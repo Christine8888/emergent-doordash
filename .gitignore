@@ -1,0 +1,14 @@
+# Christine's stuff
+*.env
+CLAUDE.md
+*.eval
+.claude/
+christine_experiments/**/*.ipynb
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# macOS
+.DS_Store
