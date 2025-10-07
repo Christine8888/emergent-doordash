@@ -18,8 +18,23 @@ DEFAULT_EPOCHS = 1
 
 
 @task
-def gpqa_diamond(template: str | None = None) -> Task:
+def gpqa_diamond(
+    template: str | None = None,
+    prefill_config: "PrefillConfig | None" = None,
+) -> Task:
+    """GPQA Diamond evaluation task.
+
+    Args:
+        template: Custom prompt template
+        prefill_config: PrefillConfig object for vLLM prefill (optional)
+    """
     solver = [multiple_choice(template=template)] if template else [multiple_choice(cot=True)]
+
+    # Add prefill if config provided
+    if prefill_config:
+        from src.evals.prefill import prefill
+        solver.append(prefill(prefill_config))
+
     return Task(
         dataset=csv_dataset(
             csv_file="https://openaipublic.blob.core.windows.net/simple-evals/gpqa_diamond.csv",

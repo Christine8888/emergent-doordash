@@ -10,7 +10,7 @@ Based on:
 2. https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/minerva_math
 3. https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/hendrycks_math
 """
-
+from src.evals.prefill import PrefillConfig
 from inspect_ai import Task, task
 from inspect_ai.dataset import hf_dataset
 from inspect_ai.model import GenerateConfig, Model
@@ -59,6 +59,7 @@ def math(
     fewshot_seed: int = 42,
     template: str | None = None,
     split: str = "test",
+    prefill_config: "PrefillConfig | None" = None,
 ) -> Task:
     """
     Inspect Task implementation for the MATH benchmark
@@ -70,6 +71,7 @@ def math(
         fewshot_seed (int): The seed used when selecting fewshots
         template (str): Custom prompt template (must include {prompt} placeholder)
         split (str): Dataset split to use ("test", "train", or "validation")
+        prefill_config: PrefillConfig object for vLLM prefill (optional)
     """
     dataset = hf_dataset(
         path=DATASET_PATH,
@@ -86,7 +88,12 @@ def math(
 
     return Task(
         dataset=dataset,
-        solver=math_solver(fewshot=fewshot, fewshot_seed=fewshot_seed, template=prompt_tmpl),
+        solver=math_solver(
+            fewshot=fewshot,
+            fewshot_seed=fewshot_seed,
+            template=prompt_tmpl,
+            prefill_config=prefill_config,
+        ),
         scorer=[
             expression_exact_match(),
             expression_exact_match_sympy(),
@@ -141,6 +148,7 @@ def math_solver(
     fewshot: int,
     fewshot_seed: int,
     template: str,
+    prefill_config: "PrefillConfig | None" = None,
 ) -> list[Solver]:
     """Build solver for MATH task.
 
@@ -148,8 +156,16 @@ def math_solver(
         fewshot (int): Number of few shot examples to use.
         fewshot_seed (int): Random seed for sampling few shot examples.
         template (str): Prompt template to use.
+        prefill_config: PrefillConfig object for vLLM prefill (optional).
     """
-    solver = [prompt_template(template), generate()]
+    solver = [prompt_template(template)]
+
+    # Add prefill if config provided
+    if prefill_config:
+        from src.evals.prefill import prefill
+        solver.append(prefill(prefill_config))
+
+    solver.append(generate())
 
     if fewshot:
         fewshot_samples = hf_dataset(
