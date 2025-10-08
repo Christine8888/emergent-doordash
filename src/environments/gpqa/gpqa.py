@@ -7,37 +7,44 @@ https://arxiv.org/abs/2311.12022
 """
 
 from typing import Any
+from pathlib import Path
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample, csv_dataset
 from inspect_ai.scorer import choice
 from inspect_ai.solver import multiple_choice
 
+from evals.solvers import multiple_choice_prefill
+from evals.prefill import PrefillConfig
+
 # default epochs to run eval for
 DEFAULT_EPOCHS = 1
+LOCAL_DATA_DIR = Path(__file__).parent / "data"
 
 
 @task
 def gpqa_diamond(
     template: str | None = None,
-    prefill_config: "PrefillConfig | None" = None,
+    prefill_config: PrefillConfig | None = None,
+    timeout: int | None = 600,
 ) -> Task:
     """GPQA Diamond evaluation task.
 
     Args:
         template: Custom prompt template
         prefill_config: PrefillConfig object for vLLM prefill (optional)
+        timeout: Timeout in seconds for generation (default: 600)
     """
-    solver = [multiple_choice(template=template)] if template else [multiple_choice(cot=True)]
-
-    # Add prefill if config provided
-    if prefill_config:
-        from src.evals.prefill import prefill
-        solver.append(prefill(prefill_config))
+    # Use the custom prefill-aware solver
+    solver = multiple_choice_prefill(
+        template=template,
+        prefill_config=prefill_config,
+        timeout=timeout
+    )
 
     return Task(
         dataset=csv_dataset(
-            csv_file="https://openaipublic.blob.core.windows.net/simple-evals/gpqa_diamond.csv",
+            csv_file=str(LOCAL_DATA_DIR / "gpqa_diamond.csv"),
             sample_fields=record_to_sample,
             shuffle_choices=True,
         ),

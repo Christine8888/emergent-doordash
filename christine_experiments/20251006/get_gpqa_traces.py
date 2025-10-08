@@ -1,9 +1,9 @@
+
 from utils.setup import setup_env
 from inspect_ai import eval
 from environments.gpqa.gpqa import gpqa_diamond
 
 setup_env()
-
 
 # Configuration
 LOG_DIR = "./gpqa"

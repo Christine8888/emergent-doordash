@@ -16,18 +16,17 @@ TP="${2:-4}"
 MODEL_NAME="${3:-}"
 N_DEVICES="${4:-$TP}"
 
-export HF_HOME="/workspace/.cache/huggingface"
+export HF_HOME="$NLP/.cache/huggingface"
 
 VLLM_PIDS=()
-NGINX_PID=""
+LB_PID=""
 SHUTTING_DOWN=false
 
 cleanup() {
     SHUTTING_DOWN=true
     echo "Shutting down servers..."
 
-    [ -n "$NGINX_PID" ] && kill "$NGINX_PID" 2>/dev/null || true
-    sudo nginx -s quit 2>/dev/null || true
+    [ -n "$LB_PID" ] && kill "$LB_PID" 2>/dev/null || true
 
     for pid in "${VLLM_PIDS[@]}"; do
         kill "$pid" 2>/dev/null || true
@@ -35,17 +34,33 @@ cleanup() {
 
     sleep 5
     pkill -f "vllm serve" 2>/dev/null || true
+    pkill -f "load_balancer.py" 2>/dev/null || true
 
     for port in {9000..9004}; do
         lsof -ti:$port 2>/dev/null | xargs -r kill -9 2>/dev/null || true
     done
 
-    rm -f /tmp/vllm_nginx_$$.conf
+    rm -f /tmp/load_balancer_$$.py
     echo "Shutdown complete"
     exit 0
 }
 
 trap cleanup EXIT INT TERM
+
+# Check if ports are already in use and kill if needed
+echo "Checking if ports 9000-9004 are free..."
+for port in {9000..9004}; do
+    if lsof -ti:$port >/dev/null 2>&1; then
+        echo "Port $port is in use, killing existing process..."
+        lsof -ti:$port | xargs -r kill -9 2>/dev/null || true
+        sleep 1
+    fi
+done
+
+# Also kill any stray vllm or load balancer processes
+pkill -f "vllm serve" 2>/dev/null || true
+pkill -f "load_balancer.py" 2>/dev/null || true
+sleep 2
 
 if [ $((N_DEVICES % TP)) -ne 0 ]; then
     echo "Error: n_devices ($N_DEVICES) must be divisible by tensor_parallel ($TP)"
@@ -56,13 +71,13 @@ NUM_INSTANCES=$((N_DEVICES / TP))
 
 VLLM_ARGS=(
     --dtype auto
-    --max-model-len 32768
+    --max-model-len 12800
     --tensor-parallel-size $TP
     --enable-prefix-caching
-    --max-num-seqs 32
-    --max-num-batched-tokens 131072
+    --max-num-seqs 16
+    --max-num-batched-tokens 65536
     --enable-chunked-prefill
-    --gpu-memory-utilization 0.9
+    --gpu-memory-utilization 0.85
     --kv-cache-dtype auto
     --max-parallel-loading-workers 2
 )
@@ -96,39 +111,100 @@ for i in $(seq 0 $((NUM_INSTANCES - 1))); do
     echo "Server on port $PORT ready"
 done
 
-NGINX_CONFIG="/tmp/vllm_nginx_$$.conf"
-cat > "$NGINX_CONFIG" << EOF
-events { worker_connections 1024; }
-http {
-    upstream vllm_backend { least_conn;
-EOF
+# Create Python load balancer
+LB_SCRIPT="/tmp/load_balancer_$$.py"
+cat > "$LB_SCRIPT" << 'EOFPY'
+#!/usr/bin/env python3
+import http.server
+import socketserver
+import urllib.request
+import sys
+from itertools import cycle
 
+class LoadBalancingHandler(http.server.BaseHTTPRequestHandler):
+    backends = []
+    backend_cycle = None
+    
+    def do_GET(self):
+        self._proxy_request()
+    
+    def do_POST(self):
+        self._proxy_request()
+    
+    def do_PUT(self):
+        self._proxy_request()
+    
+    def do_DELETE(self):
+        self._proxy_request()
+    
+    def _proxy_request(self):
+        backend = next(self.backend_cycle)
+        
+        # Read request body if present
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length) if content_length > 0 else None
+        
+        # Forward request
+        url = f"{backend}{self.path}"
+        headers = {k: v for k, v in self.headers.items() 
+                  if k.lower() not in ['host', 'connection']}
+        
+        try:
+            req = urllib.request.Request(url, data=body, headers=headers, method=self.command)
+            with urllib.request.urlopen(req, timeout=600) as response:
+                self.send_response(response.status)
+                for key, value in response.headers.items():
+                    if key.lower() not in ['connection', 'transfer-encoding']:
+                        self.send_header(key, value)
+                self.end_headers()
+                self.wfile.write(response.read())
+        except Exception as e:
+            self.send_error(502, f"Bad Gateway: {str(e)}")
+    
+    def log_message(self, format, *args):
+        sys.stdout.write(f"{self.address_string()} - {format % args}\n")
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python3 load_balancer.py <port1> <port2> ...")
+        sys.exit(1)
+    
+    ports = sys.argv[1:]
+    LoadBalancingHandler.backends = [f"http://localhost:{port}" for port in ports]
+    LoadBalancingHandler.backend_cycle = cycle(LoadBalancingHandler.backends)
+    
+    PORT = 9000
+    with socketserver.ThreadingTCPServer(("", PORT), LoadBalancingHandler) as httpd:
+        print(f"Load balancer running on port {PORT}")
+        print(f"Backends: {', '.join(LoadBalancingHandler.backends)}")
+        httpd.serve_forever()
+EOFPY
+
+chmod +x "$LB_SCRIPT"
+
+# Build port list for load balancer
+LB_PORTS=()
 for i in $(seq 0 $((NUM_INSTANCES - 1))); do
-    echo "        server localhost:$((9001 + i));" >> "$NGINX_CONFIG"
+    LB_PORTS+=($((9001 + i)))
 done
 
-cat >> "$NGINX_CONFIG" << 'EOF'
-    }
-    server {
-        listen 9000;
-        client_max_body_size 100M;
-        location / {
-            proxy_pass http://vllm_backend;
-            proxy_set_header Host $host;
-            proxy_connect_timeout 600s;
-            proxy_send_timeout 600s;
-            proxy_read_timeout 600s;
-            proxy_buffering off;
-        }
-    }
-}
-EOF
+echo "Starting Python load balancer..."
+python3 "$LB_SCRIPT" "${LB_PORTS[@]}" &
+LB_PID=$!
 
-sudo nginx -c "$NGINX_CONFIG" &
-NGINX_PID=$!
+sleep 2
 
-echo "All servers started"
+echo ""
+echo "============================================"
+echo "All servers started successfully!"
+echo "============================================"
 echo "Load balancer: http://localhost:9000"
-echo "Press Ctrl+C to stop"
+echo "Backend instances:"
+for i in $(seq 0 $((NUM_INSTANCES - 1))); do
+    echo "  Instance $((i + 1)): http://localhost:$((9001 + i))"
+done
+echo ""
+echo "Press Ctrl+C to stop all servers"
+echo "============================================"
 
 wait
