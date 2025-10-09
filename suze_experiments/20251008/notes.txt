@@ -1,0 +1,24 @@
+what is the pretraining FLOP count at which a fully post-trained model can get non-zero accuracy on the given task?
+
+steps
+- take all pretrained checkpoints, across model sizes and training. Start with   (trained on RedPajama dataset).
+- for each model and checkpoint, calculate pretraining loss to be used as x axis later
+- create MATH and GPQA finetuning dataset from training data
+- for each model and checkpoint, run SFT on full finetuning dataset
+- apply varying amounts of hinting to validation set and see how accuracy changes
+with this we create a plot where y axis is accuracy and x axis is pretraining loss
+
+
+random
+Snell uses pretraining loss instead of FLOPS or parameter count
+How do i get pretraining loss for OpenLlama v1??
+how to get pretraining loss x axis?
+
+can actually consider OpenLlama v1 checkpoints: https://huggingface.co/openlm-research/models?p=1
+
+uv setup:
+uv venv $SPHINX_DIR/uv_envs/emergent-doordash --python 3.11
+activate
+
+uv pip install -r requirements.txt
+uv pip install [package]
