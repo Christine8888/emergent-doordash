@@ -19,7 +19,7 @@ from inspect_ai.scorer import Score, Scorer, Target, accuracy, scorer, stderr
 from inspect_ai.solver import TaskState
 from pathlib import Path
 
-from inspect_evals.math.utils import (
+from environments.math.utils import (
     MathLevel,
     MathSubject,
     filter_dataset,
@@ -49,6 +49,7 @@ def math(
     fewshot_seed: int = 42,
     template: str | None = None,
     split: str = "test",
+    fewshot_config: "PrefillConfig | None" = None,
     prefill_config: "PrefillConfig | None" = None,
 ) -> Task:
     """
@@ -61,7 +62,8 @@ def math(
         fewshot_seed (int): The seed used when selecting fewshots
         template (str): Custom prompt template (must include {prompt} placeholder)
         split (str): Dataset split to use ("test", "train", or "validation")
-        prefill_config: PrefillConfig object for vLLM prefill (optional)
+        fewshot_config: PrefillConfig for few-shot solutions (train_hints.jsonl)
+        prefill_config: PrefillConfig object for eval-time hints (test_hints.jsonl)
     """
     # Load from local JSONL file
     local_file = LOCAL_DATASET_DIR / f"math_{split}.jsonl"
@@ -81,6 +83,7 @@ def math(
             template=prompt_tmpl,
             fewshot=fewshot,
             fewshot_seed=fewshot_seed,
+            fewshot_config=fewshot_config,
             prefill_config=prefill_config,
             local_dataset_dir=LOCAL_DATASET_DIR,
             record_to_sample=record_to_sample,

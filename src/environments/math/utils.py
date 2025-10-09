@@ -81,6 +81,9 @@ async def score_helper(
                 norm_answer = await normalize_final_answer(answer)
                 norm_target = await normalize_final_answer(target.text)
                 correct = await is_equiv_sympy(norm_answer, norm_target)
+                # Fall back to string-based comparison if sympy fails
+                if not correct:
+                    correct = await is_equiv(answer, target.text)
             else:
                 correct = await is_equiv(answer, target.text)
 
@@ -116,18 +119,27 @@ async def score_helper(
 
 def extract_answer(completion: str) -> str:
     r"""
-    Find the last occurrence of ANSWER: pattern
+    Find the last occurrence of ANSWER: pattern or \boxed{} pattern
 
     Handles cases like "**Final answer:**\nANSWER: 42" where we want to extract "42"
+    Also handles "\boxed{42}" format
     """
+    # First try to find ANSWER: pattern
     matches = list(re.finditer(AnswerPattern.LINE, completion))
     if matches:
         return matches[-1].group(1)
+
+    # If no ANSWER: pattern found, try to find \boxed{} pattern
+    boxed_answer = last_boxed_only_string(completion)
+    if boxed_answer:
+        return remove_boxed(boxed_answer)
+
     return ""
 
 
 def record_to_sample(record: dict[str, Any]) -> Sample:
     return Sample(
+        id=record.get("id"),
         input=record["problem"],
         target=remove_boxed(
             last_boxed_only_string(record["solution"]) or record["solution"]

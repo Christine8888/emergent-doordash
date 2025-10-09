@@ -24,7 +24,8 @@ def parse_args():
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--max_connections", type=int, default=20)
     parser.add_argument("--timeout", type=int, default=600)
-    parser.add_argument("--prefill_path", type=str, default=None, help="Path to prefill JSONL file")
+    parser.add_argument("--prefill_path", type=str, default="/nlp/scr/cye/emergent-doordash/christine_experiments/20251006/math_test_hints.jsonl", help="Path to eval-time prefill JSONL file")
+    parser.add_argument("--fewshot_path", type=str, default="/nlp/scr/cye/emergent-doordash/christine_experiments/20251006/math_train_hints.jsonl", help="Path to few-shot solutions JSONL file")
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -37,23 +38,29 @@ if __name__ == "__main__":
     LIMIT = args.limit
     MAX_CONNECTIONS = args.max_connections
     TIMEOUT = args.timeout
-
-    # Determine prefill path based on fewshot if not provided
-    if args.prefill_path:
-        prefill_path = args.prefill_path
-    else:
-        prefill_path = f"/nlp/scr/cye/emergent-doordash/christine_experiments/20251007/math_samples_{FEWSHOT}shot.jsonl"
+    PREFILL_PATH = args.prefill_path
+    FEWSHOT_PATH = args.fewshot_path
 
     prefill_config = PrefillConfig(
-        path=prefill_path,
+        path=PREFILL_PATH,
         id_field="id",
         response_field="response",
         fraction=HINT_FRACTION,
     )
 
+    fewshot_config = None
+    if FEWSHOT > 0:
+        fewshot_config = PrefillConfig(
+            path=FEWSHOT_PATH,
+            id_field="id",
+            response_field="response",
+            fraction=1.0,  # Use full solutions for few-shot
+        )
+
     log = eval(
         math(
             template=TEMPLATE,
+            fewshot_config=fewshot_config,
             prefill_config=prefill_config,
             fewshot=FEWSHOT,
             fewshot_seed=42,
