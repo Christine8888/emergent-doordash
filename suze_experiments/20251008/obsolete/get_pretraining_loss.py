@@ -51,8 +51,9 @@ models_13b = [
 
 def get_pretraining_loss(model):
     # set up a script that gets the loss of a model on some small(ish) pretraining corpus val set
+    # To compare them, we use held-out loss on the C4 validation set as our independent variable L(M)
     # TODO
     pass
 
-pretraining_losses = [get_pretraining_loss(model) for model in models]
+pretraining_losses = [get_pretraining_loss(model) for model in models_3b]
 # TODO write to file
