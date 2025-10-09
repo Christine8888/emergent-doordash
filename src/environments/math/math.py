@@ -89,10 +89,7 @@ def math(
             record_to_sample=record_to_sample,
             sample_to_fewshot=sample_to_fewshot,
         ),
-        scorer=[
-            expression_exact_match(),
-            expression_exact_match_sympy(),
-        ],
+        scorer=expression_exact_match_sympy(),
         config=GenerateConfig(temperature=0.5),
     )
 

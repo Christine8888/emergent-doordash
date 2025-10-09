@@ -99,6 +99,7 @@ async def score_helper(
 
         score = Score(
             value=CORRECT if correct else INCORRECT,
+            answer=answer,
             explanation=state.output.completion,
             metadata={
                 "extracted_answer": answer,
@@ -117,17 +118,54 @@ async def score_helper(
     return score
 
 
+def clean_latex_and_markdown(text: str) -> str:
+    """Remove LaTeX delimiters and markdown formatting from text.
+
+    Removes:
+    - LaTeX delimiters: $...$, \\(...\\), \\[...\\]
+    - Markdown bold: **...**
+    - Extra whitespace
+
+    Args:
+        text: Raw extracted answer text
+
+    Returns:
+        Cleaned text with formatting removed
+    """
+    # Remove markdown bold (**text**)
+    text = re.sub(r'\*\*', '', text)
+
+    # Remove LaTeX display delimiters \[ \]
+    text = re.sub(r'\\\[|\\\]', '', text)
+
+    # Remove LaTeX inline delimiters \( \)
+    text = re.sub(r'\\\(|\\\)', '', text)
+
+    # Remove $ delimiters
+    text = re.sub(r'\$', '', text)
+
+    # Strip leading/trailing whitespace
+    text = text.strip()
+
+    return text
+
+
 def extract_answer(completion: str) -> str:
     r"""
     Find the last occurrence of ANSWER: pattern or \boxed{} pattern
 
     Handles cases like "**Final answer:**\nANSWER: 42" where we want to extract "42"
     Also handles "\boxed{42}" format
+    Cleans LaTeX delimiters and markdown formatting
     """
     # First try to find ANSWER: pattern
-    matches = list(re.finditer(AnswerPattern.LINE, completion))
+    # Match ANSWER: only when it appears standalone (at line start, after whitespace, or after newline)
+    # This avoids matching "**Answer:**" which has ANSWER immediately after ':'
+    pattern = r'(?i)(?:^|\n|\s)ANSWER\s*:\s*([^\n]+)'
+    matches = list(re.finditer(pattern, completion, re.MULTILINE))
     if matches:
-        return matches[-1].group(1)
+        raw_answer = matches[-1].group(1)
+        return clean_latex_and_markdown(raw_answer)
 
     # If no ANSWER: pattern found, try to find \boxed{} pattern
     boxed_answer = last_boxed_only_string(completion)

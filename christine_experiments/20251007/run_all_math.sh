@@ -18,10 +18,9 @@ trap cleanup INT TERM
 export HF_HOME="/scr/biggest/cye/.cache/huggingface"
 
 # Format: "model_path:tensor_parallel"
-MODELS=(
-    # "Qwen/Qwen2.5-0.5B-Instruct:1"
-# "Qwen/Qwen2.5-1.5B-Instruct:1"
-# "Qwen/Qwen2.5-3B-Instruct:1"
+MODELS=("Qwen/Qwen2.5-0.5B-Instruct:1"
+"Qwen/Qwen2.5-1.5B-Instruct:1"
+"Qwen/Qwen2.5-3B-Instruct:1"
 "Qwen/Qwen2.5-7B-Instruct:1"
 "Qwen/Qwen2.5-14B-Instruct:2"
 "Qwen/Qwen2.5-32B-Instruct:2")
@@ -30,6 +29,7 @@ N_DEVICES=4
 MAX_CONNECTIONS=32
 HINT_FRACTIONS=(0.0 0.2 0.4 0.6 0.8)
 FEWSHOTS=(0 5)
+BASE_PORT=5000
 VLLM_UTILS_DIR="$NLP/emergent-doordash/src/utils"
 EXPERIMENTS_DIR="$NLP/emergent-doordash/christine_experiments/20251007"
 LIMIT=500
@@ -40,12 +40,12 @@ for MODEL_SPEC in "${MODELS[@]}"; do
     MODEL_NAME="${MODEL##*/}"
     MAX_WAIT=1200
 
-    echo "Starting vLLM server for $MODEL_NAME..."
-    $VLLM_UTILS_DIR/start_vllm.sh $MODEL $TP $MODEL_NAME $N_DEVICES &
+    echo "Starting vLLM server for $MODEL_NAME on port $BASE_PORT..."
+    $VLLM_UTILS_DIR/start_vllm.sh $MODEL $TP $MODEL_NAME $N_DEVICES $BASE_PORT &
     VLLM_PID=$!
 
     ELAPSED=0
-    while ! curl -s http://localhost:9000/health >/dev/null 2>&1; do
+    while ! curl -s http://localhost:$BASE_PORT/health >/dev/null 2>&1; do
         if [ $ELAPSED -ge $MAX_WAIT ]; then
             echo "Error: vLLM server failed to start within ${MAX_WAIT}s"
             kill $VLLM_PID 2>/dev/null || true
@@ -71,7 +71,8 @@ for MODEL_SPEC in "${MODELS[@]}"; do
                 --fewshot $FEWSHOT \
                 --max_connections $MAX_CONNECTIONS \
                 --log_dir $LOG_DIR \
-                --limit $LIMIT
+                --limit $LIMIT \
+                --base_port $BASE_PORT
         done
     done
 

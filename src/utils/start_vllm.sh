@@ -3,11 +3,11 @@
 set -e
 set -o pipefail
 
-if [ $# -lt 1 ] || [ $# -gt 4 ]; then
-    echo "Usage: $0 <model_path> [tensor_parallel] [model_name] [n_devices]"
+if [ $# -lt 1 ] || [ $# -gt 5 ]; then
+    echo "Usage: $0 <model_path> [tensor_parallel] [model_name] [n_devices] [base_port]"
     echo "Examples:"
     echo "  $0 /workspace/model"
-    echo "  $0 /workspace/model 2 my-model 4"
+    echo "  $0 /workspace/model 2 my-model 4 9000"
     exit 1
 fi
 
@@ -15,6 +15,7 @@ MODEL_PATH="$1"
 TP="${2:-4}"
 MODEL_NAME="${3:-}"
 N_DEVICES="${4:-$TP}"
+BASE_PORT="${5:-9000}"
 
 export HF_HOME="$NLP/.cache/huggingface"
 
@@ -36,7 +37,7 @@ cleanup() {
     pkill -f "vllm serve" 2>/dev/null || true
     pkill -f "load_balancer.py" 2>/dev/null || true
 
-    for port in {9000..9004}; do
+    for port in $(seq ${BASE_PORT:-9000} $((${BASE_PORT:-9000} + 4))); do
         lsof -ti:$port 2>/dev/null | xargs -r kill -9 2>/dev/null || true
     done
 
@@ -48,8 +49,9 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # Check if ports are already in use and kill if needed
-echo "Checking if ports 9000-9004 are free..."
-for port in {9000..9004}; do
+MAX_PORT=$((BASE_PORT + 4))
+echo "Checking if ports $BASE_PORT-$MAX_PORT are free..."
+for port in $(seq $BASE_PORT $MAX_PORT); do
     if lsof -ti:$port >/dev/null 2>&1; then
         echo "Port $port is in use, killing existing process..."
         lsof -ti:$port | xargs -r kill -9 2>/dev/null || true
@@ -89,7 +91,7 @@ echo "Model: $MODEL_PATH"
 echo "TP: $TP | Devices: $N_DEVICES"
 
 for i in $(seq 0 $((NUM_INSTANCES - 1))); do
-    PORT=$((9001 + i))
+    PORT=$((BASE_PORT + 1 + i))
     GPU_START=$((i * TP))
     GPU_END=$((GPU_START + TP - 1))
 
@@ -103,7 +105,7 @@ done
 
 echo "Waiting for servers..."
 for i in $(seq 0 $((NUM_INSTANCES - 1))); do
-    PORT=$((9001 + i))
+    PORT=$((BASE_PORT + 1 + i))
     while ! curl -s http://localhost:$PORT/health >/dev/null 2>&1; do
         [ "$SHUTTING_DOWN" = true ] && exit 0
         sleep 2
@@ -165,17 +167,17 @@ class LoadBalancingHandler(http.server.BaseHTTPRequestHandler):
         sys.stdout.write(f"{self.address_string()} - {format % args}\n")
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 load_balancer.py <port1> <port2> ...")
+    if len(sys.argv) < 3:
+        print("Usage: python3 load_balancer.py <lb_port> <backend_port1> <backend_port2> ...")
         sys.exit(1)
-    
-    ports = sys.argv[1:]
-    LoadBalancingHandler.backends = [f"http://localhost:{port}" for port in ports]
+
+    lb_port = int(sys.argv[1])
+    backend_ports = sys.argv[2:]
+    LoadBalancingHandler.backends = [f"http://localhost:{port}" for port in backend_ports]
     LoadBalancingHandler.backend_cycle = cycle(LoadBalancingHandler.backends)
-    
-    PORT = 9000
-    with socketserver.ThreadingTCPServer(("", PORT), LoadBalancingHandler) as httpd:
-        print(f"Load balancer running on port {PORT}")
+
+    with socketserver.ThreadingTCPServer(("", lb_port), LoadBalancingHandler) as httpd:
+        print(f"Load balancer running on port {lb_port}")
         print(f"Backends: {', '.join(LoadBalancingHandler.backends)}")
         httpd.serve_forever()
 EOFPY
@@ -185,11 +187,11 @@ chmod +x "$LB_SCRIPT"
 # Build port list for load balancer
 LB_PORTS=()
 for i in $(seq 0 $((NUM_INSTANCES - 1))); do
-    LB_PORTS+=($((9001 + i)))
+    LB_PORTS+=($((BASE_PORT + 1 + i)))
 done
 
 echo "Starting Python load balancer..."
-python3 "$LB_SCRIPT" "${LB_PORTS[@]}" &
+python3 "$LB_SCRIPT" "$BASE_PORT" "${LB_PORTS[@]}" &
 LB_PID=$!
 
 sleep 2
@@ -198,10 +200,10 @@ echo ""
 echo "============================================"
 echo "All servers started successfully!"
 echo "============================================"
-echo "Load balancer: http://localhost:9000"
+echo "Load balancer: http://localhost:$BASE_PORT"
 echo "Backend instances:"
 for i in $(seq 0 $((NUM_INSTANCES - 1))); do
-    echo "  Instance $((i + 1)): http://localhost:$((9001 + i))"
+    echo "  Instance $((i + 1)): http://localhost:$((BASE_PORT + 1 + i))"
 done
 echo ""
 echo "Press Ctrl+C to stop all servers"
