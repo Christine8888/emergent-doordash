@@ -1,11 +1,10 @@
-dump_dir: /afs/cs.stanford.edu/u/suzeva/emergent-doordash/outputs/sft_math
-model_name_or_path: meta-llama/Llama-3.1-8B-Instruct
-save_dir: /afs/cs.stanford.edu/u/suzeva/emergent-doordash/checkpoints/sft_math
-run_name: sft-math
+model_name_or_path: openlm-research/open_llama_3b_step_250000
+save_dir: /u/sphinx/suzeva/emergent-doordash/
+run_name: test-suze
 epochs: 1
-per_device_train_batch_size: 1
-per_device_eval_batch_size: 1
-gradient_accumulation_steps: 8
+per_device_train_batch_size: 8
+per_device_eval_batch_size: 8
+gradient_accumulation_steps: 1
 learning_rate: 2.0e-5
 max_seq_len: 2048
 num_proc: 4
@@ -25,13 +24,13 @@ warmup_ratio: 0.03
 lr_scheduler_type: cosine
 
 # Data: train and eval are MATH
-train_dataset: hendrycks/competition_math
+train_dataset: DigitalLearningGmbH/MATH-lighteval
 train_split: train
 eval_datasets:
-  - hendrycks/competition_math
+  - DigitalLearningGmbH/MATH-lighteval
 eval_splits:
   - test
-cache_dir: /afs/cs.stanford.edu/u/suzeva/hf_cache
+cache_dir: /sphinx/u/suzeva/data
 
 # Generation config for callback
 max_length: 2048

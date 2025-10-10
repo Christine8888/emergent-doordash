@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Callable, List, Optional
 
+import os
 import torch
 from accelerate import PartialState
 from datasets import load_dataset
@@ -12,15 +13,23 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
 # from transformers.trainer_callback import EarlyStoppingCallback
 from transformers.trainer_utils import set_seed
-from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
+from trl import SFTConfig, SFTTrainer
+
 
 from finetune import GenerativeAccuracyCallback
 from utils import zip_
 
 
+# W&B configuration
+WANDB_ENTITY = "suzevana"  # replace with your W&B username (entity)
+WANDB_PROJECT = "emergent_doordash"  # replace with your W&B project name
+
+# Set defaults only if not already provided via environment
+os.environ.setdefault("WANDB_ENTITY", WANDB_ENTITY)
+os.environ.setdefault("WANDB_PROJECT", WANDB_PROJECT)
+
 @dataclass
 class SFTArgs:
-    dump_dir: str
     model_name_or_path: str
     save_dir: str
     run_name: str
@@ -255,6 +264,7 @@ def train_sft(cfg: SFTArgs):
         weight_decay=cfg.weight_decay,
         warmup_ratio=cfg.warmup_ratio,
         lr_scheduler_type=cfg.lr_scheduler_type,
+        report_to=["wandb"],
         overwrite_output_dir=True,  # Overwrite existing checkpoints
         metric_for_best_model=f"eval_{short_main_eval_dataset_name}_loss" if short_main_eval_dataset_name is not None else "loss",
         greater_is_better=False,
@@ -335,6 +345,7 @@ def main():
     Plus all the default values in EvalArgs dataclass.
     """
     cli_args = OmegaConf.from_cli()
+    print(cli_args)
     file_cfg = OmegaConf.load(cli_args.config)
     # We remove 'config' attribute from config as the underlying DataClass does not have it
     del cli_args.config
@@ -347,4 +358,5 @@ def main():
 
 
 if __name__ == "__main__":
+    # python suze_experiments/20251008/run_sft.py config=suze_experiments/20251008/sft_math.yaml
     main()
