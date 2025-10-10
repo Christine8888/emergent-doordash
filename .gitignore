@@ -5,6 +5,7 @@ CLAUDE.md
 .claude/
 christine_experiments/**/*.ipynb
 christine_experiments/**/*.json
+!/sphinx/u/cye/emergent-doordash/christine_experiments/20251008/plots.ipynb
 
 # Python
 __pycache__/

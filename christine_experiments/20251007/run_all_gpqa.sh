@@ -28,8 +28,8 @@ MODELS=(
 
 N_DEVICES=4
 MAX_CONNECTIONS=32
-HINT_FRACTIONS=(0.0 0.2 0.4 0.6 0.8)
-FEWSHOTS=(5)
+HINT_FRACTIONS=(0.0 0.2 0.4 0.6 0.8 1.0)
+FEWSHOTS=(0 5)
 VLLM_UTILS_DIR="$SPHINX/emergent-doordash/src/utils"
 EXPERIMENTS_DIR="$SPHINX/emergent-doordash/christine_experiments/20251007"
 

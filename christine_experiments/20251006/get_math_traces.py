@@ -8,7 +8,8 @@ setup_env()
 LOG_DIR = "./math"
 MODEL = "anthropic/claude-sonnet-4-5-20250929"
 LIMIT = None
-MAX_CONNECTIONS = 25
+MAX_CONNECTIONS = 40
+EPOCHS = 3
 TEMPLATE = None  # Set to custom template string, or None for default
 SPLIT = "train"  # Options: "test", "train", "validation"
 
@@ -21,9 +22,10 @@ SPLIT = "train"  # Options: "test", "train", "validation"
 
 if __name__ == "__main__":
     log = eval(
-        math(template=TEMPLATE, split=SPLIT),
+        math(split=SPLIT, ),
         model=MODEL,
         log_dir=LOG_DIR,
+        epochs=EPOCHS,
         limit=LIMIT,
         max_connections=MAX_CONNECTIONS,
         display="rich",

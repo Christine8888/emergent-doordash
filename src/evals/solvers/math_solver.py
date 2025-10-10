@@ -13,8 +13,9 @@ from inspect_ai.solver import (
 )
 from inspect_ai.util import resource
 
-from evals.prefill import PrefillConfig, load_prefill_map
-from evals.fewshot import FewShotConfig, load_fewshot_samples, create_fewshot_message
+from evals.example import Example
+from evals.prefill import PrefillConfig
+from evals.fewshot import FewShotConfig, create_fewshot_message
 from evals.hint import get_prefill_fraction
 
 logger = logging.getLogger(__name__)
@@ -68,14 +69,15 @@ def math_solver(
         timeout: Timeout in seconds for generation (default: None)
     """
 
-    prefill_map = {}
+    # Get cached prefill data if config provided
+    prefill_data = {}
     if prefill_config:
-        prefill_map = load_prefill_map(prefill_config)
+        prefill_data = prefill_config.get_data()
 
-    # Load few-shot samples
-    all_fewshot_samples = []
+    # Get cached few-shot data if config provided
+    fewshot_data = {}
     if fewshot_config:
-        all_fewshot_samples = load_fewshot_samples(fewshot_config)
+        fewshot_data = fewshot_config.get_data()
 
     if instruction_template is None:
         instruction_template = DEFAULT_INSTRUCTIONS
@@ -90,9 +92,9 @@ def math_solver(
         )
 
         # Handle few-shot prompting
-        if fewshot_config and all_fewshot_samples:
+        if fewshot_config and fewshot_data:
             user_content = create_fewshot_message(
-                all_samples=all_fewshot_samples,
+                fewshot_data=fewshot_data,
                 config=fewshot_config,
                 instruction_template=instruction_template,
                 example_template=example_template,
@@ -107,17 +109,16 @@ def math_solver(
             state.user_prompt.text = user_content
 
         # Handle prefill if available
+        # Skip prefilling if fraction is 0.0 (useful for ablation studies)
         continue_message = False
-        if prefill_config and state.sample_id in prefill_map:
-            full_response = prefill_map[state.sample_id]
+        if state.sample_id in prefill_data and prefill_config.fraction > 0.0:
+            full_response = prefill_data[state.sample_id].response
             prefill_text = get_prefill_fraction(
                 full_response,
                 fraction=prefill_config.fraction
             )
-
-            if prefill_text:
-                state.messages.append(ChatMessageAssistant(content=prefill_text))
-                continue_message = True
+            state.messages.append(ChatMessageAssistant(content=prefill_text))
+            continue_message = True
 
         # Set generation parameters
         gen_config = GenerateConfig(

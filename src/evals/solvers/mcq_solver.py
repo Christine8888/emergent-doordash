@@ -1,16 +1,17 @@
 """Multiple choice solver with prefill support for vLLM continuation."""
 
 import logging
-import re
-
 from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, GenerateConfig
 from inspect_ai.solver import Generate, Solver, TaskState, solver
-from inspect_ai._util.answer import answer_character, answer_index
 from inspect_ai.util import resource
+from inspect_ai._util.answer import answer_index
 
-from evals.prefill import PrefillConfig, load_prefill_map
-from evals.fewshot import FewShotConfig, load_fewshot_samples, create_fewshot_message
+from evals.example import Example
+from evals.prefill import PrefillConfig
+from evals.fewshot import FewShotConfig, create_fewshot_message
 from evals.hint import get_prefill_fraction
+from evals.solvers.mcq_utils import parse_answer, format_answer_options
+
 
 logger = logging.getLogger(__name__)
 
@@ -23,56 +24,9 @@ DEFAULT_EXAMPLE_TEMPLATE = """
 PROBLEM:
 {question}
 
-{choices}
-
 SOLUTION:
 {solution}
 """.strip()
-
-
-def answer_options(choices: list[str]) -> str:
-    """Format choices as A) ... B) ... etc."""
-    return "\n".join(
-        [f"{answer_character(i)}) {choice}" for i, choice in enumerate(choices)]
-    )
-
-
-def prompt(question: str, choices: list[str], template: str) -> str:
-    """Format the multiple choice prompt."""
-    choices_text = answer_options(choices)
-    letters = ",".join(answer_character(i) for i in range(len(choices)))
-
-    return template.format(
-        choices=choices_text,
-        letters=letters,
-        question=question,
-    )
-
-
-def parse_answer(completion: str, num_choices: int) -> str | None:
-    """Extract single answer from completion (A, B, C, etc.)."""
-    match = re.search(
-        r"(?i)^ANSWER\s*:\s*([A-Za-z])\s*(?:$|\n|\.)",
-        completion,
-        flags=re.MULTILINE,
-    )
-
-    if match is None:
-        match = re.search(
-            r"(?i)ANSWER\s*:\s*([A-Za-z])(?:[^\w]|\n|$|\.)",
-            completion,
-        )
-
-    if match is None:
-        return None
-
-    matched = match.group(1).strip().upper()
-    allowed_options = set(answer_character(i) for i in range(num_choices))
-
-    if matched in allowed_options:
-        return matched
-
-    return None
 
 
 @solver
@@ -88,30 +42,37 @@ def multiple_choice_prefill(
     """Multiple choice solver with prefill support.
 
     This solver:
-    1. Optionally adds few-shot examples (different per task, excludes current sample)
-    2. Formats the multiple choice prompt
-    3. Optionally adds a prefill assistant message
+    1. Formats the question with choices (A, B, C, etc.)
+    2. Optionally adds few-shot examples (different per task, excludes current sample)
+    3. Optionally adds a prefill assistant message from prefill data
     4. Calls generate() with continue_final_message=True if prefill was added
+
+    When using prefill:
+    - Dataset should be loaded from prefill JSONL with choices in correct order
+    - No shuffling should occur (handled in task definition)
+    - The (choices, target) tuple is preserved from the prefill data
 
     Args:
         instruction_template: Custom instruction template (overrides default).
                              Used for both 0-shot and few-shot prompts.
         example_template: Custom example template (overrides default).
                          Used for both 0-shot and few-shot examples.
+                         Should expect {question} and {solution} fields.
         fewshot_config: FewShotConfig for few-shot examples
-        prefill_config: Optional prefill configuration
+        prefill_config: Optional prefill configuration. When provided, loads
+                       response text from the JSONL file for prefilling.
         max_tokens: Maximum tokens to generate
         timeout: Timeout in seconds for generation (default: None)
     """
-    # Load prefill map if config provided
-    prefill_map = {}
+    # Get cached prefill data if config provided
+    prefill_data = {}
     if prefill_config:
-        prefill_map = load_prefill_map(prefill_config)
+        prefill_data = prefill_config.get_data()
 
-    # Load few-shot samples
-    all_fewshot_samples = []
+    # Get cached few-shot data if config provided
+    fewshot_data = {}
     if fewshot_config:
-        all_fewshot_samples = load_fewshot_samples(fewshot_config)
+        fewshot_data = fewshot_config.get_data()
 
     if instruction_template is None:
         instruction_template = DEFAULT_INSTRUCTIONS
@@ -122,53 +83,48 @@ def multiple_choice_prefill(
         if not state.choices:
             raise ValueError("multiple_choice_prefill requires samples with choices")
 
-        # Format current task as an incomplete example
+        # Format question with choices
+        # When using prefill, choices are already in the correct order (no shuffling)
+        # so the target matches the choice ordering
         choices_list = [choice.value for choice in state.choices]
-        choices_text = answer_options(choices_list)
+        choices_text = format_answer_options(choices_list)
+        question_with_choices = f"{state.user_prompt.text}\n\n{choices_text}"
+
+        # Record question & ordering of choices
+        state.metadata["question_with_choices"] = question_with_choices
 
         current_task = example_template.format(
-            question=state.user_prompt.text,
-            choices=choices_text,
-            solution=""  # Empty - to be completed by the model
+            question=question_with_choices,
+            solution=""
         )
 
-        # Handle few-shot prompting
-        if fewshot_config and all_fewshot_samples:
-            # Define formatter for multiple choice specific formatting
-            def format_mc_sample(sample_data: dict) -> dict:
-                """Format choices list into A) B) C) format for template."""
-                if 'choices' in sample_data and isinstance(sample_data['choices'], list):
-                    sample_data['choices'] = answer_options(sample_data['choices'])
-                return sample_data
-
+        # Add instructions (0-shot or few-shot)
+        if fewshot_config and fewshot_data:
             user_content = create_fewshot_message(
-                all_samples=all_fewshot_samples,
+                fewshot_data=fewshot_data,
                 config=fewshot_config,
                 instruction_template=instruction_template,
                 example_template=example_template,
                 current_task=current_task,
                 current_id=state.sample_id,
                 seed=state.sample_id,
-                format_sample=format_mc_sample,
             )
-            state.user_prompt.text = user_content
         else:
-            # 0-shot: just instructions + current task
             user_content = instruction_template + "\n\n" + current_task
-            state.user_prompt.text = user_content
+
+        state.user_prompt.text = user_content
 
         # Handle prefill if available
+        # Skip prefilling if fraction is 0.0 (useful for ablation studies)
         continue_message = False
-        if prefill_config and state.sample_id in prefill_map:
-            full_response = prefill_map[state.sample_id]
+        if state.sample_id in prefill_data and prefill_config.fraction > 0.0:
+            full_response = prefill_data[state.sample_id].response
             prefill_text = get_prefill_fraction(
                 full_response,
                 fraction=prefill_config.fraction
             )
-
-            if prefill_text:
-                state.messages.append(ChatMessageAssistant(content=prefill_text))
-                continue_message = True
+            state.messages.append(ChatMessageAssistant(content=prefill_text))
+            continue_message = True
         
         # Set generation parameters
         gen_config = GenerateConfig(
