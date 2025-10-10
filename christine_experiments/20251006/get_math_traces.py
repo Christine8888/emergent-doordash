@@ -9,7 +9,7 @@ LOG_DIR = "./math"
 MODEL = "anthropic/claude-sonnet-4-5-20250929"
 LIMIT = None
 MAX_CONNECTIONS = 40
-EPOCHS = 5
+EPOCHS = 3
 TEMPLATE = None  # Set to custom template string, or None for default
 SPLIT = "train"  # Options: "test", "train", "validation"
 
