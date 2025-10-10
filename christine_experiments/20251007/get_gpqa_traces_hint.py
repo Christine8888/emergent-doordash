@@ -3,6 +3,7 @@ import os
 from inspect_ai import eval
 from environments.gpqa.gpqa import gpqa_diamond
 from evals.prefill import PrefillConfig
+from evals.fewshot import FewShotConfig
 import logging
 from utils.inspect_utils import extract_scores_from_log
 import json
@@ -18,6 +19,8 @@ def parse_args():
     parser = ArgumentParser()
     parser.add_argument("--model", type=str, default="vllm/Qwen2.5-0.5B-Instruct")
     parser.add_argument("--hint_fraction", type=float, default=0.8)
+    parser.add_argument("--fewshot", type=int, default=0)
+    parser.add_argument("--fewshot_seed", type=int, default=42)
     parser.add_argument("--template", type=str, default=None)
     parser.add_argument("--log_dir", type=str, default="./gpqa")
     parser.add_argument("--limit", type=int, default=None)
@@ -29,26 +32,53 @@ if __name__ == "__main__":
     args = parse_args()
     MODEL = args.model
     HINT_FRACTION = args.hint_fraction
+    FEWSHOT = args.fewshot
+    FEWSHOT_SEED = args.fewshot_seed
     LOG_DIR = args.log_dir
     TEMPLATE = args.template
     LIMIT = args.limit
     MAX_CONNECTIONS = args.max_connections
     TIMEOUT = args.timeout
 
+    data_path = "/sphinx/u/cye/emergent-doordash/christine_experiments/20251006/gpqa_diamond_samples.jsonl"
+
     prefill_config = PrefillConfig(
-        path="/nlp/scr/cye/emergent-doordash/christine_experiments/20251006/gpqa_diamond_samples.jsonl",
+        path=data_path,
         id_field="id",
         response_field="response",
         fraction=HINT_FRACTION,
     )
+
+    fewshot_config = None
+    if FEWSHOT > 0:
+        fewshot_config = FewShotConfig(
+            path=data_path,
+            id_field="id",
+            response_field="response",
+            num_examples=FEWSHOT,
+            seed=FEWSHOT_SEED,
+            system_template="You will be asked to solve a multiple choice question. Some examples of problems and solutions are provided below.\n\n{examples}",
+            example_template="PROBLEM:\n{formatted_example}\n\nSOLUTION:\n{response}\n",
+            exclude_current=True,
+            additional_fields=["question", "target", "choices"]
+        )
+
     log = eval(
-        gpqa_diamond(template=TEMPLATE, prefill_config=prefill_config, timeout=TIMEOUT),
+        gpqa_diamond(
+            template=TEMPLATE,
+            fewshot_config=fewshot_config,
+            prefill_config=prefill_config,
+            timeout=TIMEOUT
+        ),
         model=MODEL,
         log_dir=LOG_DIR,
         limit=LIMIT,
         max_connections=MAX_CONNECTIONS,
         display="rich",
     )
+
     results = extract_scores_from_log(log[0])
-    with open(f"{LOG_DIR}/gpqa_diamond_{HINT_FRACTION}.json", "w") as f:
+    filename = f"{LOG_DIR}/gpqa_diamond_{FEWSHOT}shot_{HINT_FRACTION}.json"
+
+    with open(filename, "w") as f:
         json.dump(results, f)

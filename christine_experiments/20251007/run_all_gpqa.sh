@@ -19,24 +19,24 @@ export HF_HOME="/scr/biggest/cye/.cache/huggingface"
 
 # Format: "model_path:tensor_parallel"
 MODELS=(
-# "Qwen/Qwen2.5-0.5B-Instruct:1"
-# "Qwen/Qwen2.5-1.5B-Instruct:1"
-# "Qwen/Qwen2.5-3B-Instruct:1"
-# "Qwen/Qwen2.5-7B-Instruct:1"
-# "Qwen/Qwen2.5-14B-Instruct:2"
+"Qwen/Qwen2.5-0.5B-Instruct:1"
+"Qwen/Qwen2.5-1.5B-Instruct:1"
+"Qwen/Qwen2.5-3B-Instruct:1"
+"Qwen/Qwen2.5-7B-Instruct:1"
+"Qwen/Qwen2.5-14B-Instruct:2"
 "Qwen/Qwen2.5-32B-Instruct:2")
 
 N_DEVICES=4
 MAX_CONNECTIONS=32
 HINT_FRACTIONS=(0.0 0.2 0.4 0.6 0.8)
-VLLM_UTILS_DIR="$NLP/emergent-doordash/src/utils"
-EXPERIMENTS_DIR="$NLP/emergent-doordash/christine_experiments/20251007"
+FEWSHOTS=(5)
+VLLM_UTILS_DIR="$SPHINX/emergent-doordash/src/utils"
+EXPERIMENTS_DIR="$SPHINX/emergent-doordash/christine_experiments/20251007"
 
 for MODEL_SPEC in "${MODELS[@]}"; do
     MODEL="${MODEL_SPEC%%:*}"
     TP="${MODEL_SPEC##*:}"
     MODEL_NAME="${MODEL##*/}"
-    LOG_DIR="$EXPERIMENTS_DIR/gpqa/$MODEL_NAME"
     MAX_WAIT=1200
 
     echo "Starting vLLM server for $MODEL_NAME..."
@@ -57,14 +57,19 @@ for MODEL_SPEC in "${MODELS[@]}"; do
     done
 
     echo "Running experiments for $MODEL_NAME..."
-    for HINT_FRACTION in "${HINT_FRACTIONS[@]}"; do
-        echo "  Running with hint_fraction=$HINT_FRACTION"
-        cd $EXPERIMENTS_DIR
-        python get_gpqa_traces_hint.py \
-            --model vllm/$MODEL_NAME \
-            --hint_fraction $HINT_FRACTION \
-            --max_connections $MAX_CONNECTIONS \
-            --log_dir $LOG_DIR
+    for FEWSHOT in "${FEWSHOTS[@]}"; do
+        LOG_DIR="$EXPERIMENTS_DIR/gpqa/${FEWSHOT}shot/$MODEL_NAME"
+        
+        for HINT_FRACTION in "${HINT_FRACTIONS[@]}"; do
+            echo "  Running with fewshot=$FEWSHOT, hint_fraction=$HINT_FRACTION"
+            cd $EXPERIMENTS_DIR
+            python get_gpqa_traces_hint.py \
+                --model vllm/$MODEL_NAME \
+                --fewshot $FEWSHOT \
+                --hint_fraction $HINT_FRACTION \
+                --max_connections $MAX_CONNECTIONS \
+                --log_dir $LOG_DIR
+        done
     done
 
     echo "Stopping vLLM server for $MODEL_NAME..."

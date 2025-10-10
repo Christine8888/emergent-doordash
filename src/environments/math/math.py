@@ -11,6 +11,7 @@ Based on:
 3. https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/hendrycks_math
 """
 from evals.prefill import PrefillConfig
+from evals.fewshot import FewShotConfig
 from evals.solvers import math_solver
 from inspect_ai import Task, task
 from inspect_ai.dataset import json_dataset
@@ -31,25 +32,14 @@ from environments.math.utils import (
 DATASET_PATH = "DigitalLearningGmbH/MATH-lighteval"
 LOCAL_DATASET_DIR = Path(__file__).parent / "data"
 
-# Setup for problem + instructions for providing answer
-USER_PROMPT_TEMPLATE = """
-Solve the following math problem step by step. The last line of your response should be of the form "ANSWER: $ANSWER" (without quotes) where $ANSWER is the answer to the problem.
-
-{prompt}
-
-Remember to put your answer on its own line at the end in the form "ANSWER: $ANSWER" (without quotes) where $ANSWER is the answer to the problem, and you do not need to use a \\boxed command.
-""".strip()
-
 
 @task
 def math(
     levels: list[MathLevel] | MathLevel = [],
     subjects: list[MathSubject] | MathSubject = [],
-    fewshot: int = 0,
-    fewshot_seed: int = 42,
     template: str | None = None,
     split: str = "test",
-    fewshot_config: "PrefillConfig | None" = None,
+    fewshot_config: "FewShotConfig | None" = None,
     prefill_config: "PrefillConfig | None" = None,
 ) -> Task:
     """
@@ -58,11 +48,9 @@ def math(
     Args:
         levels (list[MathLevel]): List of levels to filter on, 1 to 5.
         subjects (list[MathSubject]): List of subjects to filter on.
-        fewshot (int): The number of fewshots to include
-        fewshot_seed (int): The seed used when selecting fewshots
         template (str): Custom prompt template (must include {prompt} placeholder)
         split (str): Dataset split to use ("test", "train", or "validation")
-        fewshot_config: PrefillConfig for few-shot solutions (train_hints.jsonl)
+        fewshot_config: FewShotConfig for few-shot examples
         prefill_config: PrefillConfig object for eval-time hints (test_hints.jsonl)
     """
     # Load from local JSONL file
@@ -75,14 +63,10 @@ def math(
     # Subset the data based on levels and/or subjects
     dataset = filter_dataset(dataset=dataset, levels=levels, subjects=subjects)
 
-    prompt_tmpl = template if template else USER_PROMPT_TEMPLATE
-
     return Task(
         dataset=dataset,
         solver=math_solver(
-            template=prompt_tmpl,
-            fewshot=fewshot,
-            fewshot_seed=fewshot_seed,
+            template=template,
             fewshot_config=fewshot_config,
             prefill_config=prefill_config,
             local_dataset_dir=LOCAL_DATASET_DIR,

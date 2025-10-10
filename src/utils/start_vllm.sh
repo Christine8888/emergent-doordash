@@ -3,11 +3,12 @@
 set -e
 set -o pipefail
 
-if [ $# -lt 1 ] || [ $# -gt 5 ]; then
-    echo "Usage: $0 <model_path> [tensor_parallel] [model_name] [n_devices] [base_port]"
+if [ $# -lt 1 ] || [ $# -gt 7 ]; then
+    echo "Usage: $0 <model_path> [tensor_parallel] [model_name] [n_devices] [base_port] [max_length] [chat_template]"
     echo "Examples:"
     echo "  $0 /workspace/model"
-    echo "  $0 /workspace/model 2 my-model 4 9000"
+    echo "  $0 /workspace/model 2 my-model 4 9000 12800"
+    echo "  $0 /workspace/model 2 my-model 4 9000 12800 'simple'"
     exit 1
 fi
 
@@ -16,8 +17,8 @@ TP="${2:-4}"
 MODEL_NAME="${3:-}"
 N_DEVICES="${4:-$TP}"
 BASE_PORT="${5:-9000}"
-
-export HF_HOME="$NLP/.cache/huggingface"
+MAX_LENGTH="${6:-12800}"
+CHAT_TEMPLATE="${7:-}"
 
 VLLM_PIDS=()
 LB_PID=""
@@ -73,7 +74,7 @@ NUM_INSTANCES=$((N_DEVICES / TP))
 
 VLLM_ARGS=(
     --dtype auto
-    --max-model-len 12800
+    --max-model-len $MAX_LENGTH
     --tensor-parallel-size $TP
     --enable-prefix-caching
     --max-num-seqs 16
@@ -85,6 +86,11 @@ VLLM_ARGS=(
 )
 
 [ -n "$MODEL_NAME" ] && VLLM_ARGS+=(--served-model-name "$MODEL_NAME")
+
+# Add chat template if provided
+if [ -n "$CHAT_TEMPLATE" ]; then
+    VLLM_ARGS+=(--chat-template "$CHAT_TEMPLATE")
+fi
 
 echo "Starting $NUM_INSTANCES vLLM instance(s)"
 echo "Model: $MODEL_PATH"

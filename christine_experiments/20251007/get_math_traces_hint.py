@@ -3,6 +3,7 @@ import os
 from inspect_ai import eval
 from environments.math.math import math
 from evals.prefill import PrefillConfig
+from evals.fewshot import FewShotConfig
 import logging
 from utils.inspect_utils import extract_scores_from_log
 import json
@@ -22,8 +23,9 @@ def parse_args():
     parser.add_argument("--max_connections", type=int, default=20)
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--base_port", type=int, default=9000, help="Base port for vLLM server")
-    parser.add_argument("--prefill_path", type=str, default="/nlp/scr/cye/emergent-doordash/christine_experiments/20251006/math_test_hints.jsonl", help="Path to eval-time prefill JSONL file")
-    parser.add_argument("--fewshot_path", type=str, default="/nlp/scr/cye/emergent-doordash/christine_experiments/20251006/math_train_hints.jsonl", help="Path to few-shot solutions JSONL file")
+    parser.add_argument("--max_tokens", type=int, default=None, help="Maximum tokens to generate")
+    parser.add_argument("--prefill_path", type=str, default="/sphinx/u/cye/emergent-doordash/christine_experiments/20251006/math_test_hints.jsonl", help="Path to eval-time prefill JSONL file")
+    parser.add_argument("--fewshot_path", type=str, default="/sphinx/u/cye/emergent-doordash/christine_experiments/20251006/math_train_hints.jsonl", help="Path to few-shot solutions JSONL file")
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -37,6 +39,7 @@ if __name__ == "__main__":
     MAX_CONNECTIONS = args.max_connections
     TIMEOUT = args.timeout
     BASE_PORT = args.base_port
+    MAX_TOKENS = args.max_tokens
     PREFILL_PATH = args.prefill_path
     FEWSHOT_PATH = args.fewshot_path
 
@@ -53,11 +56,16 @@ if __name__ == "__main__":
 
     fewshot_config = None
     if FEWSHOT > 0:
-        fewshot_config = PrefillConfig(
+        fewshot_config = FewShotConfig(
             path=FEWSHOT_PATH,
             id_field="id",
             response_field="response",
-            fraction=1.0,  # Use full solutions for few-shot
+            num_examples=FEWSHOT,
+            seed=42,
+            system_template="You will be asked to solve a math problem. Some examples of problems and solutions are provided below.\n\n{examples}",
+            example_template="PROBLEM:\n{formatted_example}\n\nSOLUTION:\n{response}",
+            exclude_current=True,
+            additional_fields=["question", "target"]
         )
 
     log = eval(
@@ -65,8 +73,6 @@ if __name__ == "__main__":
             template=TEMPLATE,
             fewshot_config=fewshot_config,
             prefill_config=prefill_config,
-            fewshot=FEWSHOT,
-            fewshot_seed=42,
             split="test"
         ),
         model=MODEL,
@@ -74,6 +80,7 @@ if __name__ == "__main__":
         limit=LIMIT,
         max_connections=MAX_CONNECTIONS,
         display="rich",
+        max_tokens=MAX_TOKENS,
     )
     results = extract_scores_from_log(log[0])
     with open(f"{LOG_DIR}/math_{FEWSHOT}shot_{HINT_FRACTION}.json", "w") as f:

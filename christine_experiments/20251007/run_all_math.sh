@@ -14,11 +14,11 @@ cleanup() {
 }
 
 trap cleanup INT TERM
-
-export HF_HOME="/scr/biggest/cye/.cache/huggingface"
+export HF_HOME=/scr/biggest/cye/.cache/huggingface
 
 # Format: "model_path:tensor_parallel"
-MODELS=("Qwen/Qwen2.5-0.5B-Instruct:1"
+MODELS=(
+# "Qwen/Qwen2.5-0.5B-Instruct:1"
 "Qwen/Qwen2.5-1.5B-Instruct:1"
 "Qwen/Qwen2.5-3B-Instruct:1"
 "Qwen/Qwen2.5-7B-Instruct:1"
@@ -30,8 +30,8 @@ MAX_CONNECTIONS=32
 HINT_FRACTIONS=(0.0 0.2 0.4 0.6 0.8)
 FEWSHOTS=(0 5)
 BASE_PORT=5000
-VLLM_UTILS_DIR="$NLP/emergent-doordash/src/utils"
-EXPERIMENTS_DIR="$NLP/emergent-doordash/christine_experiments/20251007"
+VLLM_UTILS_DIR="$SPHINX/emergent-doordash/src/utils"
+EXPERIMENTS_DIR="$SPHINX/emergent-doordash/christine_experiments/20251007"
 LIMIT=500
 
 for MODEL_SPEC in "${MODELS[@]}"; do
