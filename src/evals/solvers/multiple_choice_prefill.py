@@ -8,7 +8,7 @@ from inspect_ai.solver import Generate, Solver, TaskState, solver
 from inspect_ai._util.answer import answer_character, answer_index
 from inspect_ai.util import resource
 
-from evals.prefill import PrefillConfig, load_prefill_map
+from evals.prefill import PrefillConfig, load_prefill_data
 from evals.fewshot import FewShotConfig, load_fewshot_samples, create_fewshot_message
 from evals.hint import get_prefill_fraction
 
@@ -22,8 +22,6 @@ Answer the following multiple choice question. The last line of your response sh
 DEFAULT_EXAMPLE_TEMPLATE = """
 PROBLEM:
 {question}
-
-{choices}
 
 SOLUTION:
 {solution}
@@ -49,28 +47,85 @@ def prompt(question: str, choices: list[str], template: str) -> str:
     )
 
 
+def _try_extract_answer_letter(completion: str) -> str | None:
+    """Try to extract answer letter from completion using multiple patterns.
+
+    Supports various answer formats:
+    - ANSWER: X or Answer: X
+    - Final Answer: X
+    - ANSWER: [X] (with brackets)
+    - Answer: X) (with parenthesis)
+    - \\boxed{X} (LaTeX format)
+    - X) (just letter with parenthesis, as fallback)
+
+    Handles whitespace/newlines between "Answer" and the letter.
+    Returns the LAST occurrence found (most recent answer).
+
+    Returns the extracted letter (uppercase) or None if no match found.
+    """
+    # Define patterns to try (ordered by specificity)
+    patterns = [
+        # LaTeX boxed format: \boxed{A}
+        r"\\boxed\s*\{\s*([A-Za-z])\s*\}",
+
+        # Answer with brackets: ANSWER: [A] or Answer: [A]
+        r"(?i)(?:final\s+)?answer\s*:\s*\[\s*([A-Za-z])\s*\]",
+
+        # Answer with letter and parenthesis: Answer: C) or ANSWER: C)
+        r"(?i)(?:final\s+)?answer\s*:\s*([A-Za-z])\s*\)",
+
+        # Answer with just letter: ANSWER: C or Final Answer: A
+        # Allow newlines and whitespace between "Answer:" and the letter
+        r"(?i)(?:final\s+)?answer\s*:\s*\n?\s*([A-Za-z])",
+
+        # Fallback: Just letter followed by parenthesis (e.g., "C)")
+        # Use word boundary or start of line to avoid matching mid-word
+        r"(?:^|\s)([A-Za-z])\s*\)",
+    ]
+
+    all_matches = []
+
+    # Find all matches for all patterns
+    for pattern in patterns:
+        matches = re.finditer(pattern, completion, flags=re.MULTILINE | re.DOTALL)
+        for match in matches:
+            # Store (position, letter) to track order
+            all_matches.append((match.start(), match.group(1).strip().upper()))
+
+    # Return the last match (most recent answer)
+    if all_matches:
+        all_matches.sort(key=lambda x: x[0])  # Sort by position
+        return all_matches[-1][1]  # Return the letter from last match
+
+    return None
+
+
+def _validate_answer_letter(letter: str, num_choices: int) -> bool:
+    """Check if extracted letter is a valid choice (A, B, C, etc.)."""
+    allowed_options = set(answer_character(i) for i in range(num_choices))
+    return letter in allowed_options
+
+
 def parse_answer(completion: str, num_choices: int) -> str | None:
-    """Extract single answer from completion (A, B, C, etc.)."""
-    match = re.search(
-        r"(?i)^ANSWER\s*:\s*([A-Za-z])\s*(?:$|\n|\.)",
-        completion,
-        flags=re.MULTILINE,
-    )
+    """Extract single answer from completion (A, B, C, etc.).
 
-    if match is None:
-        match = re.search(
-            r"(?i)ANSWER\s*:\s*([A-Za-z])(?:[^\w]|\n|$|\.)",
-            completion,
-        )
+    Attempts to find "ANSWER: X" pattern in the completion and validates
+    that the extracted letter corresponds to a valid choice.
 
-    if match is None:
+    Args:
+        completion: The model's completion text
+        num_choices: Number of available choices
+
+    Returns:
+        The answer letter (A, B, C, etc.) or None if no valid answer found
+    """
+    letter = _try_extract_answer_letter(completion)
+
+    if letter is None:
         return None
 
-    matched = match.group(1).strip().upper()
-    allowed_options = set(answer_character(i) for i in range(num_choices))
-
-    if matched in allowed_options:
-        return matched
+    if _validate_answer_letter(letter, num_choices):
+        return letter
 
     return None
 
@@ -87,9 +142,13 @@ def multiple_choice_prefill(
 ) -> Solver:
     """Multiple choice solver with prefill support.
 
+    Two modes:
+    1. WITH prefill: Uses question_with_choices from the prefill JSONL file
+    2. WITHOUT prefill: Uses normal formatting with choices (A, B, C, etc.)
+
     This solver:
     1. Optionally adds few-shot examples (different per task, excludes current sample)
-    2. Formats the multiple choice prompt
+    2. Formats the question (using prefill source or normal formatting)
     3. Optionally adds a prefill assistant message
     4. Calls generate() with continue_final_message=True if prefill was added
 
@@ -98,15 +157,18 @@ def multiple_choice_prefill(
                              Used for both 0-shot and few-shot prompts.
         example_template: Custom example template (overrides default).
                          Used for both 0-shot and few-shot examples.
+                         Should expect {question} and {solution} fields.
         fewshot_config: FewShotConfig for few-shot examples
-        prefill_config: Optional prefill configuration
+        prefill_config: Optional prefill configuration. When provided, loads
+                       question_with_choices from the JSONL file.
         max_tokens: Maximum tokens to generate
         timeout: Timeout in seconds for generation (default: None)
     """
-    # Load prefill map if config provided
+    # Load prefill data if config provided
+    question_map = {}
     prefill_map = {}
     if prefill_config:
-        prefill_map = load_prefill_map(prefill_config)
+        question_map, prefill_map = load_prefill_data(prefill_config)
 
     # Load few-shot samples
     all_fewshot_samples = []
@@ -122,25 +184,33 @@ def multiple_choice_prefill(
         if not state.choices:
             raise ValueError("multiple_choice_prefill requires samples with choices")
 
-        # Format current task as an incomplete example
-        choices_list = [choice.value for choice in state.choices]
-        choices_text = answer_options(choices_list)
+        # Two paths for getting question_with_choices (question + formatted choices, no instructions):
+        # 1. WITH prefill: Use pre-formatted question_with_choices from JSONL
+        # 2. WITHOUT prefill: Format question with choices normally
+        use_preformatted = question_map and state.sample_id in question_map
 
+        if use_preformatted:
+            # Path 1: Use pre-formatted question_with_choices from prefill JSONL
+            question_with_choices = question_map[state.sample_id]
+        else:
+            # Path 2: Format normally with choices (A) B) C) ...)
+            choices_list = [choice.value for choice in state.choices]
+            choices_text = answer_options(choices_list)
+            question_with_choices = f"{state.user_prompt.text}\n\n{choices_text}"
+
+        # Save question_with_choices (question + choices, no instructions) to metadata
+        if state.metadata is None:
+            state.metadata = {}
+        state.metadata["question_with_choices"] = question_with_choices
+
+        # Both paths: wrap in example template (PROBLEM: ... SOLUTION: ...)
         current_task = example_template.format(
-            question=state.user_prompt.text,
-            choices=choices_text,
-            solution=""  # Empty - to be completed by the model
+            question=question_with_choices,
+            solution=""
         )
 
-        # Handle few-shot prompting
+        # Both paths: add instructions (0-shot or few-shot)
         if fewshot_config and all_fewshot_samples:
-            # Define formatter for multiple choice specific formatting
-            def format_mc_sample(sample_data: dict) -> dict:
-                """Format choices list into A) B) C) format for template."""
-                if 'choices' in sample_data and isinstance(sample_data['choices'], list):
-                    sample_data['choices'] = answer_options(sample_data['choices'])
-                return sample_data
-
             user_content = create_fewshot_message(
                 all_samples=all_fewshot_samples,
                 config=fewshot_config,
@@ -149,13 +219,13 @@ def multiple_choice_prefill(
                 current_task=current_task,
                 current_id=state.sample_id,
                 seed=state.sample_id,
-                format_sample=format_mc_sample,
+                format_sample=None,  # No formatting needed - questions already have choices
             )
-            state.user_prompt.text = user_content
         else:
             # 0-shot: just instructions + current task
             user_content = instruction_template + "\n\n" + current_task
-            state.user_prompt.text = user_content
+
+        state.user_prompt.text = user_content
 
         # Handle prefill if available
         continue_message = False

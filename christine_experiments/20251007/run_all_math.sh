@@ -18,17 +18,17 @@ export HF_HOME=/scr/biggest/cye/.cache/huggingface
 
 # Format: "model_path:tensor_parallel"
 MODELS=(
-# "Qwen/Qwen2.5-0.5B-Instruct:1"
-# "Qwen/Qwen2.5-1.5B-Instruct:1"
-# "Qwen/Qwen2.5-3B-Instruct:1"
+"Qwen/Qwen2.5-0.5B-Instruct:1"
+"Qwen/Qwen2.5-1.5B-Instruct:1"
+"Qwen/Qwen2.5-3B-Instruct:1"
 "Qwen/Qwen2.5-7B-Instruct:1"
 "Qwen/Qwen2.5-14B-Instruct:2"
 "Qwen/Qwen2.5-32B-Instruct:4")
 
 N_DEVICES=4
 MAX_CONNECTIONS=32
-HINT_FRACTIONS=(0.0 0.2 0.4 0.6 0.8)
-FEWSHOTS=(5)
+HINT_FRACTIONS=(1.0)
+FEWSHOTS=(0 5)
 BASE_PORT=5000
 VLLM_UTILS_DIR="$SPHINX/emergent-doordash/src/utils"
 EXPERIMENTS_DIR="$SPHINX/emergent-doordash/christine_experiments/20251007"
