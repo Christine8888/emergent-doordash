@@ -19,7 +19,6 @@ from transformers import (
     TrainingArguments,
 )
 from trl.models.utils import unwrap_model_for_generation
-from trl.trainer.utils import log_table_to_comet_experiment
 
 from utils import zip_
 

@@ -1,5 +1,5 @@
-model_name_or_path: openlm-research/open_llama_3b_step_250000
-save_dir: /u/sphinx/suzeva/emergent-doordash/
+model_name_or_path: allenai/OLMo-2-0425-1B # https://huggingface.co/allenai/OLMo-2-0425-1B
+save_dir: /sphinx/u/suzeva/emergent-doordash/
 run_name: test-suze
 epochs: 1
 per_device_train_batch_size: 8
@@ -15,7 +15,7 @@ fp16: false
 bf16: true
 tf32: true
 seed: 42
-eval_strategy: steps
+eval_strategy: no
 save_strategy: steps
 save_steps: 200
 save_total_limit: 2
@@ -24,12 +24,12 @@ warmup_ratio: 0.03
 lr_scheduler_type: cosine
 
 # Data: train and eval are MATH
-train_dataset: DigitalLearningGmbH/MATH-lighteval
-train_split: train
+train_dataset: math_train.jsonl
+train_split: na
 eval_datasets:
-  - DigitalLearningGmbH/MATH-lighteval
+#   - DigitalLearningGmbH/MATH-lighteval
 eval_splits:
-  - test
+#   - test
 cache_dir: /sphinx/u/suzeva/data
 
 # Generation config for callback

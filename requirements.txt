@@ -7,9 +7,11 @@ transformers
 accelerate
 datasets
 omegaconf
-trl
 pandas
 wandb
-trl
 tiktoken
 sentencepiece
+omegaconf
+flash-attn
+protobuf<4
+trl==0.9.6
