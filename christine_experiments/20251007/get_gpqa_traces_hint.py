@@ -21,7 +21,6 @@ def parse_args():
     parser.add_argument("--hint_fraction", type=float, default=0.8)
     parser.add_argument("--fewshot", type=int, default=0)
     parser.add_argument("--fewshot_seed", type=int, default=42)
-    parser.add_argument("--template", type=str, default=None)
     parser.add_argument("--log_dir", type=str, default="./gpqa")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--max_connections", type=int, default=20)
@@ -35,7 +34,6 @@ if __name__ == "__main__":
     FEWSHOT = args.fewshot
     FEWSHOT_SEED = args.fewshot_seed
     LOG_DIR = args.log_dir
-    TEMPLATE = args.template
     LIMIT = args.limit
     MAX_CONNECTIONS = args.max_connections
     TIMEOUT = args.timeout
@@ -57,15 +55,11 @@ if __name__ == "__main__":
             response_field="response",
             num_examples=FEWSHOT,
             seed=FEWSHOT_SEED,
-            system_template="You will be asked to solve a multiple choice question. Some examples of problems and solutions are provided below.\n\n{examples}",
-            example_template="PROBLEM:\n{formatted_example}\n\nSOLUTION:\n{response}\n",
             exclude_current=True,
-            additional_fields=["question", "target", "choices"]
         )
 
     log = eval(
         gpqa_diamond(
-            template=TEMPLATE,
             fewshot_config=fewshot_config,
             prefill_config=prefill_config,
             timeout=TIMEOUT

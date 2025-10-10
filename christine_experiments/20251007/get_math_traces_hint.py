@@ -17,7 +17,6 @@ def parse_args():
     parser.add_argument("--model", type=str, default="vllm/Qwen2.5-0.5B-Instruct")
     parser.add_argument("--hint_fraction", type=float, default=0.8)
     parser.add_argument("--fewshot", type=int, default=0, help="Number of few-shot examples (0 or 5)")
-    parser.add_argument("--template", type=str, default=None)
     parser.add_argument("--log_dir", type=str, default="./math")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--max_connections", type=int, default=20)
@@ -34,7 +33,6 @@ if __name__ == "__main__":
     HINT_FRACTION = args.hint_fraction
     FEWSHOT = args.fewshot
     LOG_DIR = args.log_dir
-    TEMPLATE = args.template
     LIMIT = args.limit
     MAX_CONNECTIONS = args.max_connections
     TIMEOUT = args.timeout
@@ -62,15 +60,11 @@ if __name__ == "__main__":
             response_field="response",
             num_examples=FEWSHOT,
             seed=42,
-            system_template="You will be asked to solve a math problem. Some examples of problems and solutions are provided below.\n\n{examples}",
-            example_template="PROBLEM:\n{formatted_example}\n\nSOLUTION:\n{response}",
             exclude_current=True,
-            additional_fields=["question", "target"]
         )
 
     log = eval(
         math(
-            template=TEMPLATE,
             fewshot_config=fewshot_config,
             prefill_config=prefill_config,
             split="test"

@@ -37,10 +37,12 @@ LOCAL_DATASET_DIR = Path(__file__).parent / "data"
 def math(
     levels: list[MathLevel] | MathLevel = [],
     subjects: list[MathSubject] | MathSubject = [],
-    template: str | None = None,
     split: str = "test",
+    instruction_template: str | None = None,
+    example_template: str | None = None,
     fewshot_config: "FewShotConfig | None" = None,
     prefill_config: "PrefillConfig | None" = None,
+    timeout: int | None = None,
 ) -> Task:
     """
     Inspect Task implementation for the MATH benchmark
@@ -48,10 +50,12 @@ def math(
     Args:
         levels (list[MathLevel]): List of levels to filter on, 1 to 5.
         subjects (list[MathSubject]): List of subjects to filter on.
-        template (str): Custom prompt template (must include {prompt} placeholder)
         split (str): Dataset split to use ("test", "train", or "validation")
+        instruction_template: Custom instruction template (overrides default)
+        example_template: Custom example template (overrides default)
         fewshot_config: FewShotConfig for few-shot examples
         prefill_config: PrefillConfig object for eval-time hints (test_hints.jsonl)
+        timeout: Timeout in seconds for generation (default: None)
     """
     # Load from local JSONL file
     local_file = LOCAL_DATASET_DIR / f"math_{split}.jsonl"
@@ -66,9 +70,11 @@ def math(
     return Task(
         dataset=dataset,
         solver=math_solver(
-            template=template,
+            instruction_template=instruction_template,
+            example_template=example_template,
             fewshot_config=fewshot_config,
             prefill_config=prefill_config,
+            timeout=timeout,
             local_dataset_dir=LOCAL_DATASET_DIR,
             record_to_sample=record_to_sample,
             sample_to_fewshot=sample_to_fewshot,

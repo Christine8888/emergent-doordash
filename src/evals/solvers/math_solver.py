@@ -14,25 +14,30 @@ from inspect_ai.solver import (
 from inspect_ai.util import resource
 
 from evals.prefill import PrefillConfig, load_prefill_map
-from evals.fewshot import FewShotConfig, load_fewshot_samples, create_fewshot_system_message
+from evals.fewshot import FewShotConfig, load_fewshot_samples, create_fewshot_message
 from evals.hint import get_prefill_fraction
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MATH_TEMPLATE = """
+# Default templates for math problems
+DEFAULT_INSTRUCTIONS = """
 Solve the following math problem step by step. The last line of your response should be of the form "ANSWER: $ANSWER" (without quotes) where $ANSWER is the answer to the problem.
+""".strip()
 
+DEFAULT_EXAMPLE_TEMPLATE = """
 PROBLEM:
-{prompt}
+{question}
 
 SOLUTION:
+{solution}
 """.strip()
 
 
 @solver
 def math_solver(
     *,
-    template: str | None = None,
+    instruction_template: str | None = None,
+    example_template: str | None = None,
     fewshot_config: FewShotConfig | None = None,
     prefill_config: PrefillConfig | None = None,
     local_dataset_dir: Path | None = None,
@@ -44,13 +49,16 @@ def math_solver(
     """Math solver with optional prefill support.
 
     This solver:
-    1. Optionally adds few-shot examples (different per task)
-    2. Formats the math prompt
+    1. Formats the problem using DEFAULT_EXAMPLE_TEMPLATE (or custom template)
+    2. Optionally adds few-shot examples with the same format
     3. Optionally adds a prefill assistant message
     4. Calls generate() with continue_final_message=True if prefill was added
 
     Args:
-        template: Template for the question (defaults to DEFAULT_MATH_TEMPLATE)
+        instruction_template: Custom instruction template (overrides default).
+                             Used for both 0-shot and few-shot prompts.
+        example_template: Custom example template (overrides default).
+                         Used for both 0-shot and few-shot examples.
         fewshot_config: FewShotConfig for few-shot examples
         prefill_config: PrefillConfig for eval-time hints (test_hints.jsonl)
         local_dataset_dir: Path to local dataset directory (deprecated)
@@ -59,62 +67,44 @@ def math_solver(
         max_tokens: Maximum tokens to generate
         timeout: Timeout in seconds for generation (default: None)
     """
-    if template is None:
-        template = DEFAULT_MATH_TEMPLATE
-
-    template_str = resource(template)
 
     prefill_map = {}
     if prefill_config:
         prefill_map = load_prefill_map(prefill_config)
 
+    # Load few-shot samples
     all_fewshot_samples = []
     if fewshot_config:
-        raw_samples = load_fewshot_samples(fewshot_config)
-        for sample in raw_samples:
-            formatted_sample = sample.copy()
-            question = sample.get('question', '')
-            # No special formatting for math problems
-            formatted_example = f"{question}"
-            formatted_sample['formatted_example'] = formatted_example
-            all_fewshot_samples.append(formatted_sample)
+        all_fewshot_samples = load_fewshot_samples(fewshot_config)
+
+    if instruction_template is None:
+        instruction_template = DEFAULT_INSTRUCTIONS
+    if example_template is None:
+        example_template = DEFAULT_EXAMPLE_TEMPLATE
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        # Construct main prompt
-        formatted_question = str(template_str).format(prompt=state.user_prompt.text)
+        # Format current task as an incomplete example
+        current_task = example_template.format(
+            question=state.user_prompt.text,
+            solution=""  # Empty - to be completed by the model
+        )
 
-        # Handle few-shot prompting if desired
+        # Handle few-shot prompting
         if fewshot_config and all_fewshot_samples:
-            seed = state.sample_id if state.sample_id else None
-
-            # Get few-shot examples
-            import random
-
-            rng = random.Random(hash(seed) if isinstance(seed, str) else seed)
-            available_samples = all_fewshot_samples
-            if fewshot_config.exclude_current and state.sample_id is not None:
-                available_samples = [s for s in all_fewshot_samples
-                                    if s.get(fewshot_config.id_field) != state.sample_id]
-
-            selected_samples = rng.sample(available_samples,
-                                         min(fewshot_config.num_examples, len(available_samples)))
-
-            # Format examples
-            examples_text = []
-            for sample in selected_samples:
-                try:
-                    example = fewshot_config.example_template.format(**sample)
-                    examples_text.append(example)
-                except KeyError as e:
-                    logger.warning(f"Missing field {e} in sample {sample.get(fewshot_config.id_field, 'unknown')}")
-                    continue
-
-            # Build user message: system instruction + examples + current question
-            system_instruction = fewshot_config.system_template.replace("{examples}", "").strip()
-            user_content = system_instruction + "\n\n" + "\n\n".join(examples_text) + "\n\n" + formatted_question
+            user_content = create_fewshot_message(
+                all_samples=all_fewshot_samples,
+                config=fewshot_config,
+                instruction_template=instruction_template,
+                example_template=example_template,
+                current_task=current_task,
+                current_id=state.sample_id,
+                seed=state.sample_id,
+            )
             state.user_prompt.text = user_content
         else:
-            state.user_prompt.text = formatted_question
+            # 0-shot: just instructions + current task
+            user_content = instruction_template + "\n\n" + current_task
+            state.user_prompt.text = user_content
 
         # Handle prefill if available
         continue_message = False

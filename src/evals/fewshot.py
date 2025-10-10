@@ -19,12 +19,7 @@ class FewShotConfig:
         response_field: Field name containing the full response text
         num_examples: Number of examples to include (default: 5)
         seed: Random seed for sampling examples (default: 42)
-        system_template: Template for the system message containing examples.
-                        Must contain {examples} placeholder.
-        example_template: Template for individual examples. Can reference any
-                         fields from the JSONL data (e.g., {question}, {response}, {target}).
         exclude_current: Whether to exclude the current sample from few-shot selection (default: True)
-        additional_fields: List of additional field names to extract from JSONL (default: [])
     """
 
     path: str
@@ -32,10 +27,7 @@ class FewShotConfig:
     response_field: str = "response"
     num_examples: int = 5
     seed: int = 42
-    system_template: str = "You will be asked to solve a problem. Some examples of problems and solutions are provided below.\n\n{examples}"
-    example_template: str = "PROBLEM:\n{question}\n\nSOLUTION:\n{response}\nANSWER: {target}"
     exclude_current: bool = True
-    additional_fields: list[str] | None = None
 
 
 def load_fewshot_samples(config: FewShotConfig) -> list[dict]:
@@ -53,26 +45,12 @@ def load_fewshot_samples(config: FewShotConfig) -> list[dict]:
     if not fewshot_file.exists():
         raise FileNotFoundError(f"Few-shot file not found: {config.path}")
 
-    # Determine which fields to extract
-    fields_to_extract = [config.id_field, config.response_field]
-    if config.additional_fields:
-        fields_to_extract.extend(config.additional_fields)
-
     with open(fewshot_file) as f:
         for line_num, line in enumerate(f, 1):
             try:
                 data = json.loads(line)
-                sample = {}
-
-                # Extract all specified fields
-                for field in fields_to_extract:
-                    if field in data:
-                        sample[field] = data[field]
-
-                # Also extract all fields for template flexibility
-                sample.update(data)
-
-                samples.append(sample)
+                # Load all fields from JSONL for template flexibility
+                samples.append(data)
             except json.JSONDecodeError as e:
                 logger.warning(f"Line {line_num}: Invalid JSON - {e}")
 
@@ -80,26 +58,35 @@ def load_fewshot_samples(config: FewShotConfig) -> list[dict]:
     return samples
 
 
-def create_fewshot_system_message(
+def create_fewshot_message(
     all_samples: list[dict],
     config: FewShotConfig,
+    instruction_template: str,
+    example_template: str,
+    current_task: str,
     current_id: str | None = None,
     seed: int | str | None = None,
+    format_sample: Callable[[dict], dict] | None = None,
 ) -> str:
-    """Create a few-shot system message from samples.
+    """Create a few-shot message with instructions, examples, and current task.
 
     Args:
         all_samples: List of sample dictionaries
-        config: FewShotConfig with templates and settings
+        config: FewShotConfig with data loading settings
+        instruction_template: Template for instructions
+        example_template: Template for formatting examples
+        current_task: Formatted current task to append
         current_id: ID of current sample to exclude (if config.exclude_current is True)
         seed: Random seed for sampling (overrides config.seed if provided)
+        format_sample: Optional function to format sample data before template formatting.
+                      Takes a sample dict and returns a formatted dict.
 
     Returns:
-        Formatted system message with few-shot examples
+        Formatted message: instructions + examples + current_task
     """
     import random
 
-    # Filter out current sample if needed
+    # Filter out current sample if requested
     available_samples = all_samples
     if config.exclude_current and current_id is not None:
         available_samples = [s for s in all_samples if s.get(config.id_field) != current_id]
@@ -110,21 +97,27 @@ def create_fewshot_system_message(
             f"available{f' after excluding current sample {current_id}' if config.exclude_current else ''}"
         )
 
-    # Sample examples
+    # Sample examples for few-shot prompting
     effective_seed = seed if seed is not None else config.seed
     rng = random.Random(hash(effective_seed) if isinstance(effective_seed, str) else effective_seed)
     selected_samples = rng.sample(available_samples, min(config.num_examples, len(available_samples)))
 
     # Format each example using the template
-    examples = []
+    examples_text = []
     for sample in selected_samples:
         try:
-            example = config.example_template.format(**sample)
-            examples.append(example)
+            # Get 'solution' field
+            sample_data = sample.copy()
+            sample_data['solution'] = sample.get(config.response_field, '')
+
+            # Apply custom formatting
+            if format_sample:
+                sample_data = format_sample(sample_data)
+
+            example = example_template.format(**sample_data)
+            examples_text.append(example)
         except KeyError as e:
             logger.warning(f"Missing field {e} in sample {sample.get(config.id_field, 'unknown')}")
             continue
 
-    # Format system message
-    examples_text = "\n\n".join(examples)
-    return config.system_template.format(examples=examples_text)
+    return instruction_template + "\n\n" + "\n\n".join(examples_text) + "\n\n" + current_task

@@ -9,20 +9,24 @@ from inspect_ai._util.answer import answer_character, answer_index
 from inspect_ai.util import resource
 
 from evals.prefill import PrefillConfig, load_prefill_map
-from evals.fewshot import FewShotConfig, load_fewshot_samples, create_fewshot_system_message
+from evals.fewshot import FewShotConfig, load_fewshot_samples, create_fewshot_message
 from evals.hint import get_prefill_fraction
 
 logger = logging.getLogger(__name__)
 
-SINGLE_ANSWER_TEMPLATE_COT = r"""
-Answer the following multiple choice question. The last line of your response should be of the following format: 'ANSWER: $LETTER' (without quotes) where LETTER is one of {letters}. Think step by step before answering.
+# Default templates for multiple choice problems
+DEFAULT_INSTRUCTIONS = """
+Answer the following multiple choice question. The last line of your response should be of the following format: 'ANSWER: $LETTER' (without quotes) where LETTER is one of the options. Think step by step before answering.
+""".strip()
 
+DEFAULT_EXAMPLE_TEMPLATE = """
 PROBLEM:
 {question}
 
 {choices}
 
 SOLUTION:
+{solution}
 """.strip()
 
 
@@ -74,7 +78,8 @@ def parse_answer(completion: str, num_choices: int) -> str | None:
 @solver
 def multiple_choice_prefill(
     *,
-    template: str | None = None,
+    instruction_template: str | None = None,
+    example_template: str | None = None,
     fewshot_config: FewShotConfig | None = None,
     prefill_config: PrefillConfig | None = None,
     max_tokens: int | None = None,
@@ -89,81 +94,68 @@ def multiple_choice_prefill(
     4. Calls generate() with continue_final_message=True if prefill was added
 
     Args:
-        template: Template for the question (defaults to COT template)
+        instruction_template: Custom instruction template (overrides default).
+                             Used for both 0-shot and few-shot prompts.
+        example_template: Custom example template (overrides default).
+                         Used for both 0-shot and few-shot examples.
         fewshot_config: FewShotConfig for few-shot examples
         prefill_config: Optional prefill configuration
         max_tokens: Maximum tokens to generate
         timeout: Timeout in seconds for generation (default: None)
     """
-    if template is None:
-        template = SINGLE_ANSWER_TEMPLATE_COT
-
-    template = resource(template)
-
     # Load prefill map if config provided
     prefill_map = {}
     if prefill_config:
         prefill_map = load_prefill_map(prefill_config)
 
-    # Load and format few-shot samples
+    # Load few-shot samples
     all_fewshot_samples = []
     if fewshot_config:
-        raw_samples = load_fewshot_samples(fewshot_config)
+        all_fewshot_samples = load_fewshot_samples(fewshot_config)
 
-        # Format each sample to match the prompt format
-        for sample in raw_samples:
-            formatted_sample = sample.copy()
-            # Format question with choices to match the PROBLEM: format
-            question = sample.get('question', '')
-            choices = sample.get('choices', [])
-            formatted_example = f"{question}\n{answer_options(choices)}"
-            formatted_sample['formatted_example'] = formatted_example
-            all_fewshot_samples.append(formatted_sample)
+    if instruction_template is None:
+        instruction_template = DEFAULT_INSTRUCTIONS
+    if example_template is None:
+        example_template = DEFAULT_EXAMPLE_TEMPLATE
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         if not state.choices:
             raise ValueError("multiple_choice_prefill requires samples with choices")
 
-        # Construct main prompt
+        # Format current task as an incomplete example
         choices_list = [choice.value for choice in state.choices]
-        formatted_question = prompt(
+        choices_text = answer_options(choices_list)
+
+        current_task = example_template.format(
             question=state.user_prompt.text,
-            choices=choices_list,
-            template=str(template),
+            choices=choices_text,
+            solution=""  # Empty - to be completed by the model
         )
 
-        # Handle few-shot prompting if desired
+        # Handle few-shot prompting
         if fewshot_config and all_fewshot_samples:
-            seed = state.sample_id if state.sample_id else None
+            # Define formatter for multiple choice specific formatting
+            def format_mc_sample(sample_data: dict) -> dict:
+                """Format choices list into A) B) C) format for template."""
+                if 'choices' in sample_data and isinstance(sample_data['choices'], list):
+                    sample_data['choices'] = answer_options(sample_data['choices'])
+                return sample_data
 
-            # Get few-shot examples
-            import random
-
-            rng = random.Random(hash(seed) if isinstance(seed, str) else seed)
-            available_samples = all_fewshot_samples
-            if fewshot_config.exclude_current and state.sample_id is not None:
-                available_samples = [s for s in all_fewshot_samples
-                                    if s.get(fewshot_config.id_field) != state.sample_id]
-
-            selected_samples = rng.sample(available_samples,
-                                         min(fewshot_config.num_examples, len(available_samples)))
-
-            # Format examples
-            examples_text = []
-            for sample in selected_samples:
-                try:
-                    example = fewshot_config.example_template.format(**sample)
-                    examples_text.append(example)
-                except KeyError as e:
-                    logger.warning(f"Missing field {e} in sample {sample.get(fewshot_config.id_field, 'unknown')}")
-                    continue
-
-            # Build user message: system instruction + examples + current question
-            system_instruction = fewshot_config.system_template.replace("{examples}", "").strip()
-            user_content = system_instruction + "\n\n" + "\n\n".join(examples_text) + "\n\n" + formatted_question
+            user_content = create_fewshot_message(
+                all_samples=all_fewshot_samples,
+                config=fewshot_config,
+                instruction_template=instruction_template,
+                example_template=example_template,
+                current_task=current_task,
+                current_id=state.sample_id,
+                seed=state.sample_id,
+                format_sample=format_mc_sample,
+            )
             state.user_prompt.text = user_content
         else:
-            state.user_prompt.text = formatted_question
+            # 0-shot: just instructions + current task
+            user_content = instruction_template + "\n\n" + current_task
+            state.user_prompt.text = user_content
 
         # Handle prefill if available
         continue_message = False

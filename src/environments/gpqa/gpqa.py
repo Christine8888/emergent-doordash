@@ -25,7 +25,8 @@ LOCAL_DATA_DIR = Path(__file__).parent / "data"
 
 @task
 def gpqa_diamond(
-    template: str | None = None,
+    instruction_template: str | None = None,
+    example_template: str | None = None,
     fewshot_config: FewShotConfig | None = None,
     prefill_config: PrefillConfig | None = None,
     timeout: int | None = 600,
@@ -33,13 +34,15 @@ def gpqa_diamond(
     """GPQA Diamond evaluation task.
 
     Args:
-        template: Custom prompt template
+        instruction_template: Custom instruction template (overrides default)
+        example_template: Custom example template (overrides default)
         fewshot_config: FewShotConfig for few-shot examples
         prefill_config: PrefillConfig object for vLLM prefill (optional)
         timeout: Timeout in seconds for generation (default: 600)
     """
     solver = multiple_choice_prefill(
-        template=template,
+        instruction_template=instruction_template,
+        example_template=example_template,
         fewshot_config=fewshot_config,
         prefill_config=prefill_config,
         timeout=timeout

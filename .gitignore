@@ -4,6 +4,7 @@ CLAUDE.md
 *.eval
 .claude/
 christine_experiments/**/*.ipynb
+christine_experiments/**/*.json
 
 # Python
 __pycache__/
