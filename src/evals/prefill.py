@@ -5,26 +5,57 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from evals.example import Example
+
 logger = logging.getLogger(__name__)
+
+# Module-level cache for prefill data
+_PREFILL_DATA_CACHE: dict[str, dict[str, Example]] = {}
 
 
 @dataclass
 class PrefillConfig:
     """Configuration for prefill solver.
 
+    Caches loaded data to avoid reloading for every solver invocation.
+
     Args:
         path: Path to JSONL file containing prefill data
         fraction: Fraction of words to include from response (0.0 to 1.0)
-        response_field: Field name containing the full response text
         id_field: Field name containing the sample ID
-        question_field: Field name containing the question with formatted choices (optional)
+        question_field: Field name containing the question (e.g., question with choices)
+        response_field: Field name containing the response
+        target_field: Field name containing the target answer (optional)
     """
 
     path: str
     fraction: float = 0.5
-    response_field: str = "response"
     id_field: str = "id"
     question_field: str = "question_with_choices"
+    response_field: str = "response"
+    target_field: str = "target"
+
+    def get_data(self) -> dict[str, Example]:
+        """Get cached prefill data, loading if necessary.
+
+        Returns:
+            Dictionary mapping sample IDs to Example objects
+        """
+        # Use path as cache key
+        if self.path not in _PREFILL_DATA_CACHE:
+            logger.info(f"Loading prefill data from {self.path}")
+            _PREFILL_DATA_CACHE[self.path] = load_prefill_data(self)
+
+        return _PREFILL_DATA_CACHE[self.path]
+
+    def get_available_ids(self) -> set[str]:
+        """Get set of sample IDs that have prefill data available.
+
+        Returns:
+            Set of sample IDs
+        """
+        prefill_data = self.get_data()
+        return set(prefill_data.keys())
 
 
 def load_prefill_map(config: PrefillConfig) -> dict[str, str]:
@@ -58,19 +89,16 @@ def load_prefill_map(config: PrefillConfig) -> dict[str, str]:
     return prefill_map
 
 
-def load_prefill_data(config: PrefillConfig) -> tuple[dict[str, str], dict[str, str]]:
-    """Load both question_with_choices and prefill responses from JSONL file.
+def load_prefill_data(config: PrefillConfig) -> dict[str, Example]:
+    """Load prefill data from JSONL file.
 
     Args:
         config: PrefillConfig with path and field names
 
     Returns:
-        Tuple of (question_map, prefill_map) where:
-        - question_map: Dictionary mapping sample IDs to question_with_choices
-        - prefill_map: Dictionary mapping sample IDs to response texts
+        Dictionary mapping sample IDs to Example objects
     """
-    question_map = {}
-    prefill_map = {}
+    prefill_data = {}
     prefill_file = Path(config.path)
 
     if not prefill_file.exists():
@@ -81,16 +109,18 @@ def load_prefill_data(config: PrefillConfig) -> tuple[dict[str, str], dict[str, 
             try:
                 data = json.loads(line)
                 sample_id = data.get(config.id_field)
-                response_text = data.get(config.response_field)
                 question_text = data.get(config.question_field)
+                response_text = data.get(config.response_field)
+                target_text = data.get(config.target_field)  # Optional
 
-                if sample_id and response_text:
-                    prefill_map[sample_id] = response_text
-
-                if sample_id and question_text:
-                    question_map[sample_id] = question_text
+                if sample_id and question_text and response_text:
+                    prefill_data[sample_id] = Example(
+                        question=question_text,
+                        response=response_text,
+                        target=target_text
+                    )
             except json.JSONDecodeError as e:
                 logger.warning(f"Line {line_num}: Invalid JSON - {e}")
 
-    logger.info(f"Loaded {len(prefill_map)} prefill entries and {len(question_map)} questions from {config.path}")
-    return question_map, prefill_map
+    logger.info(f"Loaded {len(prefill_data)} prefill entries from {config.path}")
+    return prefill_data

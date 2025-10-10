@@ -76,16 +76,17 @@ async def score_helper(
     answer = extract_answer(state.output.completion)
     if answer:
         if exact_match:
+            correct = False
+            norm_answer = await normalize_final_answer(answer)
+            norm_target = await normalize_final_answer(target.text)
+            
             if use_sympy:
                 # Use sympy library for exact match based on https://arxiv.org/pdf/2206.14858
-                norm_answer = await normalize_final_answer(answer)
-                norm_target = await normalize_final_answer(target.text)
                 correct = await is_equiv_sympy(norm_answer, norm_target)
-                # Fall back to string-based comparison if sympy fails
-                if not correct:
-                    correct = await is_equiv(answer, target.text)
-            else:
-                correct = await is_equiv(answer, target.text)
+            
+            # Fall back to string-based comparison if sympy fails
+            if not correct:
+                correct = await is_equiv(norm_answer, norm_target)
 
         # Ask grader model to judge equivalence
         else:

@@ -38,11 +38,18 @@ if __name__ == "__main__":
     MAX_CONNECTIONS = args.max_connections
     TIMEOUT = args.timeout
 
-    data_path = "/sphinx/u/cye/emergent-doordash/christine_experiments/20251006/gpqa_diamond_samples.jsonl"
+    data_path = "/sphinx/u/cye/emergent-doordash/christine_experiments/20251006/gpqa_diamond_samples_with_choices.jsonl"
+
+    # Check if output file already exists
+    filename = f"{LOG_DIR}/gpqa_diamond_{FEWSHOT}shot_{HINT_FRACTION}.json"
+    if os.path.exists(filename):
+        print(f"Output file {filename} already exists. Skipping evaluation.")
+        exit(0)
 
     prefill_config = PrefillConfig(
         path=data_path,
         id_field="id",
+        question_field="question_with_choices",
         response_field="response",
         fraction=HINT_FRACTION,
     )
@@ -52,6 +59,7 @@ if __name__ == "__main__":
         fewshot_config = FewShotConfig(
             path=data_path,
             id_field="id",
+            question_field="question_with_choices",
             response_field="response",
             num_examples=FEWSHOT,
             seed=FEWSHOT_SEED,
@@ -72,7 +80,6 @@ if __name__ == "__main__":
     )
 
     results = extract_scores_from_log(log[0])
-    filename = f"{LOG_DIR}/gpqa_diamond_{FEWSHOT}shot_{HINT_FRACTION}.json"
 
     with open(filename, "w") as f:
         json.dump(results, f)

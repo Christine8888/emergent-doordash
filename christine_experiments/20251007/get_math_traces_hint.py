@@ -45,6 +45,12 @@ if __name__ == "__main__":
     os.environ["VLLM_BASE_URL"] = f"http://localhost:{BASE_PORT}/v1"
     os.environ["VLLM_API_KEY"] = "local"
 
+    # Check if output file already exists
+    filename = f"{LOG_DIR}/math_{FEWSHOT}shot_{HINT_FRACTION}.json"
+    if os.path.exists(filename):
+        print(f"Output file {filename} already exists. Skipping evaluation.")
+        exit(0)
+
     prefill_config = PrefillConfig(
         path=PREFILL_PATH,
         id_field="id",
@@ -77,5 +83,5 @@ if __name__ == "__main__":
         max_tokens=MAX_TOKENS,
     )
     results = extract_scores_from_log(log[0])
-    with open(f"{LOG_DIR}/math_{FEWSHOT}shot_{HINT_FRACTION}.json", "w") as f:
+    with open(filename, "w") as f:
         json.dump(results, f)
