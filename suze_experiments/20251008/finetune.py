@@ -156,18 +156,6 @@ class GenerativeAccuracyCallback(TrainerCallback):
                     )
                     wandb.log({f"eval/{eval_dataset_name}_model_completions": wandb.Table(dataframe=df)})
 
-            if "comet_ml" in args.report_to:
-                df = _generative_accuracy_completions_df(
-                    state=state,
-                    prompts=prompts,
-                    completions=completions,
-                    is_correct=is_correct,
-                )
-                log_table_to_comet_experiment(
-                    name=f"eval/{eval_dataset_name}_model_completions.csv",
-                    table=df,
-                )
-
     def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         # At every evaluation step, we generate completions for the model and compare them with the ground truth.
         # Then we log this to the trainer.
