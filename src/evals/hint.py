@@ -1,6 +1,6 @@
 import re
 
-def get_prefill_fraction(reasoning: str, fraction: float = 0.5) -> str:
+def get_prefill_fraction(reasoning: str, fraction: float = 0.5, stop_string: str = "ANSWER:") -> str:
     # Split on whitespace while capturing it
     tokens = re.split(r'(\s+)', reasoning)
     
@@ -13,7 +13,7 @@ def get_prefill_fraction(reasoning: str, fraction: float = 0.5) -> str:
     word_count = 0
     for token in tokens:
         if not token.isspace():
-            if word_count >= num_words:
+            if word_count >= num_words or token == stop_string:
                 break
             word_count += 1
         result.append(token)
