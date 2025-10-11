@@ -28,7 +28,11 @@ MODELS=(
 N_DEVICES=4
 MAX_CONNECTIONS=32
 HINT_FRACTIONS=(0.0 0.2 0.4 0.6 0.8 1.0)
+<<<<<<< HEAD
 FEWSHOTS=(0)
+=======
+FEWSHOTS=(0 5)
+>>>>>>> b1129f2279f2c00a8f6d3c5132ebfc7cad203150
 VLLM_PORT=5000
 VLLM_UTILS_DIR="$SPHINX/emergent-doordash/src/utils"
 EXPERIMENTS_DIR="$SPHINX/emergent-doordash/christine_experiments/20251007"

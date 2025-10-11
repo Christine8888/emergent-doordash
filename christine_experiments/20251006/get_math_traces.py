@@ -11,7 +11,7 @@ LIMIT = None
 MAX_CONNECTIONS = 40
 EPOCHS = 3
 TEMPLATE = None  # Set to custom template string, or None for default
-SPLIT = "train"  # Options: "test", "train", "validation"
+SPLIT = "test"  # Options: "test", "train", "validation"
 
 # Example template (must include {prompt} placeholder):
 # TEMPLATE = """Solve the following math problem. Put your final answer after "ANSWER: ".

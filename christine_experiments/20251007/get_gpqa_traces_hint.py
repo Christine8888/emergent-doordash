@@ -36,9 +36,11 @@ if __name__ == "__main__":
     MAX_CONNECTIONS = args.max_connections
     TIMEOUT = args.timeout
     BASE_PORT = args.base_port
+    
+    data_path = "/sphinx/u/cye/emergent-doordash/christine_experiments/20251010/gpqa_diamond_samples_with_choices.jsonl"
+
     os.environ["VLLM_BASE_URL"] = f"http://localhost:{BASE_PORT}/v1"
-    os.environ["VLLM_API_KEY"] = "local"
-    data_path = "/sphinx/u/cye/emergent-doordash/christine_experiments/20251006/gpqa_diamond_samples_with_choices.jsonl"
+    os.environ["VLLM_API_KEY"] = "local"    
 
     # Check if output file already exists
     filename = f"{LOG_DIR}/gpqa_diamond_{FEWSHOT}shot_{HINT_FRACTION}.json"
