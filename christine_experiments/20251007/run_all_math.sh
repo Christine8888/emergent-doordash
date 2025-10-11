@@ -57,8 +57,6 @@ for MODEL_SPEC in "${MODELS[@]}"; do
         echo "  Waiting... (${ELAPSED}s elapsed)"
     done
 
-    echo "Running experiments for $MODEL_NAME..."
-
     for FEWSHOT in "${FEWSHOTS[@]}"; do
         LOG_DIR="$EXPERIMENTS_DIR/math/${FEWSHOT}shot/$MODEL_NAME"
 
