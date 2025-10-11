@@ -33,6 +33,35 @@ DATASET_PATH = "DigitalLearningGmbH/MATH-lighteval"
 LOCAL_DATASET_DIR = Path(__file__).parent / "data"
 
 
+def get_math_dataset(
+    split: str = "test",
+    levels: list[MathLevel] | MathLevel = [],
+    subjects: list[MathSubject] | MathSubject = [],
+    shuffle: bool = True,
+):
+    """
+    Load MATH dataset from local JSONL files.
+
+    Args:
+        split: Dataset split to use ("test", "train", or "validation")
+        levels: List of levels to filter on, 1 to 5
+        subjects: List of subjects to filter on
+        shuffle: Whether to shuffle the dataset
+
+    Returns:
+        Inspect Dataset object
+    """
+    local_file = LOCAL_DATASET_DIR / f"math_{split}.jsonl"
+    dataset = json_dataset(
+        json_file=str(local_file),
+        sample_fields=record_to_sample,
+        shuffle=shuffle,
+    )
+    # Subset the data based on levels and/or subjects
+    dataset = filter_dataset(dataset=dataset, levels=levels, subjects=subjects)
+    return dataset
+
+
 @task
 def math(
     levels: list[MathLevel] | MathLevel = [],
@@ -57,15 +86,7 @@ def math(
         prefill_config: PrefillConfig object for eval-time hints (test_hints.jsonl)
         timeout: Timeout in seconds for generation (default: None)
     """
-    # Load from local JSONL file
-    local_file = LOCAL_DATASET_DIR / f"math_{split}.jsonl"
-    dataset = json_dataset(
-        json_file=str(local_file),
-        sample_fields=record_to_sample,
-        shuffle=True,
-    )
-    # Subset the data based on levels and/or subjects
-    dataset = filter_dataset(dataset=dataset, levels=levels, subjects=subjects)
+    dataset = get_math_dataset(split=split, levels=levels, subjects=subjects, shuffle=True)
 
     return Task(
         dataset=dataset,
