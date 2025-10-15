@@ -37,7 +37,10 @@ def format_prompt(sample: Sample) -> str:
 
 def extract_sample_fields(sample: Sample) -> dict:
     """Extract additional fields for sample_to_dict."""
+    choices_text = format_answer_options(sample.choices)
+    question_with_choices = f"{sample.input}\n\n{choices_text}"
+
     return {
-        "question": sample.input,
         "choices": sample.choices,
+        "question_with_choices": question_with_choices,
     }

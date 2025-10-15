@@ -150,7 +150,7 @@ async def main():
                 f.write(json.dumps(item) + '\n')
 
     pbar.close()
-    print(f"✓ Completed. Saved to {args.output_file}")
+    print(f"Saved to {args.output_file}")
 
 
 if __name__ == "__main__":

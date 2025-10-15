@@ -24,6 +24,7 @@ from sample_utils import (
 
 async def sample_until_correct(
     sample_id: str,
+    sample_input: str,
     prompt: str,
     target: str,
     model_id: str,
@@ -47,14 +48,15 @@ async def sample_until_correct(
 
                 if correct:
                     result = sample_to_dict(
-                        sample_id, prompt, target, model_id, response, **sample_fields
+                        sample_id, prompt, target, model_id, response,
+                        question=sample_input, **sample_fields
                     )
                     pbar.update(1)
                     return result
                 else:
                     extracted = eval_config.extract_answer(response)
                     logger.info(f"  EXTRACTED: {extracted}")
-                    logger.info(f"  TARGET: {target}")
+                    logger.info(f"  TARGET: {target}\n")
 
             except Exception as e:
                 logger.error({e})
@@ -122,6 +124,7 @@ async def main():
         tasks.append(
             sample_until_correct(
                 sample_id=sample.id,
+                sample_input=sample.input,
                 prompt=prompt,
                 target=sample.target,
                 model_id=args.model,

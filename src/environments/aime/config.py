@@ -38,6 +38,4 @@ def format_prompt(sample: Sample) -> str:
 
 def extract_sample_fields(sample: Sample) -> dict:
     """Extract additional fields for sample_to_dict."""
-    return {
-        "question": sample.input,
-    }
+    return {}

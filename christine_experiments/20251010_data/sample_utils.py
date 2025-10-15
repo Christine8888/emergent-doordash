@@ -69,7 +69,7 @@ def sample_to_dict(
     model: str,
     response: str,
     question: str | None = None,
-    choices: list[str] | None = None,
+    **extra_fields
 ) -> dict:
     """Convert sample to output dict format.
 
@@ -80,18 +80,22 @@ def sample_to_dict(
         model: Model ID
         response: Model response
         question: Raw question text (defaults to full_prompt if not provided)
-        choices: List of answer choices (None for free-form tasks like MATH)
+        **extra_fields: Additional fields to include (e.g., choices, question_with_choices)
     """
-    return {
+    result = {
         "id": sample_id,
         "full_prompt": full_prompt,
         "question": question or full_prompt,
         "target": target,
         "model": model,
         "response": response,
-        "choices": choices,
         "score": "C",
     }
+
+    # Add any extra fields
+    result.update(extra_fields)
+
+    return result
 
 
 async def run_sampling_loop(
