@@ -6,10 +6,17 @@ from datasets import load_dataset
 from omegaconf import OmegaConf
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
-from trl import DataCollatorForCompletionOnlyLM
+
 import datetime
 
-from utils import set_seed, test_collator_masking
+from utils import (
+    set_seed,
+    test_collator_masking,
+    format_conversation,
+    create_data_collator,
+    compute_token_length_stats,
+    recommend_max_seq_length_from_stats,
+)
 
 
 @dataclass
@@ -23,6 +30,8 @@ class SFTArgs:
     wandb_entity: Optional[str]
     wandb_project: Optional[str]
     sft_dataset_path: str
+    test_data_collator: bool
+    prep_and_analyze_only: bool
     # train parameters
     dataset_text_field: str
     num_train_epochs: int
@@ -40,6 +49,24 @@ class SFTArgs:
     bf16: bool
     tf32: bool
 
+def init_model_and_tokenizer(cfg: SFTArgs):
+    assert torch.cuda.is_available()
+    tokenizer = AutoTokenizer.from_pretrained(cfg.model_id)
+    model = AutoModelForCausalLM.from_pretrained(
+        cfg.model_id,
+        cache_dir=cfg.model_dir,
+    )
+    print(f"loaded model {cfg.model_id} from {cfg.model_dir}")
+    # Add padding token if needed
+    if tokenizer.pad_token_id is None or tokenizer.pad_token_id == tokenizer.eos_token_id:
+        tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        tokenizer.padding_side = "right" # ensures proper causal masking
+        model.resize_token_embeddings(len(tokenizer))
+    return model, tokenizer
+
+
+
+
 def train_sft(cfg: SFTArgs):
     if cfg.wandb_entity is not None and cfg.wandb_project is not None:
         os.environ.setdefault("WANDB_ENTITY", cfg.wandb_entity)
@@ -52,23 +79,7 @@ def train_sft(cfg: SFTArgs):
         save_dir = os.path.join(cfg.base_dir, cfg.experiment_name)
     os.makedirs(save_dir, exist_ok=True)
 
-    def init_model_tokenizer():
-        assert torch.cuda.is_available()
-        tokenizer = AutoTokenizer.from_pretrained(cfg.model_id)
-        model = AutoModelForCausalLM.from_pretrained(
-            cfg.model_id,
-            cache_dir=cfg.model_dir,
-        )
-        print(f"loaded model {cfg.model_id} from {cfg.model_dir}")
-        return model, tokenizer
-
-    model, tokenizer = init_model_tokenizer()
-
-    # Add padding token if needed
-    if tokenizer.pad_token_id is None or tokenizer.pad_token_id == tokenizer.eos_token_id:
-        tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-        tokenizer.padding_side = "right" # ensures proper causal masking
-        model.resize_token_embeddings(len(tokenizer))
+    model, tokenizer = init_model_and_tokenizer(cfg)
     
     # Save initial model and tokenizer
     model.save_pretrained(save_dir)
@@ -87,17 +98,7 @@ def train_sft(cfg: SFTArgs):
     #     Assistant: <response>
     # so SFTTrainer sees one "text" field. The collator later masks user text so
     # the model learns only from assistant responses.
-    def format_conversation(example):
-        messages = example["messages"]
-        conversation = ""
-        for msg in messages:
-            role = msg["role"]
-            content = msg["content"].strip()
-            if role == "user":
-                conversation += f"User: {content}\n"
-            elif role == "assistant":
-                conversation += f"Assistant: {content}\n"
-        return {"text": conversation.strip()}
+    # use shared formatter
     
     train_dataset = load_dataset("json", data_files=cfg.sft_dataset_path, split="train")
     train_dataset = train_dataset.map(format_conversation)
@@ -106,11 +107,7 @@ def train_sft(cfg: SFTArgs):
     # TODO: not sure how to do eval from christine while training; let's start without it
 
     # --- Define collator to mask out user text ---
-    response_template = "\nAssistant:"  # match conversation format
-    collator = DataCollatorForCompletionOnlyLM(
-        response_template=response_template,
-        tokenizer=tokenizer,
-    )
+    collator = create_data_collator(tokenizer)
     print(f"defined collator to mask out user text.")
 
     # --- Training configuration ---
@@ -142,10 +139,6 @@ def train_sft(cfg: SFTArgs):
         # NOTE: leaving out any eval related setup
     )
 
-    # Test collator masking on a few examples
-    test_collator_masking(train_dataset, tokenizer, collator)
-    return # for debugging
-
     # --- Initialize trainer ---
     trainer = SFTTrainer(
         model=model,
@@ -156,6 +149,42 @@ def train_sft(cfg: SFTArgs):
     )
 
     trainer.train()
+
+
+def analyze_sft(cfg: SFTArgs):
+    set_seed(cfg.seed)
+
+    model, tokenizer = init_model_and_tokenizer(cfg)
+
+    train_dataset = load_dataset("json", data_files=cfg.sft_dataset_path, split="train")
+    print(f"Formatting reasoning traces dataset with {len(train_dataset)} examples")
+    train_dataset = train_dataset.map(format_conversation)
+    print(f"loaded reasoning traces dataset with {len(train_dataset)} examples")
+
+    # ---- Determining a good max_seq_length ----
+    model_context_limit = getattr(getattr(model, "config", object()), "max_position_embeddings", None)
+    length_stats = compute_token_length_stats(
+        train_dataset,
+        tokenizer,
+        text_field="text",
+        sample_size=5000,
+        batch_size=256,
+        add_special_tokens=True,
+    )
+    recommended_msl, msl_meta = recommend_max_seq_length_from_stats(length_stats, model_context_limit, target_percentile=95)
+    print(
+        f"token lengths stats (sampled {length_stats['count']}): min={length_stats['min']} mean={length_stats['mean']:.1f} "
+        f"p95={length_stats['percentiles']['p95']} p99={length_stats['percentiles']['p99']} max={length_stats['max']}"
+    )
+    print(
+        f"model context limit: {model_context_limit}; recommended max_seq_length: {recommended_msl} "
+        f"(p{msl_meta['target_percentile']}={msl_meta['chosen_from_data']}, overflow={msl_meta['overflow_fraction_at_recommended']:.3f})"
+    )
+    print("="*100)
+
+    # ---- Testing the data collator ----
+    collator = create_data_collator(tokenizer)
+    test_collator_masking(train_dataset, tokenizer, collator, cfg)
 
 def main():
     cli_args = OmegaConf.from_cli()
@@ -168,13 +197,14 @@ def main():
     cfg = OmegaConf.merge(default_cfg, file_cfg, cli_args)
     cfg = OmegaConf.to_object(cfg)
 
+    # Allow analyze-only runs: python sft.py config=... analyze=true
+    if getattr(cfg, "prep_and_analyze_only", False):
+        analyze_sft(cfg)
+        return
+
     train_sft(cfg)
 
 
 if __name__ == "__main__":
     # python suze_experiments/20251014/sft.py config=suze_experiments/20251014/test.yaml
     main()
-
-
-# TODO: check that data collator masks correctly
-# TODO: debug code 

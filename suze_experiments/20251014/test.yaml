@@ -1,5 +1,6 @@
 experiment_name: test
 append_timestamp: True
+prep_and_analyze_only: True
 seed: 42
 model_id: allenai/OLMo-2-0425-1B
 model_dir: /sphinx/u/suzeva/models # this is where huggingface models will be loaded from
@@ -8,6 +9,7 @@ wandb_entity: suzevana
 wandb_project: emergent_doordash
 sft_dataset_path: /sailhome/suzeva/emergent-doordash/openthoughts_sonnet45.jsonl
 dataset_text_field: text # because openthoughts_sonnet45 contains untokenized text
+test_data_collator: True # will print some examples with masking so user can see if that is happening correctly 
 # training parameters
 num_train_epochs: 1
 max_seq_length: 2048
