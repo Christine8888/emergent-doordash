@@ -6,3 +6,19 @@ base_dir: /sphinx/u/suzeva/emergent-doordash/ # this is where all experiments re
 wandb_entity: suzevana
 wandb_project: emergent_doordash
 sft_dataset_path: /sailhome/suzeva/emergent-doordash/openthoughts_sonnet45.jsonl
+# training parameters
+num_train_epochs: 1
+max_seq_length: 2048
+learning_rate: 2.0e-5
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 1
+logging_steps: 10
+weight_decay: 0.0
+warmup_ratio: 0.03
+lr_scheduler_type: cosine
+save_steps: 200
+save_total_limit: 2
+# numerically safest, most stable fine-tuning that’s still efficient on H100/H200
+fp16: False
+bf16: True
+tf32: True
