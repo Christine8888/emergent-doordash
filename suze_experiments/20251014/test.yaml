@@ -1,0 +1,8 @@
+experiment_name: test
+seed: 42
+model_id: allenai/OLMo-2-0425-1B
+model_dir: /sphinx/u/suzeva/models # this is where huggingface models will be loaded from
+base_dir: /sphinx/u/suzeva/emergent-doordash/ # this is where all experiments results will be saved (includig SFT'ed models)
+wandb_entity: suzevana
+wandb_project: emergent_doordash
+sft_dataset_path: /sailhome/suzeva/emergent-doordash/openthoughts_sonnet45.jsonl
