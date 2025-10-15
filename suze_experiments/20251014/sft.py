@@ -57,11 +57,23 @@ def init_model_and_tokenizer(cfg: SFTArgs):
         cache_dir=cfg.model_dir,
     )
     print(f"loaded model {cfg.model_id} from {cfg.model_dir}")
-    # Add padding token if needed
+    # Ensure padding token and alignment of special tokens between tokenizer, model config, and generation config
     if tokenizer.pad_token_id is None or tokenizer.pad_token_id == tokenizer.eos_token_id:
         tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-        tokenizer.padding_side = "right" # ensures proper causal masking
         model.resize_token_embeddings(len(tokenizer))
+    # For causal LMs we want right padding to preserve autoregressive masking
+    tokenizer.padding_side = "right"
+
+    # Align model.config and generation_config special tokens with the tokenizer to avoid alignment warnings
+    if getattr(tokenizer, "pad_token_id", None) is not None:
+        model.config.pad_token_id = tokenizer.pad_token_id
+        model.generation_config.pad_token_id = tokenizer.pad_token_id
+    if getattr(tokenizer, "bos_token_id", None) is not None:
+        model.config.bos_token_id = tokenizer.bos_token_id
+        model.generation_config.bos_token_id = tokenizer.bos_token_id
+    if getattr(tokenizer, "eos_token_id", None) is not None:
+        model.config.eos_token_id = tokenizer.eos_token_id
+        model.generation_config.eos_token_id = tokenizer.eos_token_id
     return model, tokenizer
 
 
@@ -131,7 +143,7 @@ def train_sft(cfg: SFTArgs, save_dir: str):
     # --- Initialize trainer ---
     trainer = SFTTrainer(
         model=model,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,  # replaces deprecated `tokenizer` arg
         train_dataset=train_dataset,
         args=training_args,
         data_collator=collator,
@@ -224,3 +236,5 @@ def main():
 if __name__ == "__main__":
     # python suze_experiments/20251014/sft.py config=suze_experiments/20251014/test.yaml
     main()
+
+# TODO: update package versions
