@@ -66,6 +66,56 @@ def filter_dataset(
     return dataset
 
 
+async def grade_math_answer(
+    answer: str,
+    target: str,
+    exact_match: bool,
+    use_sympy: bool = False,
+    model: str | Model | None = None,
+) -> bool:
+    """Canonical grader for math problems.
+
+    This is the single source of truth for grading MATH and AIME problems.
+    Extracts the core grading logic from score_helper.
+    Used by both eval scorers and sample_until_done scripts.
+
+    Args:
+        answer: Already-extracted answer string
+        target: Target answer string
+        exact_match: If True, use exact matching. If False, use model grader
+        use_sympy: If True (with exact_match), use sympy for equivalence checking
+        model: Model to use for grading (only used if exact_match=False)
+
+    Returns:
+        True if answer is correct, False otherwise
+    """
+    if not answer:
+        return False
+
+    if exact_match:
+        correct = False
+        norm_answer = await normalize_final_answer(answer)
+        norm_target = await normalize_final_answer(target)
+
+        if use_sympy:
+            # Use sympy library for exact match based on https://arxiv.org/pdf/2206.14858
+            correct = await is_equiv_sympy(norm_answer, norm_target)
+
+        # Fall back to string-based comparison if sympy fails
+        if not correct:
+            correct = await is_equiv(norm_answer, norm_target)
+
+    else:
+        # Ask grader model to judge equivalence
+        prompt = EQUIVALANCE_TEMPLATE % (
+            {"expression1": target, "expression2": answer}
+        )
+        result = await get_model(model).generate(prompt)
+        correct = result.completion.lower() == "yes"
+
+    return correct
+
+
 async def score_helper(
     state: TaskState,
     target: Target,
@@ -74,29 +124,15 @@ async def score_helper(
     model: str | Model | None = None,
 ) -> Score:
     answer = extract_answer(state.output.completion)
+
     if answer:
-        if exact_match:
-            correct = False
-            norm_answer = await normalize_final_answer(answer)
-            norm_target = await normalize_final_answer(target.text)
-            
-            if use_sympy:
-                # Use sympy library for exact match based on https://arxiv.org/pdf/2206.14858
-                correct = await is_equiv_sympy(norm_answer, norm_target)
-            
-            # Fall back to string-based comparison if sympy fails
-            if not correct:
-                correct = await is_equiv(norm_answer, norm_target)
-
-        # Ask grader model to judge equivalence
-        else:
-            prompt = EQUIVALANCE_TEMPLATE % (
-                {"expression1": target.text, "expression2": answer}
-            )
-            result = await get_model(model).generate(prompt)
-
-            # Return the score
-            correct = result.completion.lower() == "yes"
+        correct = await grade_math_answer(
+            answer=answer,
+            target=target.text,
+            exact_match=exact_match,
+            use_sympy=use_sympy,
+            model=model,
+        )
 
         score = Score(
             value=CORRECT if correct else INCORRECT,
@@ -106,9 +142,6 @@ async def score_helper(
                 "extracted_answer": answer,
             },
         )
-
-        if not exact_match and score.metadata is not None:
-            score.metadata.update({"grader_model_usage": result.usage})
     else:
         score = Score(
             value=INCORRECT,
