@@ -31,15 +31,17 @@ def get_prefill_fraction(reasoning: str, fraction: float = 0.5, stop_string: str
     if num_words == 0:
         raise ValueError(f"Fraction {fraction} results in 0 words from {len(words)} total words")
 
-    # Reconstruct up to the target word count
     result = []
     word_count = 0
     for token in tokens:
-        if not token.isspace():
-            if word_count >= num_words or token == stop_string:
-                break
-            word_count += 1
+        if word_count >= num_words:
+            break
+        word_count += 1
         result.append(token)
+
+        # add stop string to result but break afterwards
+        if token == stop_string:
+            break
 
     prefill_text = "".join(result).strip()
 

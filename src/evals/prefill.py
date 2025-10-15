@@ -31,7 +31,7 @@ class PrefillConfig:
     path: str
     fraction: float = 0.5
     id_field: str = "id"
-    question_field: str = "question_with_choices"
+    question_field: str = "question"
     response_field: str = "response"
     target_field: str = "target"
 
@@ -82,6 +82,8 @@ def load_prefill_map(config: PrefillConfig) -> dict[str, str]:
 
                 if sample_id and response_text:
                     prefill_map[sample_id] = response_text
+                else:
+                    logger.warning(f"Line {line_num}: No sample ID or response text found in {data}")
             except json.JSONDecodeError as e:
                 logger.warning(f"Line {line_num}: Invalid JSON - {e}")
 

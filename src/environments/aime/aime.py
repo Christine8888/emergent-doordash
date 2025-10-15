@@ -7,7 +7,7 @@ https://huggingface.co/datasets/di-zhang-fdu/AIME_1983_2024
 from typing import Any
 
 from inspect_ai import Task, task
-from inspect_ai.dataset import Sample, hf_dataset
+from inspect_ai.dataset import Sample, hf_dataset, json_dataset
 from inspect_ai.model import GenerateConfig
 from inspect_ai.scorer import Score, Scorer, Target, accuracy, scorer, stderr
 from inspect_ai.solver import TaskState
@@ -20,6 +20,16 @@ from environments.math.utils import score_helper
 DATASET_PATH = "di-zhang-fdu/AIME_1983_2024"
 
 
+def get_aime_dataset(split: str = "train", shuffle: bool = True):
+    """Load AIME dataset from HuggingFace."""
+    return hf_dataset(
+        path=DATASET_PATH,
+        split=split,
+        sample_fields=record_to_sample,
+        shuffle=shuffle,
+    )
+
+
 def record_to_sample(record: dict[str, Any]) -> Sample:
     """Convert AIME dataset record to Inspect Sample."""
     return Sample(
@@ -29,6 +39,30 @@ def record_to_sample(record: dict[str, Any]) -> Sample:
         metadata={
             "year": record["Year"],
             "problem_number": record["Problem Number"],
+        },
+    )
+
+
+def record_to_sample_prefill(record: dict[str, Any]) -> Sample:
+    """Map prefill JSONL records to inspect samples.
+
+    This is used when loading the dataset directly from the prefill file,
+    which automatically filters to only tasks with pre-fills available.
+
+    Args:
+        record: Dictionary with keys: id, question, response, target
+
+    Returns:
+        Sample with the question as input and response preserved in metadata
+    """
+    return Sample(
+        id=record.get("id"),
+        input=record["question"],
+        target=str(record["target"]),
+        metadata={
+            "year": record.get("year"),
+            "problem_number": record.get("problem_number"),
+            "solution": record.get("response"),  # Store the full response for reference
         },
     )
 
@@ -53,12 +87,15 @@ def aime(
         prefill_config: PrefillConfig object for eval-time hints
         timeout: Timeout in seconds for generation (default: None)
     """
-    dataset = hf_dataset(
-        path=DATASET_PATH,
-        split=split,
-        sample_fields=record_to_sample,
-        shuffle=True,
-    )
+    # When using prefill data, load directly from the prefill JSONL file
+    # This automatically drops samples that do not have correct reasoning traces
+    if prefill_config:
+        dataset = json_dataset(
+            json_file=prefill_config.path,
+            sample_fields=record_to_sample_prefill,
+        )
+    else:
+        dataset = get_aime_dataset(split=split, shuffle=True)
 
     return Task(
         dataset=dataset,
