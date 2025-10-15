@@ -12,9 +12,6 @@ from argparse import ArgumentParser
 logging.basicConfig(level=logging.INFO)
 setup_env()
 
-os.environ["VLLM_BASE_URL"] = "http://localhost:9000/v1"
-os.environ["VLLM_API_KEY"] = "local"
-
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument("--model", type=str, default="vllm/Qwen2.5-0.5B-Instruct")
@@ -25,6 +22,7 @@ def parse_args():
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--max_connections", type=int, default=20)
     parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--base_port", type=int, default=9000, help="Base port for vLLM server")
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -37,8 +35,11 @@ if __name__ == "__main__":
     LIMIT = args.limit
     MAX_CONNECTIONS = args.max_connections
     TIMEOUT = args.timeout
-
+    BASE_PORT = args.base_port
     data_path = "/sphinx/u/cye/emergent-doordash/christine_experiments/20251006/gpqa_diamond_samples_with_choices.jsonl"
+
+    os.environ["VLLM_BASE_URL"] = f"http://localhost:{BASE_PORT}/v1"
+    os.environ["VLLM_API_KEY"] = "local"    
 
     # Check if output file already exists
     filename = f"{LOG_DIR}/gpqa_diamond_{FEWSHOT}shot_{HINT_FRACTION}.json"

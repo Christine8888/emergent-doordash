@@ -23,6 +23,13 @@ DEFAULT_EPOCHS = 1
 LOCAL_DATA_DIR = Path(__file__).parent / "data"
 
 
+def get_gpqa_dataset():
+    dataset = csv_dataset(
+            csv_file=str(LOCAL_DATA_DIR / "gpqa_diamond.csv"),
+            sample_fields=record_to_sample,
+            shuffle_choices=True,
+    )
+    return dataset
 @task
 def gpqa_diamond(
     instruction_template: str | None = None,
@@ -57,12 +64,7 @@ def gpqa_diamond(
             sample_fields=record_to_sample_prefill,
         )
     else:
-        # Without prefill, load from CSV and shuffle choices
-        dataset = csv_dataset(
-            csv_file=str(LOCAL_DATA_DIR / "gpqa_diamond.csv"),
-            sample_fields=record_to_sample,
-            shuffle_choices=True,
-        )
+        dataset = get_gpqa_dataset()
 
     return Task(
         dataset=dataset,
