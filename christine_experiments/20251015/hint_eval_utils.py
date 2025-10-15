@@ -50,7 +50,7 @@ def check_output_exists(filename):
         exit(0)
 
 
-def create_configs(args, id_field="id", question_field=None, response_field="response"):
+def create_configs(args, id_field="id", question_field="question", response_field="response"):
     """Create prefill and fewshot configs."""
     prefill_path = getattr(args, 'prefill_path', None)
     fewshot_path = getattr(args, 'fewshot_path', None)

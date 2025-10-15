@@ -25,6 +25,7 @@ from environments.math.utils import (
     MathSubject,
     filter_dataset,
     record_to_sample,
+    record_to_sample_prefill,
     sample_to_fewshot,
     score_helper,
 )
@@ -86,7 +87,15 @@ def math(
         prefill_config: PrefillConfig object for eval-time hints (test_hints.jsonl)
         timeout: Timeout in seconds for generation (default: None)
     """
-    dataset = get_math_dataset(split=split, levels=levels, subjects=subjects, shuffle=True)
+    # When using prefill data, load directly from the prefill JSONL file
+    # This automatically drops samples that do not have correct reasoning traces
+    if prefill_config:
+        dataset = json_dataset(
+            json_file=prefill_config.path,
+            sample_fields=record_to_sample_prefill,
+        )
+    else:
+        dataset = get_math_dataset(split=split, levels=levels, subjects=subjects, shuffle=True)
 
     return Task(
         dataset=dataset,

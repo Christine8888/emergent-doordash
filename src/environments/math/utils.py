@@ -224,6 +224,30 @@ def record_to_sample(record: dict[str, Any]) -> Sample:
     )
 
 
+def record_to_sample_prefill(record: dict[str, Any]) -> Sample:
+    """Map prefill JSONL records to inspect samples.
+
+    This is used when loading the dataset directly from the prefill file,
+    which automatically filters to only tasks with pre-fills available.
+
+    Args:
+        record: Dictionary with keys: id, question, response, target, and optionally level/subject
+
+    Returns:
+        Sample with the question as input and response preserved in metadata
+    """
+    return Sample(
+        id=record.get("id"),
+        input=record["question"],
+        target=record["target"],
+        metadata={
+            "level": record.get("level"),
+            "subject": record.get("subject"),
+            "solution": record.get("response"),  # Store the full response for reference
+        },
+    )
+
+
 def sample_to_fewshot(sample: Sample) -> str:
     # Based on https://arxiv.org/pdf/2206.14858 - Appendix D.2
     # Tags are capitalized to match the format of the user prompt
