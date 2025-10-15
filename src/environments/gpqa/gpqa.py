@@ -58,6 +58,7 @@ def gpqa_diamond(
     # Create dataset
     # When using prefill data, load directly from the prefill JSONL file to preserve
     # the (question, response, target, choices) tuple that cannot be separated
+    # This also means we automatically drop samples that do not have correct reasoning traces
     if prefill_config:
         dataset = json_dataset(
             json_file=prefill_config.path,

@@ -24,3 +24,7 @@ def extract_scores_from_log(log: EvalLog) -> Dict[str, Any]:
         results[score.name] = score_dict
     
     return results
+
+def compute_bootstrap_over_epochs(log: EvalLog) -> Dict[str, Any]:
+    """Compute bootstrap over epochs."""
+    return log.results.bootstrap

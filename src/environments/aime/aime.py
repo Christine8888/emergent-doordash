@@ -20,6 +20,16 @@ from environments.math.utils import score_helper
 DATASET_PATH = "di-zhang-fdu/AIME_1983_2024"
 
 
+def get_aime_dataset(split: str = "train", shuffle: bool = True):
+    """Load AIME dataset from HuggingFace."""
+    return hf_dataset(
+        path=DATASET_PATH,
+        split=split,
+        sample_fields=record_to_sample,
+        shuffle=shuffle,
+    )
+
+
 def record_to_sample(record: dict[str, Any]) -> Sample:
     """Convert AIME dataset record to Inspect Sample."""
     return Sample(
@@ -53,12 +63,7 @@ def aime(
         prefill_config: PrefillConfig object for eval-time hints
         timeout: Timeout in seconds for generation (default: None)
     """
-    dataset = hf_dataset(
-        path=DATASET_PATH,
-        split=split,
-        sample_fields=record_to_sample,
-        shuffle=True,
-    )
+    dataset = get_aime_dataset(split=split, shuffle=True)
 
     return Task(
         dataset=dataset,
