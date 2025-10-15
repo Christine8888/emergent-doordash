@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 import os
 import torch
+import time
 from datasets import load_dataset
 from omegaconf import OmegaConf
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -31,7 +32,6 @@ class SFTArgs:
     wandb_project: Optional[str]
     sft_dataset_path: str
     test_data_collator: bool
-    prep_and_analyze_only: bool
     # train parameters
     dataset_text_field: str
     num_train_epochs: int
@@ -67,18 +67,7 @@ def init_model_and_tokenizer(cfg: SFTArgs):
 
 
 
-def train_sft(cfg: SFTArgs):
-    if cfg.wandb_entity is not None and cfg.wandb_project is not None:
-        os.environ.setdefault("WANDB_ENTITY", cfg.wandb_entity)
-        os.environ.setdefault("WANDB_PROJECT", cfg.wandb_project)
-    set_seed(cfg.seed)
-
-    if cfg.append_timestamp:
-        save_dir = os.path.join(cfg.base_dir, f"{cfg.experiment_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
-    else:
-        save_dir = os.path.join(cfg.base_dir, cfg.experiment_name)
-    os.makedirs(save_dir, exist_ok=True)
-
+def train_sft(cfg: SFTArgs, save_dir: str):
     model, tokenizer = init_model_and_tokenizer(cfg)
     
     # Save initial model and tokenizer
@@ -147,11 +136,15 @@ def train_sft(cfg: SFTArgs):
         args=training_args,
         data_collator=collator,
     )
+    print(f"initialized trainer")
 
+    # --- Train the model ---
+    print(f"Training the model for {cfg.num_train_epochs} epochs")
     trainer.train()
+    print(f"Model trained and saved to {save_dir}")
 
 
-def analyze_sft(cfg: SFTArgs):
+def test_data_collator(cfg: SFTArgs, save_dir: str):
     set_seed(cfg.seed)
 
     model, tokenizer = init_model_and_tokenizer(cfg)
@@ -162,31 +155,35 @@ def analyze_sft(cfg: SFTArgs):
     print(f"loaded reasoning traces dataset with {len(train_dataset)} examples")
 
     # ---- Determining a good max_seq_length ----
-    model_context_limit = getattr(getattr(model, "config", object()), "max_position_embeddings", None)
-    length_stats = compute_token_length_stats(
-        train_dataset,
-        tokenizer,
-        text_field="text",
-        sample_size=5000,
-        batch_size=256,
-        add_special_tokens=True,
-    )
-    recommended_msl, msl_meta = recommend_max_seq_length_from_stats(length_stats, model_context_limit, target_percentile=95)
-    print(
-        f"token lengths stats (sampled {length_stats['count']}): min={length_stats['min']} mean={length_stats['mean']:.1f} "
-        f"p95={length_stats['percentiles']['p95']} p99={length_stats['percentiles']['p99']} max={length_stats['max']}"
-    )
-    print(
-        f"model context limit: {model_context_limit}; recommended max_seq_length: {recommended_msl} "
-        f"(p{msl_meta['target_percentile']}={msl_meta['chosen_from_data']}, overflow={msl_meta['overflow_fraction_at_recommended']:.3f})"
-    )
-    print("="*100)
+    if False:
+        model_context_limit = getattr(getattr(model, "config", object()), "max_position_embeddings", None)
+        length_stats = compute_token_length_stats(
+            train_dataset,
+            tokenizer,
+            text_field="text",
+            sample_size=5000,
+            batch_size=256,
+            add_special_tokens=True,
+        )
+        recommended_msl, msl_meta = recommend_max_seq_length_from_stats(length_stats, model_context_limit, target_percentile=95)
+        print(
+            f"token lengths stats (sampled {length_stats['count']}): min={length_stats['min']} mean={length_stats['mean']:.1f} "
+            f"p95={length_stats['percentiles']['p95']} p99={length_stats['percentiles']['p99']} max={length_stats['max']}"
+        )
+        print(
+            f"model context limit: {model_context_limit}; recommended max_seq_length: {recommended_msl} "
+            f"(p{msl_meta['target_percentile']}={msl_meta['chosen_from_data']}, overflow={msl_meta['overflow_fraction_at_recommended']:.3f})"
+        )
+        print("="*100)
 
     # ---- Testing the data collator ----
     collator = create_data_collator(tokenizer)
     test_collator_masking(train_dataset, tokenizer, collator, cfg)
 
 def main():
+    start_time = time.time()
+    print(f"Starting main at {start_time}")
+    print("="*100)
     cli_args = OmegaConf.from_cli()
     print(cli_args)
     file_cfg = OmegaConf.load(cli_args["config"])
@@ -197,12 +194,31 @@ def main():
     cfg = OmegaConf.merge(default_cfg, file_cfg, cli_args)
     cfg = OmegaConf.to_object(cfg)
 
-    # Allow analyze-only runs: python sft.py config=... analyze=true
-    if getattr(cfg, "prep_and_analyze_only", False):
-        analyze_sft(cfg)
-        return
+    if cfg.wandb_entity is not None and cfg.wandb_project is not None:
+        os.environ.setdefault("WANDB_ENTITY", cfg.wandb_entity)
+        os.environ.setdefault("WANDB_PROJECT", cfg.wandb_project)
+    set_seed(cfg.seed)
 
-    train_sft(cfg)
+    if cfg.append_timestamp:
+        save_dir = os.path.join(cfg.base_dir, f"{cfg.experiment_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+    else:
+        save_dir = os.path.join(cfg.base_dir, cfg.experiment_name)
+    os.makedirs(save_dir, exist_ok=True)
+
+    # dump config to file
+    with open(os.path.join(save_dir, f"{cfg.experiment_name}.yaml"), "w") as f:
+        OmegaConf.save(cfg, f)
+
+    # Allow analyze-only runs: python sft.py config=... analyze=true
+    if getattr(cfg, "test_data_collator", False):
+        test_data_collator(cfg, save_dir)
+
+    train_sft(cfg, save_dir)
+
+    end_time = time.time()
+    print(f"Ending main at {end_time}")
+    print(f"Total time: {end_time - start_time:.2f} seconds")
+    print("="*100)
 
 
 if __name__ == "__main__":

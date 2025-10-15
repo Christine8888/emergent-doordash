@@ -1,6 +1,5 @@
 experiment_name: test
 append_timestamp: True
-prep_and_analyze_only: True
 seed: 42
 model_id: allenai/OLMo-2-0425-1B
 model_dir: /sphinx/u/suzeva/models # this is where huggingface models will be loaded from
