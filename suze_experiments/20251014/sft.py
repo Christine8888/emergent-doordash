@@ -1,28 +1,21 @@
-import copy
-import re
 from dataclasses import dataclass
-from functools import partial
-from typing import Callable, List, Optional
-
+from typing import Optional
 import os
 import torch
-from accelerate import PartialState
 from datasets import load_dataset
 from omegaconf import OmegaConf
-from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
-from transformers.trainer_utils import set_seed
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
 from trl import DataCollatorForCompletionOnlyLM
-# from finetune import GenerativeAccuracyCallback
-# from utils import zip_
+import datetime
 
-# suze's utils file
-from utils import set_seed
+from utils import set_seed, test_collator_masking
 
 
 @dataclass
 class SFTArgs:
     experiment_name: str
+    append_timestamp: bool
     seed: int
     model_id: str
     model_dir: str
@@ -31,6 +24,7 @@ class SFTArgs:
     wandb_project: Optional[str]
     sft_dataset_path: str
     # train parameters
+    dataset_text_field: str
     num_train_epochs: int
     max_seq_length: int
     learning_rate: float
@@ -51,7 +45,11 @@ def train_sft(cfg: SFTArgs):
         os.environ.setdefault("WANDB_ENTITY", cfg.wandb_entity)
         os.environ.setdefault("WANDB_PROJECT", cfg.wandb_project)
     set_seed(cfg.seed)
-    save_dir = os.path.join(cfg.base_dir, cfg.experiment_name)
+
+    if cfg.append_timestamp:
+        save_dir = os.path.join(cfg.base_dir, f"{cfg.experiment_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+    else:
+        save_dir = os.path.join(cfg.base_dir, cfg.experiment_name)
     os.makedirs(save_dir, exist_ok=True)
 
     def init_model_tokenizer():
@@ -113,6 +111,7 @@ def train_sft(cfg: SFTArgs):
         response_template=response_template,
         tokenizer=tokenizer,
     )
+    print(f"defined collator to mask out user text.")
 
     # --- Training configuration ---
     training_args = SFTConfig(
@@ -124,12 +123,15 @@ def train_sft(cfg: SFTArgs):
         learning_rate=cfg.learning_rate,
         max_seq_length=cfg.max_seq_length,
         seed=cfg.seed,
+        dataset_text_field=cfg.dataset_text_field,
         report_to=["wandb"],
         save_strategy="steps",
         save_steps=cfg.save_steps,
         # nice to have
         gradient_accumulation_steps=cfg.gradient_accumulation_steps,
         logging_steps=cfg.logging_steps,
+        logging_strategy="steps",
+        logging_first_step=True,
         weight_decay=cfg.weight_decay,
         warmup_ratio=cfg.warmup_ratio,
         lr_scheduler_type=cfg.lr_scheduler_type,
@@ -140,15 +142,17 @@ def train_sft(cfg: SFTArgs):
         # NOTE: leaving out any eval related setup
     )
 
+    # Test collator masking on a few examples
+    test_collator_masking(train_dataset, tokenizer, collator)
+    return # for debugging
+
     # --- Initialize trainer ---
     trainer = SFTTrainer(
         model=model,
         tokenizer=tokenizer,
         train_dataset=train_dataset,
-        dataset_text_field="text",
         args=training_args,
         data_collator=collator,
-        max_seq_length=cfg.max_seq_length,
     )
 
     trainer.train()

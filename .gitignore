@@ -19,3 +19,4 @@ core
 
 # Suze's stuff
 *.jsonl
+wandb/*

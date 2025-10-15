@@ -1,4 +1,5 @@
 experiment_name: test
+append_timestamp: True
 seed: 42
 model_id: allenai/OLMo-2-0425-1B
 model_dir: /sphinx/u/suzeva/models # this is where huggingface models will be loaded from
@@ -6,13 +7,14 @@ base_dir: /sphinx/u/suzeva/emergent-doordash/ # this is where all experiments re
 wandb_entity: suzevana
 wandb_project: emergent_doordash
 sft_dataset_path: /sailhome/suzeva/emergent-doordash/openthoughts_sonnet45.jsonl
+dataset_text_field: text # because openthoughts_sonnet45 contains untokenized text
 # training parameters
 num_train_epochs: 1
 max_seq_length: 2048
 learning_rate: 2.0e-5
 per_device_train_batch_size: 8
 gradient_accumulation_steps: 1
-logging_steps: 10
+logging_steps: 100
 weight_decay: 0.0
 warmup_ratio: 0.03
 lr_scheduler_type: cosine

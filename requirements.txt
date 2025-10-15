@@ -13,5 +13,6 @@ tiktoken
 sentencepiece
 omegaconf
 flash-attn
+datetime
 protobuf<4
 trl==0.9.6
