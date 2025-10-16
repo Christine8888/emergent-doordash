@@ -14,7 +14,7 @@ num_train_epochs: 1
 max_seq_length: 1536
 learning_rate: 2.0e-5
 per_device_train_batch_size: 4
-gradient_accumulation_steps: 2
+gradient_accumulation_steps: 1
 enable_gradient_checkpointing: False # saves memory but slows down training
 logging_steps: 100
 weight_decay: 0.0

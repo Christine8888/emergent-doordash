@@ -7,6 +7,7 @@ from datasets import load_dataset
 from omegaconf import OmegaConf
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
+import wandb
 
 import datetime
 
@@ -28,8 +29,8 @@ class SFTArgs:
     model_id: str
     model_dir: str
     base_dir: str
-    wandb_entity: Optional[str]
-    wandb_project: Optional[str]
+    wandb_entity: str
+    wandb_project: str
     sft_dataset_path: str
     test_data_collator: bool
     # train parameters
@@ -63,7 +64,7 @@ def init_model_and_tokenizer(cfg: SFTArgs):
         low_cpu_mem_usage=True
     )
     model.to("cuda")
-    print(f"loaded model {cfg.model_id} from {cfg.model_dir}")
+    wandb.termlog(f"loaded model {cfg.model_id} from {cfg.model_dir}")
     if cfg.enable_gradient_checkpointing:
         model.gradient_checkpointing_enable()
 
@@ -86,7 +87,9 @@ def init_model_and_tokenizer(cfg: SFTArgs):
         model.generation_config.eos_token_id = tokenizer.eos_token_id
 
     model.config.use_cache = False  # Always disable cache during training
-    # model = torch.compile(model, mode="reduce-overhead", fullgraph=False)
+    # model = torch.compile(model, mode="reduce-overhead", fullgraph=False) # NOTE: i think this causes a crash
+
+
 
     return model, tokenizer
 
@@ -99,7 +102,7 @@ def train_sft(cfg: SFTArgs, save_dir: str):
     # Save initial model and tokenizer
     model.save_pretrained(save_dir)
     tokenizer.save_pretrained(save_dir)
-    print(f"saved initial model and tokenizer to {save_dir}")
+    wandb.termlog(f"saved initial model and tokenizer to {save_dir}")
 
     # check that reasoning traces dataset exists
     if not os.path.exists(cfg.sft_dataset_path):
@@ -117,13 +120,23 @@ def train_sft(cfg: SFTArgs, save_dir: str):
     
     train_dataset = load_dataset("json", data_files=cfg.sft_dataset_path, split="train")
     train_dataset = train_dataset.map(format_conversation)
-    print(f"loaded reasoning traces dataset with {len(train_dataset)} examples")
+    wandb.termlog(f"loaded reasoning traces dataset with {len(train_dataset)} examples")
+
+    wandb.config.update({
+        "model_id": cfg.model_id,
+        "num_train_examples": len(train_dataset),
+        "max_seq_length": cfg.max_seq_length,
+        "batch_size": cfg.per_device_train_batch_size,
+        "gradient_accumulation_steps": cfg.gradient_accumulation_steps,
+        "learning_rate": cfg.learning_rate,
+    })
+    wandb.termlog(f"wandb config updated")
 
     # TODO: not sure how to do eval from christine while training; let's start without it
 
     # --- Define collator to mask out user text ---
     collator = create_data_collator(tokenizer)
-    print(f"defined collator to mask out user text.")
+    wandb.termlog(f"defined collator to mask out user text.")
 
     # --- Training configuration ---
     training_args = SFTConfig(
@@ -165,13 +178,13 @@ def train_sft(cfg: SFTArgs, save_dir: str):
         data_collator=collator,
         # max_seq_length=cfg.max_seq_length,
     )
-    print(f"initialized trainer")
+    wandb.termlog(f"initialized trainer")
 
     # --- Train the model ---
-    print(f"Training the model for {cfg.num_train_epochs} epochs")
+    wandb.termlog(f"Training the model for {cfg.num_train_epochs} epochs")
     torch.cuda.empty_cache()
     trainer.train()
-    print(f"Model trained and saved to {save_dir}")
+    wandb.termlog(f"Model trained and saved to {save_dir}")
 
 
 def test_data_collator(cfg: SFTArgs, save_dir: str):
@@ -180,9 +193,9 @@ def test_data_collator(cfg: SFTArgs, save_dir: str):
     model, tokenizer = init_model_and_tokenizer(cfg)
 
     train_dataset = load_dataset("json", data_files=cfg.sft_dataset_path, split="train")
-    print(f"Formatting reasoning traces dataset with {len(train_dataset)} examples")
+    wandb.termlog(f"Formatting reasoning traces dataset with {len(train_dataset)} examples")
     train_dataset = train_dataset.map(format_conversation)
-    print(f"loaded reasoning traces dataset with {len(train_dataset)} examples")
+    wandb.termlog(f"loaded reasoning traces dataset with {len(train_dataset)} examples")
 
     # ---- Determining a good max_seq_length ----
     if False:
@@ -196,15 +209,15 @@ def test_data_collator(cfg: SFTArgs, save_dir: str):
             add_special_tokens=True,
         )
         recommended_msl, msl_meta = recommend_max_seq_length_from_stats(length_stats, model_context_limit, target_percentile=95)
-        print(
+        wandb.termlog(
             f"token lengths stats (sampled {length_stats['count']}): min={length_stats['min']} mean={length_stats['mean']:.1f} "
             f"p95={length_stats['percentiles']['p95']} p99={length_stats['percentiles']['p99']} max={length_stats['max']}"
         )
-        print(
+        wandb.termlog(
             f"model context limit: {model_context_limit}; recommended max_seq_length: {recommended_msl} "
             f"(p{msl_meta['target_percentile']}={msl_meta['chosen_from_data']}, overflow={msl_meta['overflow_fraction_at_recommended']:.3f})"
         )
-        print("="*100)
+        wandb.termlog("="*100)
 
     # ---- Testing the data collator ----
     collator = create_data_collator(tokenizer)
@@ -212,10 +225,10 @@ def test_data_collator(cfg: SFTArgs, save_dir: str):
 
 def main():
     start_time = time.time()
-    print(f"Starting main at {start_time}")
-    print("="*100)
+    wandb.termlog(f"Starting main at {start_time}")
+    wandb.termlog("="*100)
     cli_args = OmegaConf.from_cli()
-    print(cli_args)
+    wandb.termlog(str(cli_args))
     file_cfg = OmegaConf.load(cli_args["config"])
     # We remove 'config' attribute from config as the underlying DataClass does not have it
     del cli_args["config"]
@@ -223,9 +236,16 @@ def main():
     default_cfg = OmegaConf.structured(SFTArgs(**file_cfg))
     cfg = OmegaConf.merge(default_cfg, file_cfg, cli_args)
 
-    if cfg.wandb_entity is not None and cfg.wandb_project is not None:
-        os.environ.setdefault("WANDB_ENTITY", cfg.wandb_entity)
-        os.environ.setdefault("WANDB_PROJECT", cfg.wandb_project)
+    os.environ.setdefault("WANDB_ENTITY", cfg.wandb_entity)
+    os.environ.setdefault("WANDB_PROJECT", cfg.wandb_project)
+    wandb.init(
+        project=cfg.wandb_project,
+        entity=cfg.wandb_entity,
+        name=cfg.experiment_name,
+        settings=wandb.Settings()
+    )
+    wandb.termlog(f"wandb entity: {cfg.wandb_entity}, wandb project: {cfg.wandb_project}")
+
     set_seed(cfg.seed)
 
     if cfg.append_timestamp:
@@ -245,9 +265,9 @@ def main():
     train_sft(cfg, save_dir)
 
     end_time = time.time()
-    print(f"Ending main at {end_time}")
-    print(f"Total time: {end_time - start_time:.2f} seconds")
-    print("="*100)
+    wandb.termlog(f"Ending main at {end_time}")
+    wandb.termlog(f"Total time: {end_time - start_time:.2f} seconds")
+    wandb.termlog("="*100)
 
 
 if __name__ == "__main__":
