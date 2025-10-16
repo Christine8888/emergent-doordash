@@ -2,7 +2,6 @@ inspect-ai
 dotenv
 antlr4-python3-runtime==4.11
 huggingface_hub
-torch
 transformers
 accelerate
 datasets
@@ -12,8 +11,6 @@ wandb
 tiktoken
 sentencepiece
 omegaconf
-flash-attn
-datetime
 protobuf<4
 trl==0.9.6
-time
+# pip install --index-url https://download.pytorch.org/whl/cu124 torch==2.6.0+cu124 --extra-index-url https://pypi.org/simple

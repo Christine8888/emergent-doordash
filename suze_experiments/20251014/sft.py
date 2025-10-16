@@ -48,15 +48,21 @@ class SFTArgs:
     fp16: bool
     bf16: bool
     tf32: bool
+    enable_gradient_checkpointing: bool
 
 def init_model_and_tokenizer(cfg: SFTArgs):
     assert torch.cuda.is_available()
-    tokenizer = AutoTokenizer.from_pretrained(cfg.model_id)
+    tokenizer = AutoTokenizer.from_pretrained(
+        cfg.model_id,
+    )
     model = AutoModelForCausalLM.from_pretrained(
         cfg.model_id,
         cache_dir=cfg.model_dir,
     )
     print(f"loaded model {cfg.model_id} from {cfg.model_dir}")
+    if cfg.enable_gradient_checkpointing:
+        model.gradient_checkpointing_enable()
+
     # Ensure padding token and alignment of special tokens between tokenizer, model config, and generation config
     if tokenizer.pad_token_id is None or tokenizer.pad_token_id == tokenizer.eos_token_id:
         tokenizer.add_special_tokens({'pad_token': '[PAD]'})
@@ -143,15 +149,17 @@ def train_sft(cfg: SFTArgs, save_dir: str):
     # --- Initialize trainer ---
     trainer = SFTTrainer(
         model=model,
-        processing_class=tokenizer,  # replaces deprecated `tokenizer` arg
+        tokenizer=tokenizer, 
         train_dataset=train_dataset,
         args=training_args,
         data_collator=collator,
+        # max_seq_length=cfg.max_seq_length,
     )
     print(f"initialized trainer")
 
     # --- Train the model ---
     print(f"Training the model for {cfg.num_train_epochs} epochs")
+    torch.cuda.empty_cache()
     trainer.train()
     print(f"Model trained and saved to {save_dir}")
 
@@ -204,7 +212,6 @@ def main():
 
     default_cfg = OmegaConf.structured(SFTArgs(**file_cfg))
     cfg = OmegaConf.merge(default_cfg, file_cfg, cli_args)
-    cfg = OmegaConf.to_object(cfg)
 
     if cfg.wandb_entity is not None and cfg.wandb_project is not None:
         os.environ.setdefault("WANDB_ENTITY", cfg.wandb_entity)
@@ -237,4 +244,4 @@ if __name__ == "__main__":
     # python suze_experiments/20251014/sft.py config=suze_experiments/20251014/test.yaml
     main()
 
-# TODO: update package versions
+# TODO: update package versions and record versions

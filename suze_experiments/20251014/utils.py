@@ -2,8 +2,9 @@ import random
 import numpy as np
 import torch
 from typing import Dict, List, Optional, Tuple
+from transformers import AutoTokenizer, DataCollatorWithPadding
 from trl import DataCollatorForCompletionOnlyLM
-from transformers import AutoTokenizer
+
 
 def set_seed(seed: int):
     random.seed(seed)
