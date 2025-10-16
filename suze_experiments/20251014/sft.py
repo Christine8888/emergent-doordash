@@ -182,8 +182,16 @@ def train_sft(cfg: SFTArgs, save_dir: str):
 
     # --- Train the model ---
     wandb.termlog(f"Training the model for {cfg.num_train_epochs} epochs")
+    # --- Resume from last checkpoint if available ---
+    last_checkpoint = None
+    if os.path.isdir(save_dir):
+        checkpoints = [os.path.join(save_dir, d) for d in os.listdir(save_dir) if d.startswith("checkpoint-")]
+        if checkpoints:
+            last_checkpoint = max(checkpoints, key=lambda x: int(x.split("-")[-1]))
+            wandb.termlog(f"Found checkpoint to resume from: {last_checkpoint}")
+
     torch.cuda.empty_cache()
-    trainer.train()
+    trainer.train(resume_from_checkpoint=last_checkpoint)
     wandb.termlog(f"Model trained and saved to {save_dir}")
 
 
