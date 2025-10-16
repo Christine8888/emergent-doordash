@@ -1,0 +1,1 @@
+{"model": "vllm/Qwen2.5-0.5B-Instruct", "total_samples": 24395, "completed_samples": 24395, "expression_exact_match_sympy": {"accuracy": 0.7551137528182017, "stderr": 0.005162796192206126, "scorer": "expression_exact_match_sympy"}, "manual_bootstrap": {"accuracy": 0.7551053494568559, "stderr": 0.0033798258608537164, "scorer": "manual_bootstrap", "epochs": 5}}

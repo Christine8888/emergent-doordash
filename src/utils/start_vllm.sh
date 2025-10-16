@@ -79,8 +79,9 @@ VLLM_ARGS=(
     --enable-prefix-caching
     --max-num-seqs 16
     --max-num-batched-tokens 65536
+    --limit-mm-per-prompt.image 4
     --enable-chunked-prefill
-    --gpu-memory-utilization 0.85
+    --gpu-memory-utilization 0.9
     --kv-cache-dtype auto
     --max-parallel-loading-workers 2
 )

@@ -36,7 +36,8 @@ if __name__ == "__main__":
     MAX_CONNECTIONS = args.max_connections
     TIMEOUT = args.timeout
     BASE_PORT = args.base_port
-    data_path = "/sphinx/u/cye/emergent-doordash/christine_experiments/20251006/gpqa_diamond_samples_with_choices.jsonl"
+    
+    data_path = "/sphinx/u/cye/emergent-doordash/christine_experiments/20251010/gpqa_diamond_samples_with_choices.jsonl"
 
     os.environ["VLLM_BASE_URL"] = f"http://localhost:{BASE_PORT}/v1"
     os.environ["VLLM_API_KEY"] = "local"    
@@ -78,6 +79,7 @@ if __name__ == "__main__":
         limit=LIMIT,
         max_connections=MAX_CONNECTIONS,
         display="rich",
+        retry_on_error=5,
     )
 
     results = extract_scores_from_log(log[0])

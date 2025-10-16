@@ -81,6 +81,7 @@ if __name__ == "__main__":
         max_connections=MAX_CONNECTIONS,
         display="rich",
         max_tokens=MAX_TOKENS,
+        retry_on_error=True,
     )
     results = extract_scores_from_log(log[0])
     with open(filename, "w") as f:
