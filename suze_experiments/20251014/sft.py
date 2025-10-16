@@ -58,7 +58,10 @@ def init_model_and_tokenizer(cfg: SFTArgs):
     model = AutoModelForCausalLM.from_pretrained(
         cfg.model_id,
         cache_dir=cfg.model_dir,
+        dtype=torch.bfloat16,
+        attn_implementation="flash_attention_2"
     )
+    model.to("cuda")
     print(f"loaded model {cfg.model_id} from {cfg.model_dir}")
     if cfg.enable_gradient_checkpointing:
         model.gradient_checkpointing_enable()
@@ -143,6 +146,8 @@ def train_sft(cfg: SFTArgs, save_dir: str):
         fp16=cfg.fp16,
         bf16=cfg.bf16,
         tf32=cfg.tf32,
+        optim="adamw_torch_fused",
+
         # NOTE: leaving out any eval related setup
     )
 

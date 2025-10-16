@@ -2,7 +2,7 @@ import random
 import numpy as np
 import torch
 from typing import Dict, List, Optional, Tuple
-from transformers import AutoTokenizer, DataCollatorWithPadding
+from transformers import AutoTokenizer
 from trl import DataCollatorForCompletionOnlyLM
 
 
