@@ -59,7 +59,8 @@ def init_model_and_tokenizer(cfg: SFTArgs):
         cfg.model_id,
         cache_dir=cfg.model_dir,
         dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2"
+        attn_implementation="flash_attention_2",
+        low_cpu_mem_usage=True
     )
     model.to("cuda")
     print(f"loaded model {cfg.model_id} from {cfg.model_dir}")
@@ -83,6 +84,10 @@ def init_model_and_tokenizer(cfg: SFTArgs):
     if getattr(tokenizer, "eos_token_id", None) is not None:
         model.config.eos_token_id = tokenizer.eos_token_id
         model.generation_config.eos_token_id = tokenizer.eos_token_id
+
+    model.config.use_cache = False  # Always disable cache during training
+    # model = torch.compile(model, mode="reduce-overhead", fullgraph=False)
+
     return model, tokenizer
 
 
