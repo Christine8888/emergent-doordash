@@ -28,6 +28,7 @@ class SFTArgs:
     append_timestamp: bool
     seed: int
     model_id: str
+    revision: str
     model_dir: str
     base_dir: str
     wandb_entity: str
@@ -64,6 +65,7 @@ def init_model_and_tokenizer(cfg: SFTArgs):
         cfg.model_id,
     )
     from_pretrained_kwargs = dict(
+        revision=cfg.revision,
         cache_dir=cfg.model_dir,
         dtype=torch.bfloat16,
         attn_implementation="flash_attention_2",
