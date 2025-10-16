@@ -19,16 +19,12 @@ export HOME=$SCR
 
 # Format: "model_path:tensor_parallel"
 MODELS=(
-#"Qwen/Qwen2.5-0.5B-Instruct:1"
-#"Qwen/Qwen2.5-1.5B-Instruct:1"
-#"Qwen/Qwen2.5-3B-Instruct:1"
-#"Qwen/Qwen2.5-7B-Instruct:1"
-#"Qwen/Qwen2.5-14B-Instruct:2"
-"Qwen/Qwen2.5-32B-Instruct:4")
+"Qwen/Qwen2.5-14B-Instruct:2"
+)
 
 N_DEVICES=4
 MAX_CONNECTIONS=48
-HINT_FRACTIONS=(1.0 0.0 0.2 0.4 0.6 0.8)
+HINT_FRACTIONS=(0.8)
 FEWSHOTS=(0)
 VLLM_PORT=5000
 EPOCHS=5
