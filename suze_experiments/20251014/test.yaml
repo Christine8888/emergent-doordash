@@ -1,5 +1,5 @@
-experiment_name: test_20251015_212536
-append_timestamp: False
+experiment_name: distributed_run
+append_timestamp: True
 seed: 42
 model_id: allenai/OLMo-2-0425-1B
 model_dir: /sphinx/u/suzeva/models # this is where huggingface models will be loaded from
@@ -26,3 +26,4 @@ save_total_limit: 2
 fp16: False
 bf16: True
 tf32: True
+dataloader_num_workers: 1 # this is for cpu workers

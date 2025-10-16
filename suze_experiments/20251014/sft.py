@@ -10,6 +10,7 @@ from trl import SFTConfig, SFTTrainer
 import wandb
 
 import datetime
+from accelerate import PartialState
 
 from utils import (
     set_seed,
@@ -50,20 +51,30 @@ class SFTArgs:
     bf16: bool
     tf32: bool
     enable_gradient_checkpointing: bool
+    # distributed parameters
+    dataloader_num_workers: int
 
 def init_model_and_tokenizer(cfg: SFTArgs):
     assert torch.cuda.is_available()
+    # determine process-local device
+    state = PartialState()
+    device = state.device
+
     tokenizer = AutoTokenizer.from_pretrained(
         cfg.model_id,
     )
-    model = AutoModelForCausalLM.from_pretrained(
-        cfg.model_id,
+    from_pretrained_kwargs = dict(
         cache_dir=cfg.model_dir,
         dtype=torch.bfloat16,
         attn_implementation="flash_attention_2",
-        low_cpu_mem_usage=True
+        low_cpu_mem_usage=True,
     )
-    model.to("cuda")
+
+    model = AutoModelForCausalLM.from_pretrained(
+        cfg.model_id,
+        **from_pretrained_kwargs,
+    )
+    model.to(device)
     wandb.termlog(f"loaded model {cfg.model_id} from {cfg.model_dir}")
     if cfg.enable_gradient_checkpointing:
         model.gradient_checkpointing_enable()
@@ -97,12 +108,15 @@ def init_model_and_tokenizer(cfg: SFTArgs):
 
 
 def train_sft(cfg: SFTArgs, save_dir: str):
+    state = PartialState()
+    is_main_process = state.is_main_process
     model, tokenizer = init_model_and_tokenizer(cfg)
     
-    # Save initial model and tokenizer
-    model.save_pretrained(save_dir)
-    tokenizer.save_pretrained(save_dir)
-    wandb.termlog(f"saved initial model and tokenizer to {save_dir}")
+    # Save initial model and tokenizer (main process only)
+    if is_main_process:
+        model.save_pretrained(save_dir)
+        tokenizer.save_pretrained(save_dir)
+        wandb.termlog(f"saved initial model and tokenizer to {save_dir}")
 
     # check that reasoning traces dataset exists
     if not os.path.exists(cfg.sft_dataset_path):
@@ -122,15 +136,16 @@ def train_sft(cfg: SFTArgs, save_dir: str):
     train_dataset = train_dataset.map(format_conversation)
     wandb.termlog(f"loaded reasoning traces dataset with {len(train_dataset)} examples")
 
-    wandb.config.update({
-        "model_id": cfg.model_id,
-        "num_train_examples": len(train_dataset),
-        "max_seq_length": cfg.max_seq_length,
-        "batch_size": cfg.per_device_train_batch_size,
-        "gradient_accumulation_steps": cfg.gradient_accumulation_steps,
-        "learning_rate": cfg.learning_rate,
-    })
-    wandb.termlog(f"wandb config updated")
+    if is_main_process:
+        wandb.config.update({
+            "model_id": cfg.model_id,
+            "num_train_examples": len(train_dataset),
+            "max_seq_length": cfg.max_seq_length,
+            "batch_size": cfg.per_device_train_batch_size,
+            "gradient_accumulation_steps": cfg.gradient_accumulation_steps,
+            "learning_rate": cfg.learning_rate,
+        })
+        wandb.termlog(f"wandb config updated")
 
     # TODO: not sure how to do eval from christine while training; let's start without it
 
@@ -165,6 +180,7 @@ def train_sft(cfg: SFTArgs, save_dir: str):
         bf16=cfg.bf16,
         tf32=cfg.tf32,
         optim="adamw_torch_fused",
+        dataloader_num_workers=cfg.dataloader_num_workers,
 
         # NOTE: leaving out any eval related setup
     )
@@ -178,27 +194,34 @@ def train_sft(cfg: SFTArgs, save_dir: str):
         data_collator=collator,
         # max_seq_length=cfg.max_seq_length,
     )
-    wandb.termlog(f"initialized trainer")
+    if is_main_process:
+        wandb.termlog(f"initialized trainer")
 
     # --- Train the model ---
-    wandb.termlog(f"Training the model for {cfg.num_train_epochs} epochs")
+    if is_main_process:
+        wandb.termlog(f"Training the model for {cfg.num_train_epochs} epochs")
     # --- Resume from last checkpoint if available ---
     last_checkpoint = None
     if os.path.isdir(save_dir):
         checkpoints = [os.path.join(save_dir, d) for d in os.listdir(save_dir) if d.startswith("checkpoint-")]
         if checkpoints:
             last_checkpoint = max(checkpoints, key=lambda x: int(x.split("-")[-1]))
-            wandb.termlog(f"Found checkpoint to resume from: {last_checkpoint}")
+            if is_main_process:
+                wandb.termlog(f"Found checkpoint to resume from: {last_checkpoint}")
 
     torch.cuda.empty_cache()
     trainer.train(resume_from_checkpoint=last_checkpoint)
-    wandb.termlog(f"Model trained and saved to {save_dir}")
+    if is_main_process:
+        wandb.termlog(f"Model trained and saved to {save_dir}")
 
 
 def test_data_collator(cfg: SFTArgs, save_dir: str):
     set_seed(cfg.seed)
-
-    model, tokenizer = init_model_and_tokenizer(cfg)
+    state = PartialState()
+    if not state.is_main_process:
+        return
+    # keep this small and on CPU to avoid multi-GPU overhead for a quick mask check
+    tokenizer = AutoTokenizer.from_pretrained(cfg.model_id)
 
     train_dataset = load_dataset("json", data_files=cfg.sft_dataset_path, split="train")
     wandb.termlog(f"Formatting reasoning traces dataset with {len(train_dataset)} examples")
@@ -233,10 +256,14 @@ def test_data_collator(cfg: SFTArgs, save_dir: str):
 
 def main():
     start_time = time.time()
-    wandb.termlog(f"Starting main at {start_time}")
-    wandb.termlog("="*100)
+    state = PartialState()
+    is_main_process = state.is_main_process
+    if is_main_process:
+        wandb.termlog(f"Starting main at {start_time}")
+        wandb.termlog("="*100)
     cli_args = OmegaConf.from_cli()
-    wandb.termlog(str(cli_args))
+    if is_main_process:
+        wandb.termlog(str(cli_args))
     file_cfg = OmegaConf.load(cli_args["config"])
     # We remove 'config' attribute from config as the underlying DataClass does not have it
     del cli_args["config"]
@@ -244,27 +271,25 @@ def main():
     default_cfg = OmegaConf.structured(SFTArgs(**file_cfg))
     cfg = OmegaConf.merge(default_cfg, file_cfg, cli_args)
 
+    if cfg.append_timestamp:
+        cfg.experiment_name = f"{cfg.experiment_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
     os.environ.setdefault("WANDB_ENTITY", cfg.wandb_entity)
     os.environ.setdefault("WANDB_PROJECT", cfg.wandb_project)
-    wandb.init(
-        project=cfg.wandb_project,
-        entity=cfg.wandb_entity,
-        name=cfg.experiment_name,
-        settings=wandb.Settings()
-    )
-    wandb.termlog(f"wandb entity: {cfg.wandb_entity}, wandb project: {cfg.wandb_project}")
+    if is_main_process:
+        wandb.init(
+            project=cfg.wandb_project,
+            entity=cfg.wandb_entity,
+            name=cfg.experiment_name,
+            settings=wandb.Settings()
+        )
+        wandb.termlog(f"wandb entity: {cfg.wandb_entity}, wandb project: {cfg.wandb_project}")
 
     set_seed(cfg.seed)
 
-    if cfg.append_timestamp:
-        save_dir = os.path.join(cfg.base_dir, f"{cfg.experiment_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
-    else:
-        save_dir = os.path.join(cfg.base_dir, cfg.experiment_name)
+    
+    save_dir = os.path.join(cfg.base_dir, cfg.experiment_name)
     os.makedirs(save_dir, exist_ok=True)
-
-    # dump config to file
-    with open(os.path.join(save_dir, f"{cfg.experiment_name}.yaml"), "w") as f:
-        OmegaConf.save(cfg, f)
 
     # Allow analyze-only runs: python sft.py config=... analyze=true
     if getattr(cfg, "test_data_collator", False):
@@ -273,13 +298,12 @@ def main():
     train_sft(cfg, save_dir)
 
     end_time = time.time()
-    wandb.termlog(f"Ending main at {end_time}")
-    wandb.termlog(f"Total time: {end_time - start_time:.2f} seconds")
-    wandb.termlog("="*100)
+    if is_main_process:
+        wandb.termlog(f"Ending main at {end_time}")
+        wandb.termlog(f"Total time: {end_time - start_time:.2f} seconds")
+        wandb.termlog("="*100)
 
 
 if __name__ == "__main__":
     # python suze_experiments/20251014/sft.py config=suze_experiments/20251014/test.yaml
     main()
-
-# TODO: update package versions and record versions
