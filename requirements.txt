@@ -10,6 +10,7 @@ pandas
 wandb
 tiktoken
 sentencepiece
+vllm
 omegaconf
 protobuf<4
 flash-attn
