@@ -9,9 +9,15 @@ export PYTHONPATH="/afs/cs.stanford.edu/u/suzeva/emergent-doordash/src:/afs/cs.s
 cleanup() {
     echo ""
     if [ -n "$VLLM_PID" ]; then
-        kill $VLLM_PID 2>/dev/null || true
+        kill -9 $VLLM_PID 2>/dev/null || true
     fi
-    $VLLM_UTILS_DIR/stop_vllm.sh
+    # Kill all VLLM processes to ensure full cleanup
+    pkill -9 -f "vllm serve" 2>/dev/null || true
+    pkill -9 -f "vllm.entrypoints" 2>/dev/null || true
+    pkill -9 -f "VLLM::" 2>/dev/null || true
+    pkill -9 -f "load_balancer" 2>/dev/null || true
+    nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+    $VLLM_UTILS_DIR/stop_vllm.sh $VLLM_PORT
     exit 1
 }
 
@@ -29,10 +35,10 @@ N_DEVICES_DEFAULT=4
 MAX_CONNECTIONS=32
 HINT_FRACTIONS=(0.0 0.2 0.4 0.6 0.8 1.0)
 FEWSHOTS=(0)
-VLLM_PORT=5000
+VLLM_PORT=6000 # check if port in use with lsof -i :6000
 EPOCHS=5
 
-VLLM_UTILS_DIR="/afs/cs.stanford.edu/u/suzeva/emergent-doordash/src/utils"
+VLLM_UTILS_DIR="/afs/cs.stanford.edu/u/suzeva/emergent-doordash/suze_experiments/20251016"
 CODE_DIR="/afs/cs.stanford.edu/u/suzeva/emergent-doordash/christine_experiments/20251015"
 EXPERIMENTS_DIR="/afs/cs.stanford.edu/u/suzeva/emergent-doordash/suze_experiments/20251016/results"
 
@@ -46,13 +52,17 @@ MODELS=(
 # Pre-clean ports to avoid EADDRINUSE (load balancer + up to 4 backends)
 echo "Initial cleanup..."
 pkill -9 -f "vllm serve" 2>/dev/null || true
+pkill -9 -f "vllm.entrypoints" 2>/dev/null || true
+pkill -9 -f "VLLM::" 2>/dev/null || true
 pkill -9 -f "load_balancer" 2>/dev/null || true
-sleep 5
+# Also kill by nvidia-smi if processes are using GPUs
+nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+sleep 2
 
 for p in $VLLM_PORT $((VLLM_PORT+1)) $((VLLM_PORT+2)) $((VLLM_PORT+3)) $((VLLM_PORT+4)); do
     lsof -ti:$p | xargs -r kill -9 2>/dev/null || true
 done
-sleep 5
+sleep 2
 echo "Initial cleanup complete."
 
 for MODEL_SPEC in "${MODELS[@]}"; do
@@ -70,34 +80,37 @@ for MODEL_SPEC in "${MODELS[@]}"; do
     # Ensure ports are free before each model launch
     echo "Cleaning up ports and processes..."
     pkill -9 -f "vllm serve" 2>/dev/null || true
+    pkill -9 -f "vllm.entrypoints" 2>/dev/null || true
+    pkill -9 -f "VLLM::" 2>/dev/null || true
     pkill -9 -f "load_balancer" 2>/dev/null || true
-    sleep 5
+    # Also kill by nvidia-smi if processes are using GPUs
+    nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | xargs -r kill -9 2>/dev/null || true
+    sleep 2
     
     for p in $VLLM_PORT $((VLLM_PORT+1)) $((VLLM_PORT+2)) $((VLLM_PORT+3)) $((VLLM_PORT+4)); do
         lsof -ti:$p | xargs -r kill -9 2>/dev/null || true
     done
-    sleep 5
+    sleep 2
     
     # Verify ports are actually free
     for p in $VLLM_PORT $((VLLM_PORT+1)) $((VLLM_PORT+2)) $((VLLM_PORT+3)) $((VLLM_PORT+4)); do
         if lsof -ti:$p >/dev/null 2>&1; then
             echo "WARNING: Port $p still in use, killing again..."
             lsof -ti:$p | xargs -r kill -9 2>/dev/null || true
-            sleep 3
+            sleep 2
         fi
     done
 
-    echo "Starting vLLM server for $MODEL_NAME... on port $VLLM_PORT"
-    $VLLM_UTILS_DIR/start_vllm.sh $MODEL $TP $MODEL_NAME $N_DEVICES $VLLM_PORT 4096 &
+    echo "Starting vLLM server for $MODEL_NAME on port $VLLM_PORT"
+    $VLLM_UTILS_DIR/start_vllm.sh "$MODEL" "$TP" "$MODEL_NAME" "$N_DEVICES" "$VLLM_PORT" 4096 "" &
     VLLM_PID=$!
-
 
     ELAPSED=0
     while ! curl -s http://localhost:$VLLM_PORT/health >/dev/null 2>&1; do
         if [ $ELAPSED -ge $MAX_WAIT ]; then
             echo "Error: vLLM server failed to start within ${MAX_WAIT}s"
             kill $VLLM_PID 2>/dev/null || true
-            $VLLM_UTILS_DIR/stop_vllm.sh
+            $VLLM_UTILS_DIR/stop_vllm.sh $VLLM_PORT
             exit 1
         fi
         sleep 5
@@ -125,11 +138,11 @@ for MODEL_SPEC in "${MODELS[@]}"; do
 
     echo "Stopping vLLM server for $MODEL_NAME..."
     kill $VLLM_PID 2>/dev/null || true
-    $VLLM_UTILS_DIR/stop_vllm.sh
+    $VLLM_UTILS_DIR/stop_vllm.sh $VLLM_PORT
     
     # Give extra time for cleanup before next model
     echo "Waiting for complete cleanup..."
-    sleep 15
+    sleep 10
 done
 
 echo "All experiments completed!"
