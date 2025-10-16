@@ -15,25 +15,26 @@ cleanup() {
 
 trap cleanup INT TERM
 export HF_HOME=/scr/biggest/cye/.cache/huggingface
+export HOME=$SCR
 
 # Format: "model_path:tensor_parallel"
 MODELS=(
-"Qwen/Qwen2.5-0.5B-Instruct:1"
-"Qwen/Qwen2.5-1.5B-Instruct:1"
-"Qwen/Qwen2.5-3B-Instruct:1"
+#"Qwen/Qwen2.5-0.5B-Instruct:1"
+#"Qwen/Qwen2.5-1.5B-Instruct:1"
 "Qwen/Qwen2.5-7B-Instruct:1"
+"Qwen/Qwen2.5-3B-Instruct:1"
 "Qwen/Qwen2.5-14B-Instruct:2"
 "Qwen/Qwen2.5-32B-Instruct:4")
 
 N_DEVICES=4
-MAX_CONNECTIONS=32
-HINT_FRACTIONS=(1.0)
-FEWSHOTS=(0 5)
+MAX_CONNECTIONS=64
+HINT_FRACTIONS=(1.0 0.0 0.2 0.4 0.6 0.8)
+FEWSHOTS=(0)
 BASE_PORT=5000
 VLLM_UTILS_DIR="$SPHINX/emergent-doordash/src/utils"
 CODE_DIR="$SPHINX/emergent-doordash/christine_experiments/20251015"
 EXPERIMENTS_DIR="$SPHINX/emergent-doordash/christine_experiments/20251015/results"
-LIMIT=500
+LIMIT=5000
 EPOCHS=5
 
 for MODEL_SPEC in "${MODELS[@]}"; do

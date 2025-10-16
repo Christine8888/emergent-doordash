@@ -19,6 +19,12 @@ def prompt(question: str, choices: list[str], template: str) -> str:
         question=question,
     )
 
+def _normalize_answer(answer: str) -> str:
+    """Normalize answer to uppercase and remove whitespace."""
+    answer = answer.strip().upper()
+    # replace any instance of $
+    answer = re.sub(r'\$', '', answer)
+    return answer
 
 def _try_extract_answer_letter(completion: str) -> str | None:
     """Try to extract answer letter from completion using multiple patterns.
@@ -34,7 +40,7 @@ def _try_extract_answer_letter(completion: str) -> str | None:
     Handles whitespace/newlines between "Answer" and the letter.
     Returns the LAST occurrence found (most recent answer).
 
-    Returns the extracted letter (uppercase) or None if no match found.
+    Returns the extracted letter (uppercase) or string directly if no match found.
     """
     # Define patterns to try (ordered by specificity)
     patterns = [
@@ -70,7 +76,7 @@ def _try_extract_answer_letter(completion: str) -> str | None:
         all_matches.sort(key=lambda x: x[0])  # Sort by position
         return all_matches[-1][1]  # Return the letter from last match
 
-    return None
+    return completion.strip()
 
 
 def _validate_answer_letter(letter: str, num_choices: int) -> bool:
@@ -92,7 +98,7 @@ def parse_answer(completion: str, num_choices: int) -> str | None:
     Returns:
         The answer letter (A, B, C, etc.) or None if no valid answer found
     """
-    letter = _try_extract_answer_letter(completion)
+    letter = _try_extract_answer_letter(_normalize_answer(completion))
 
     if letter is None:
         return None

@@ -15,6 +15,7 @@ cleanup() {
 trap cleanup INT TERM
 
 export HF_HOME="/scr/biggest/cye/.cache/huggingface"
+export HOME=$SCR
 
 # Format: "model_path:tensor_parallel"
 MODELS=(
@@ -26,9 +27,9 @@ MODELS=(
 "Qwen/Qwen2.5-32B-Instruct:4")
 
 N_DEVICES=4
-MAX_CONNECTIONS=32
-HINT_FRACTIONS=(0.0 0.2 0.4 0.6 0.8 1.0)
-FEWSHOTS=(0 5)
+MAX_CONNECTIONS=48
+HINT_FRACTIONS=(1.0 0.0 0.2 0.4 0.6 0.8)
+FEWSHOTS=(0)
 VLLM_PORT=5000
 EPOCHS=5
 VLLM_UTILS_DIR="$SPHINX/emergent-doordash/src/utils"

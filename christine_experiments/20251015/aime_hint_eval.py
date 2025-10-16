@@ -24,7 +24,6 @@ if __name__ == "__main__":
     task_kwargs = {
         "fewshot_config": fewshot_config,
         "prefill_config": prefill_config,
-        "split": "test"
     }
 
     run_eval_and_save(
@@ -32,5 +31,5 @@ if __name__ == "__main__":
         task_kwargs=task_kwargs,
         args=args,
         output_filename=filename,
-        bootstrap_metric='expression_exact_match_sympy'
+        bootstrap_metric='aime_scorer'
     )

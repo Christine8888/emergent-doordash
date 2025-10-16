@@ -1,0 +1,1 @@
+{"model": "vllm/gemma-3-270m-it", "total_samples": 925, "completed_samples": 925, "choice": {"accuracy": 0.05405405405405406, "stderr": 0.010081133062057445, "scorer": "choice"}, "manual_bootstrap": {"accuracy": 0.05343243243243243, "stderr": 0.013869658304209572, "scorer": "manual_bootstrap", "epochs": 5}}
