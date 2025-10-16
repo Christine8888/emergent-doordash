@@ -17,3 +17,7 @@ __pycache__/
 .DS_Store
 core
 *.egg-info/
+
+# Suze's stuff
+*.jsonl
+wandb/*

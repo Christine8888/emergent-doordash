@@ -1,0 +1,30 @@
+experiment_name: default_config
+append_timestamp: True
+seed: 42
+model_id: allenai/OLMo-2-0425-1B
+revision: main # this is the revision of the model to load
+model_dir: /sphinx/u/suzeva/models # this is where huggingface models will be loaded from
+base_dir: /sphinx/u/suzeva/emergent-doordash/ # this is where all experiments results will be saved (includig SFT'ed models)
+wandb_entity: suzevana
+wandb_project: emergent_doordash
+sft_dataset_path: /sailhome/suzeva/emergent-doordash/openthoughts_sonnet45.jsonl
+dataset_text_field: text # because openthoughts_sonnet45 contains untokenized text
+test_data_collator: True # will print some examples with masking so user can see if that is happening correctly 
+# training parameters
+num_train_epochs: 1
+max_seq_length: 1536
+learning_rate: 2.0e-5
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 1
+enable_gradient_checkpointing: False # saves memory but slows down training
+logging_steps: 100
+weight_decay: 0.0
+warmup_ratio: 0.03
+lr_scheduler_type: cosine
+save_steps: 200
+save_total_limit: 2
+# numerically safest, most stable fine-tuning that’s still efficient on H100/H200
+fp16: False
+bf16: True
+tf32: True
+dataloader_num_workers: 1 # this is for cpu workers

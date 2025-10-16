@@ -14,6 +14,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 # from transformers.trainer_callback import EarlyStoppingCallback
 from transformers.trainer_utils import set_seed
 from trl import SFTConfig, SFTTrainer
+from trl import DataCollatorForCompletionOnlyLM
 
 
 from finetune import GenerativeAccuracyCallback
@@ -21,12 +22,14 @@ from utils import zip_
 
 
 # W&B configuration
-WANDB_ENTITY = "suzevana"  # replace with your W&B username (entity)
-WANDB_PROJECT = "emergent_doordash"  # replace with your W&B project name
+WANDB_ENTITY = "suzevana"
+WANDB_PROJECT = "emergent_doordash"
 
 # Set defaults only if not already provided via environment
 os.environ.setdefault("WANDB_ENTITY", WANDB_ENTITY)
 os.environ.setdefault("WANDB_PROJECT", WANDB_PROJECT)
+
+
 
 @dataclass
 class SFTArgs:
@@ -78,6 +81,12 @@ Then the label on which we backpropagate will be exactly the `completion` field 
 This is necessary because the formatted `prompt` field below are passed to the accuracy evaluation callback `GenerativeAccuracyCallback`.
 """
 
+def prepare_math_local_train_dataset(example):
+    return {
+        "prompt": "# Question\n\n" + example["question"] + "\n\n# Solution",
+        "completion": "\n\n" + example["response"] + " The answer is: " + example["target"],
+    }
+
 def prepare_math_cot_train_dataset(example):
     return {
         "prompt": "# Question\n\n" + example["problem"] + "\n\n# Solution",
@@ -88,10 +97,11 @@ DATASET_TO_PREPROCESS_FN = {
     # math has multiple names so we just put them all in here
     "math": prepare_math_cot_train_dataset,
     "competition_math": prepare_math_cot_train_dataset,
-    "hendrycks/competition_math": prepare_math_cot_train_dataset,
+    "MATH-lighteval": prepare_math_cot_train_dataset,
+    "math_train.jsonl": prepare_math_local_train_dataset,
 }
 
-def prepare_dataset(dataset, dataset_name, num_proc):
+def prepare_dataset(dataset, dataset_name, num_proc): # TODO suze is here
     dataset = dataset.map(DATASET_TO_PREPROCESS_FN[dataset_name], num_proc=num_proc)
     return dataset
 
@@ -164,14 +174,25 @@ def grade_answer(completion: str, ground_truth: str, answer_parser_fn: Callable)
 DATASET_TO_ANSWER_GRADER_FN = {
     "math": partial(grade_answer, answer_parser_fn=parse_gsm8k_math_finetuned_answer),
     "competition_math": partial(grade_answer, answer_parser_fn=parse_gsm8k_math_finetuned_answer),
-    "hendrycks/competition_math": partial(grade_answer, answer_parser_fn=parse_gsm8k_math_finetuned_answer),
+    "MATH-lighteval": partial(grade_answer, answer_parser_fn=parse_gsm8k_math_finetuned_answer),
+    "math_train.jsonl": partial(grade_answer, answer_parser_fn=parse_gsm8k_math_finetuned_answer),
 }
 
+DATASET_TO_LOADER_FN = {
+    "math_train.jsonl": lambda cfg: load_dataset("json", data_files="math_train.jsonl", split="train"),
+    "competition_math": lambda cfg: load_dataset(cfg.train_dataset, split=cfg.train_split, cache_dir=cfg.cache_dir),
+    "MATH-lighteval": lambda cfg: load_dataset(cfg.train_dataset, split=cfg.train_split, cache_dir=cfg.cache_dir),
+}
 
 def get_train_dataset_and_answer_grader_fn(cfg: SFTArgs):
-    train_dataset = load_dataset(cfg.train_dataset, split=cfg.train_split, cache_dir=cfg.cache_dir)
     short_train_dataset_name = cfg.train_dataset.split("/")[-1]
+    
+    loader_fn = DATASET_TO_LOADER_FN[short_train_dataset_name]
+    train_dataset = loader_fn(cfg)
+    
     train_dataset = train_dataset.map(DATASET_TO_PREPROCESS_FN[short_train_dataset_name], num_proc=cfg.num_proc)
+    # print one example
+    print(f"one example of train_dataset: {train_dataset[0]}")
 
     # Drop cols that are not "prompt" or "completion"
     train_dataset = train_dataset.remove_columns(set(train_dataset.column_names) - {"prompt", "completion"})
@@ -214,10 +235,11 @@ def train_sft(cfg: SFTArgs):
     model = AutoModelForCausalLM.from_pretrained(
         cfg.model_name_or_path,
         low_cpu_mem_usage=True,
-        torch_dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2",
+        dtype=torch.bfloat16,
+        # attn_implementation="flash_attention_2",
         device_map={"": PartialState().process_index}
     )
+    print(f"Model loaded from {cfg.model_name_or_path}")
     
     # Add padding token if needed
     if tokenizer.pad_token_id is None or tokenizer.pad_token_id == tokenizer.eos_token_id:
@@ -236,6 +258,7 @@ def train_sft(cfg: SFTArgs):
     else:
         eval_datasets, eval_datasets_for_accuracy_callback = get_eval_datasets(cfg)
         short_main_eval_dataset_name = cfg.eval_datasets[0].split("/")[-1]
+    print(f"Loaded datasets {train_dataset} and {eval_datasets}")
 
     
 
@@ -346,9 +369,9 @@ def main():
     """
     cli_args = OmegaConf.from_cli()
     print(cli_args)
-    file_cfg = OmegaConf.load(cli_args.config)
+    file_cfg = OmegaConf.load(cli_args["config"])
     # We remove 'config' attribute from config as the underlying DataClass does not have it
-    del cli_args.config
+    del cli_args["config"]
 
     default_cfg = OmegaConf.structured(SFTArgs(**file_cfg))
     cfg = OmegaConf.merge(default_cfg, file_cfg, cli_args)
@@ -358,5 +381,5 @@ def main():
 
 
 if __name__ == "__main__":
-    # python suze_experiments/20251008/run_sft.py config=suze_experiments/20251008/sft_math.yaml
+    # python suze_experiments/20251008/run_sft.py config=suze_experiments/20251008/suze_test.yaml
     main()
