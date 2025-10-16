@@ -25,7 +25,7 @@ def get_prefill_fraction(reasoning: str, fraction: float = 0.5, stop_string: str
     tokens = re.split(r'(\s+)', reasoning)
 
     # Filter to just words (non-whitespace tokens)
-    words = [t for t in tokens if t and not t.isspace()]
+    words = [t for t in tokens]
     num_words = int(len(words) * fraction)
 
     if num_words == 0:

@@ -355,6 +355,10 @@ async def normalize_final_answer(final_answer: str) -> str:
     final_answer = re.sub(r"(\\textbf\{)(.*?)(\})", "\\2", final_answer)
     final_answer = re.sub(r"(\\overline\{)(.*?)(\})", "\\2", final_answer)
     final_answer = re.sub(r"(\\boxed\{)(.*)(\})", "\\2", final_answer)
+    
+    # remove any instances of ANSWER: or Answer:
+    final_answer = re.sub(r"ANSWER: ", "", final_answer)
+    final_answer = re.sub(r"Answer: ", "", final_answer)
 
     # Normalize shorthand TeX:
     #  \fracab -> \frac{a}{b}
