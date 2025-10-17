@@ -20,7 +20,7 @@ export HOME=$SCR
 # Format: "model_path:tensor_parallel"
 MODELS=(
 #"Qwen/Qwen2.5-0.5B-Instruct:1"
-#"Qwen/Qwen2.5-1.5B-Instruct:1"
+"Qwen/Qwen2.5-1.5B-Instruct:1"
 "Qwen/Qwen2.5-7B-Instruct:1"
 "Qwen/Qwen2.5-3B-Instruct:1"
 "Qwen/Qwen2.5-14B-Instruct:2"
