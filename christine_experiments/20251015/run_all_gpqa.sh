@@ -25,16 +25,19 @@ MODELS=(
 #"Qwen/Qwen2.5-7B-Instruct:1"
 #"Qwen/Qwen2.5-14B-Instruct:2"
 #"Qwen/Qwen2.5-32B-Instruct:4"
-#"google/gemma-3-270m-it:1"
-# "google/gemma-3-1b-it:1"
-# "google/gemma-3-4b-it:1"
+"google/gemma-3-1b-it:1"
+"google/gemma-3-4b-it:1"
 "google/gemma-3-12b-it:4"
 "google/gemma-3-27b-it:4"
+"allenai/OLMo-2-0425-1B-Instruct:1"
+"allenai/OLMo-2-0325-32B-Instruct:4"
+"allenai/OLMo-2-1124-7B-Instruct:1"
+"allenai/OLMo-2-1124-13B-Instruct:2"
 )
 
 N_DEVICES=4
 MAX_CONNECTIONS=32
-HINT_FRACTIONS=(1.0 0.8 0.0 0.2 0.4 0.6)
+HINT_FRACTIONS=(0.95 0.9 0.85 0.75 0.7 0.65 0.55 0.5 0.45 0.35 0.3 0.25 0.15 0.1)
 FEWSHOTS=(0)
 VLLM_PORT=3000
 MAX_LENGTH=4096

@@ -1,0 +1,1 @@
+{"model": "vllm/OLMo-2-0425-1B-Instruct", "total_samples": 925, "completed_samples": 925, "choice": {"accuracy": 0.14162162162162148, "stderr": 0.014713792734597941, "scorer": "choice"}, "manual_bootstrap": {"accuracy": 0.14308648648648647, "stderr": 0.022137863409726313, "scorer": "manual_bootstrap", "epochs": 5}}
