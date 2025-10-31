@@ -74,8 +74,8 @@ def main():
         print(f"Error: Directory {eval_dir} does not exist")
         sys.exit(1)
 
-    # Find all .eval files
-    eval_files = list(eval_dir.glob("*.eval"))
+    # Find all .eval files recursively
+    eval_files = list(eval_dir.glob("**/*.eval"))
 
     if not eval_files:
         print(f"No .eval files found in {eval_dir}")
