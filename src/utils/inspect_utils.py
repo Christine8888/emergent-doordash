@@ -5,26 +5,30 @@ import random
 
 def extract_scores_from_log(log: EvalLog) -> Dict[str, Any]:
     """Extract scores and metrics from the evaluation log.
-    
+
     Args:
         log: The evaluation log from Inspect
-        
+
     Returns:
-        Dictionary containing extracted results
+        Dictionary containing extracted results including metadata
     """
     results = {
         "model": log.eval.model,
         "total_samples": log.results.total_samples,
         "completed_samples": log.results.completed_samples
     }
-    
+
+    # Include metadata if present
+    if log.eval.metadata:
+        results["metadata"] = log.eval.metadata
+
     for score in log.results.scores:
         score_dict = {}
         for metric_name, metric_value in score.metrics.items():
             score_dict[metric_name] = metric_value.value
         score_dict["scorer"] = score.scorer
         results[score.name] = score_dict
-    
+
     return results
 
 def group_by_sample_epoch(log: EvalLog, scorer: str) -> Dict[str, List[EvalLog]]:
