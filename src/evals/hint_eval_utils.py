@@ -92,6 +92,24 @@ def run_eval_and_save(
     bootstrap_metric=None
 ):
     """Run evaluation and save results."""
+    # Build metadata dict with all relevant args
+    metadata = {
+        "hint_fraction": args.hint_fraction,
+        "fewshot": args.fewshot,
+        "fewshot_seed": args.fewshot_seed,
+        "timeout": args.timeout,
+    }
+
+    # Add optional args if present
+    if hasattr(args, 'prefill_path'):
+        metadata["prefill_path"] = args.prefill_path
+    if hasattr(args, 'fewshot_path'):
+        metadata["fewshot_path"] = args.fewshot_path
+    if args.max_tokens is not None:
+        metadata["max_tokens"] = args.max_tokens
+    if args.limit is not None:
+        metadata["limit"] = args.limit
+
     eval_kwargs = {
         "model": args.model,
         "log_dir": args.log_dir,
@@ -99,6 +117,7 @@ def run_eval_and_save(
         "limit": args.limit,
         "max_connections": args.max_connections,
         "display": "rich",
+        "metadata": metadata,
     }
 
     if args.max_tokens is not None:
