@@ -44,12 +44,34 @@ def regenerate_json(eval_file_path, output_dir=None, bootstrap_metric=None):
 
     # Compute bootstrap statistics if requested
     if bootstrap_metric:
-        # Check if we have multiple epochs
-        n_epochs = log.eval.epochs if hasattr(log.eval, 'epochs') else 1
+        # Check if we have multiple epochs - try multiple ways to detect it
+        n_epochs = None
+        if hasattr(log.eval, 'epochs') and log.eval.epochs:
+            n_epochs = log.eval.epochs
+
+        # Also check the actual number of samples per ID
+        if log.samples:
+            sample_ids = {}
+            for sample in log.samples:
+                sample_ids[sample.id] = sample_ids.get(sample.id, 0) + 1
+            if sample_ids:
+                n_epochs_actual = max(sample_ids.values())
+                if n_epochs is None:
+                    n_epochs = n_epochs_actual
+                elif n_epochs != n_epochs_actual:
+                    print(f"  WARNING: log.eval.epochs={n_epochs} but actual epochs from samples={n_epochs_actual}")
+                    n_epochs = n_epochs_actual
+
+        if n_epochs is None:
+            n_epochs = 1
+
+        print(f"  Epochs detected: {n_epochs}")
 
         if n_epochs > 1:
             results["manual_bootstrap"] = compute_bootstrap_over_epochs(log, bootstrap_metric)
             results["pass_at_k"] = compute_pass_at_k(log, bootstrap_metric)
+        else:
+            print(f"  WARNING: Only 1 epoch found, skipping bootstrap/pass@k calculations")
 
     # Write to JSON
     with open(output_path, 'w') as f:
