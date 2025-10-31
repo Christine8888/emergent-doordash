@@ -30,7 +30,7 @@ MAX_CONNECTIONS=32
 HINT_FRACTIONS=(1.0 0.0 0.2 0.4 0.6 0.8)
 FEWSHOTS=(0)
 VLLM_PORT=3000
-MAX_LENGTH=8192
+MAX_LENGTH=4096
 EPOCHS=5
 VLLM_UTILS_DIR="$SPHINX/emergent-doordash/src/utils"
 CODE_DIR="$SPHINX/emergent-doordash/christine_experiments/20251030"
@@ -43,8 +43,8 @@ for MODEL_SPEC in "${MODELS[@]}"; do
     MAX_WAIT=1200
 
     echo "Starting vLLM server for $MODEL_NAME... on port $VLLM_PORT"
-    $VLLM_UTILS_DIR/start_vllm.sh $MODEL $TP $MODEL_NAME $N_DEVICES $VLLM_PORT $MAX_LENGTH &
-    VLLM_PID=$!
+    # $VLLM_UTILS_DIR/start_vllm.sh $MODEL $TP $MODEL_NAME $N_DEVICES $VLLM_PORT $MAX_LENGTH &
+    # VLLM_PID=$!
 
     ELAPSED=0
     while ! curl -s http://localhost:$VLLM_PORT/health >/dev/null 2>&1; do
