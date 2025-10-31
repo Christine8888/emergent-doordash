@@ -650,3 +650,127 @@ fig, ax = plot_results_rescaled(
 
 plt.show()
 # %%
+
+def is_id_json(filename):
+    """Check if filename is a 22-character ID JSON file."""
+    import re
+    pattern = r'^[A-Za-z0-9]{22}\.json$'
+    return bool(re.match(pattern, filename))
+
+def load_pass_at_k_by_hint(base_folder: str, model: str, condition: str = "0shot"):
+    """Load pass@k data grouped by hint fraction.
+
+    Args:
+        base_folder: Base directory containing results (e.g., "results/gpqa")
+        model: Model name (e.g., "gemma-3-4b-it")
+        condition: Condition name (e.g., "0shot")
+
+    Returns:
+        Dictionary: {hint_fraction: {k: (accuracy, stderr)}}
+    """
+    model_folder = Path(base_folder) / condition / model
+
+    if not model_folder.exists():
+        print(f"Warning: Folder not found: {model_folder}")
+        return {}
+
+    results_by_hint = {}
+
+    for json_file in model_folder.glob("*.json"):
+        if not is_id_json(json_file.name):
+            continue
+
+        with open(json_file, 'r') as f:
+            data = json.load(f)
+
+        if "hint_fraction" not in data or "pass_at_k" not in data:
+            continue
+
+        hint = data["hint_fraction"]
+        if hint not in results_by_hint:
+            results_by_hint[hint] = {}
+
+        for k_str, metrics in data["pass_at_k"].items():
+            k = int(k_str)
+            accuracy = metrics.get("accuracy")
+            stderr = metrics.get("stderr")
+
+            results_by_hint[hint][k] = (accuracy, stderr)
+
+    return results_by_hint
+
+def plot_pass_at_k_by_hint(results_by_hint: Dict, hints: List[float],
+                            model_name: str,
+                            title: str = "Pass@k vs Hint Fraction",
+                            figsize: Tuple[int, int] = (12, 7)):
+    """Plot pass@k accuracy for different hint fractions.
+
+    Args:
+        results_by_hint: Results dictionary from load_pass_at_k_by_hint
+        hints: List of hint fractions to plot
+        model_name: Model name for title
+        title: Plot title
+        figsize: Figure size
+    """
+    fig, ax = plt.subplots(figsize=figsize)
+
+    colors = sns.color_palette("viridis", len(hints))
+
+    for i, hint in enumerate(hints):
+        if hint not in results_by_hint:
+            print(f"Warning: No data for hint={hint}")
+            continue
+
+        k_values = []
+        accuracies = []
+        stderrs = []
+
+        for k in sorted(results_by_hint[hint].keys()):
+            accuracy, stderr = results_by_hint[hint][k]
+            if accuracy is not None:
+                k_values.append(k)
+                accuracies.append(accuracy)
+                stderrs.append(stderr if stderr is not None else 0)
+
+        if not k_values:
+            continue
+
+        color = colors[i]
+        label = f"{hint}"
+
+        ax.errorbar(k_values, accuracies, yerr=stderrs,
+                   color=color, linestyle='-',
+                   marker='o', markersize=8, capsize=4,
+                   linewidth=2, alpha=0.8, label=label)
+
+    ax.set_xlabel('k (number of attempts)', fontsize=13, fontweight='bold')
+    ax.set_ylabel('pass@k accuracy', fontsize=13, fontweight='bold')
+    ax.set_title(title, fontsize=15, fontweight='bold', pad=20)
+    ax.legend(loc='best', title='hint fraction', framealpha=0.9)
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    return fig, ax
+# %%
+
+# Example usage: Plot pass@k by hint fraction for a single model
+# Uncomment and customize the following code:
+
+MODEL_TO_PLOT = "Qwen2.5-32B-Instruct"
+HINTS_TO_PLOT = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0]  # Specify which hint fractions to show
+
+results_by_hint = load_pass_at_k_by_hint(
+    base_folder=BASE_FOLDER,
+    model=MODEL_TO_PLOT,
+    condition="0shot"
+)
+
+fig, ax = plot_pass_at_k_by_hint(
+    results_by_hint=results_by_hint,
+    hints=HINTS_TO_PLOT,
+    model_name=clean_model_name(MODEL_TO_PLOT),
+    title=f"GPQA: Pass@k for {clean_model_name(MODEL_TO_PLOT)}"
+)
+
+plt.show()
+# %%

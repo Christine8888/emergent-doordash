@@ -34,5 +34,6 @@
       "accuracy": 0.7351351351351352,
       "stderr": 0.0
     }
-  }
+  },
+  "hint_fraction": 0.55
 }
