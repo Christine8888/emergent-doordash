@@ -11,10 +11,11 @@ from pathlib import Path
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample, csv_dataset, json_dataset
-from inspect_ai.scorer import choice
-from inspect_ai.solver import multiple_choice
+from inspect_ai.scorer import CORRECT, INCORRECT, Score, Scorer, Target, accuracy, scorer, stderr
+from inspect_ai.solver import TaskState
 
-from evals.solvers.mcq_solver import multiple_choice_prefill
+from evals.solvers.mcq_utils import format_answer_options, parse_answer
+from evals.solvers.generic_solver import solver_with_prefill
 from evals.prefill import PrefillConfig
 from evals.fewshot import FewShotConfig
 
@@ -22,12 +23,28 @@ from evals.fewshot import FewShotConfig
 DEFAULT_EPOCHS = 1
 LOCAL_DATA_DIR = Path(__file__).parent / "data"
 
+# Default instructions for GPQA
+DEFAULT_INSTRUCTIONS = (
+    "Answer the following multiple choice question. "
+    "The last line of your response should be of the following format: 'ANSWER: $LETTER' (without quotes) where LETTER is one of the options. "
+    "Think step by step before answering."
+)
 
-def get_gpqa_dataset():
+
+def get_gpqa_dataset(shuffle_seed: int = 42):
+    """Load GPQA dataset with shuffled choices.
+
+    Args:
+        shuffle_seed: Random seed for shuffling choices (default: 42).
+    """
+    import functools
+
+    # Create a version of record_to_sample with the seed bound
+    record_to_sample_with_seed = functools.partial(record_to_sample, shuffle_seed=shuffle_seed)
+
     dataset = csv_dataset(
             csv_file=str(LOCAL_DATA_DIR / "gpqa_diamond.csv"),
-            sample_fields=record_to_sample,
-            shuffle_choices=True,
+            sample_fields=record_to_sample_with_seed,
     )
     return dataset
 @task
@@ -36,6 +53,7 @@ def gpqa_diamond(
     example_template: str | None = None,
     fewshot_config: FewShotConfig | None = None,
     prefill_config: PrefillConfig | None = None,
+    shuffle_seed: int | None = None,
     timeout: int | None = 600,
 ) -> Task:
     """GPQA Diamond evaluation task.
@@ -45,58 +63,104 @@ def gpqa_diamond(
         example_template: Custom example template (overrides default)
         fewshot_config: FewShotConfig for few-shot examples
         prefill_config: PrefillConfig object for vLLM prefill (optional)
+        shuffle_seed: Random seed for shuffling choices. If None, uses alphabetical ordering.
         timeout: Timeout in seconds for generation (default: 600)
     """
-    solver = multiple_choice_prefill(
-        instruction_template=instruction_template,
+    # Use generic solver with prefill support
+    solver = solver_with_prefill(
+        instruction_template=instruction_template or DEFAULT_INSTRUCTIONS,
         example_template=example_template,
         fewshot_config=fewshot_config,
         prefill_config=prefill_config,
         timeout=timeout
     )
 
-    # Create dataset
-    # When using prefill data, load directly from the prefill JSONL file to preserve
-    # the (question, response, target, choices) tuple that cannot be separated
-    # This also means we automatically drop samples that do not have correct reasoning traces
+    # When using prefill data, load directly from the prefill JSONL file
     if prefill_config:
         dataset = json_dataset(
             json_file=prefill_config.path,
             sample_fields=record_to_sample_prefill,
         )
     else:
-        dataset = get_gpqa_dataset()
+        dataset = get_gpqa_dataset(shuffle_seed=shuffle_seed)
 
     return Task(
         dataset=dataset,
         solver=solver,
-        scorer=choice(),
+        scorer=gpqa_scorer(),
         epochs=DEFAULT_EPOCHS,
     )
 
 
-# map CSV records to inspect samples (note that target is always "A" in the
-# dataset, we will shuffle the presentation of options to mitigate this)
-def record_to_sample(record: dict[str, Any]) -> Sample:
+def record_to_sample(record: dict[str, Any], shuffle_seed: int = 42) -> Sample:
+    """Convert GPQA CSV record to Sample with choices formatted into text.
+
+    Args:
+        record: CSV record
+        shuffle_seed: Random seed for shuffling choices (default: 42).
+    """
+    import random
+
+    # Collect all choices
+    choices = [
+        str(record["Correct Answer"]),
+        str(record["Incorrect Answer 1"]),
+        str(record["Incorrect Answer 2"]),
+        str(record["Incorrect Answer 3"]),
+    ]
+
+    # Shuffle with seed for reproducibility
+    rng = random.Random(shuffle_seed)
+    choices_shuffled = choices.copy()
+    rng.shuffle(choices_shuffled)
+
+    # Find target letter based on where correct answer ended up
+    target_idx = choices_shuffled.index(str(record["Correct Answer"]))
+    target_letter = chr(ord('A') + target_idx)
+
+    # Format choices as "A) ... B) ... C) ... D) ..."
+    choices_text = format_answer_options(choices_shuffled)
+
+    # Combine question with formatted choices
+    question_with_choices = f"{record['Question']}\n\n{choices_text}"
+
     return Sample(
-        input=record["Question"],
-        choices=[
-            str(record["Correct Answer"]),
-            str(record["Incorrect Answer 1"]),
-            str(record["Incorrect Answer 2"]),
-            str(record["Incorrect Answer 3"]),
-        ],
-        target="A",
         id=record["Record ID"],
+        input=question_with_choices,
+        target=target_letter,
     )
 
 
-# map prefill JSONL records to inspect samples
-# The (question, target, choices) tuple is preserved from the prefill data
 def record_to_sample_prefill(record: dict[str, Any]) -> Sample:
+    """Convert prefill JSONL record to Sample.
+
+    Prefill records already have the question formatted with choices in the
+    'question_with_choices' field.
+    """
     return Sample(
-        input=record["question"],  # Just the question without choices - choices are in question_with_choices
-        choices=record["choices"],  # Choices in the correct order from prefill data
-        target=record["target"],    # Target letter that matches the choice ordering
         id=record["id"],
+        input=record["question_with_choices"],  # Formatted question with choices
+        target=record["target"],
     )
+
+
+@scorer(metrics=[accuracy(), stderr()])
+def gpqa_scorer() -> Scorer:
+    """Score GPQA answers using letter extraction and comparison."""
+    async def score(state: TaskState, target: Target) -> Score:
+        answer = parse_answer(state.output.completion, num_choices=4)
+
+        if answer and answer.upper() == target.text.upper():
+            return Score(
+                value=CORRECT,
+                answer=answer,
+                explanation="Correct answer",
+            )
+        else:
+            return Score(
+                value=INCORRECT,
+                answer=answer or "",
+                explanation="Incorrect answer",
+            )
+
+    return score

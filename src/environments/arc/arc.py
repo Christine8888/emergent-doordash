@@ -44,7 +44,7 @@ def get_arc_dataset(split: str = "training", shuffle: bool = True) -> Dataset:
 
         for test_idx, test_case in enumerate(data["test"]):
             sample = Sample(
-                id=f"{task_id}_test_{test_idx}",
+                id=task_id,
                 input=construct_arc_prompt(train_examples, test_case["input"]),
                 target=format_grid(test_case["output"]),
                 metadata={
@@ -60,7 +60,7 @@ def get_arc_dataset(split: str = "training", shuffle: bool = True) -> Dataset:
     dataset = MemoryDataset(samples=samples, name=f"arc_{split}")
 
     if shuffle:
-        dataset = dataset.shuffle()
+        dataset.shuffle()
 
     return dataset
 
