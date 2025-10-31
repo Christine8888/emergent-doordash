@@ -1,0 +1,38 @@
+{
+  "model": "vllm/gemma-3-12b-it",
+  "total_samples": 925,
+  "completed_samples": 925,
+  "choice": {
+    "accuracy": 0.8086486486486486,
+    "stderr": 0.02303765002148444,
+    "scorer": "choice"
+  },
+  "manual_bootstrap": {
+    "accuracy": 0.8077243243243244,
+    "stderr": 0.018105251085627903,
+    "scorer": "manual_bootstrap",
+    "epochs": 5
+  },
+  "pass_at_k": {
+    "1": {
+      "accuracy": 0.8085891891891892,
+      "stderr": 0.017183816090360116
+    },
+    "2": {
+      "accuracy": 0.8803675675675676,
+      "stderr": 0.012619712802011752
+    },
+    "3": {
+      "accuracy": 0.9077351351351352,
+      "stderr": 0.01109917968263715
+    },
+    "4": {
+      "accuracy": 0.9265675675675675,
+      "stderr": 0.007978742758836595
+    },
+    "5": {
+      "accuracy": 0.9405405405405406,
+      "stderr": 0.0
+    }
+  }
+}
