@@ -43,8 +43,8 @@ for MODEL_SPEC in "${MODELS[@]}"; do
     MAX_WAIT=1200
 
     echo "Starting vLLM server for $MODEL_NAME... on port $VLLM_PORT"
-    $VLLM_UTILS_DIR/start_vllm.sh $MODEL $TP $MODEL_NAME $N_DEVICES $VLLM_PORT $MAX_LENGTH &
-    VLLM_PID=$!
+    # $VLLM_UTILS_DIR/start_vllm.sh $MODEL $TP $MODEL_NAME $N_DEVICES $VLLM_PORT $MAX_LENGTH &
+    # VLLM_PID=$!
 
     ELAPSED=0
     while ! curl -s http://localhost:$VLLM_PORT/health >/dev/null 2>&1; do
@@ -83,3 +83,4 @@ for MODEL_SPEC in "${MODELS[@]}"; do
 
     sleep 10
 done
+
