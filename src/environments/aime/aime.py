@@ -107,7 +107,7 @@ def aime(
             timeout=timeout,
         ),
         scorer=aime_scorer(),
-        config=GenerateConfig(temperature=0.5),
+        config=GenerateConfig(temperature=1.0),
     )
 
 

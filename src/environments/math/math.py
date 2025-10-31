@@ -110,7 +110,7 @@ def math(
             sample_to_fewshot=sample_to_fewshot,
         ),
         scorer=expression_exact_match_sympy(),
-        config=GenerateConfig(temperature=0.5),
+        config=GenerateConfig(temperature=1.0),
     )
 
 # Exact match using an LLM GRADER!!!! 
