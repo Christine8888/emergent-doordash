@@ -22,18 +22,24 @@ from environments.arc.utils import construct_arc_prompt, format_grid, grade_arc_
 ARC_DATA_PATH = Path(__file__).parent / "ARC-AGI" / "data"
 
 
-def get_arc_dataset(split: str = "training", shuffle: bool = True) -> Dataset:
+def get_arc_dataset(split: str = "training", shuffle: bool = True, test_case_seed: int = 42) -> Dataset:
     """Load ARC dataset from local JSON files.
+
+    For tasks with multiple test cases, randomly selects one using the seed.
 
     Args:
         split: Either "training" or "evaluation"
         shuffle: Whether to shuffle the dataset
+        test_case_seed: Seed for selecting test case when multiple exist (default: 42)
 
     Returns:
-        Dataset with ARC samples
+        Dataset with ARC samples (one per task)
     """
+    import random
+
     data_dir = ARC_DATA_PATH / split
     samples = []
+    rng = random.Random(test_case_seed)
 
     for json_file in sorted(data_dir.glob("*.json")):
         with open(json_file) as f:
@@ -42,20 +48,22 @@ def get_arc_dataset(split: str = "training", shuffle: bool = True) -> Dataset:
         task_id = json_file.stem
         train_examples = data["train"]
 
-        for test_idx, test_case in enumerate(data["test"]):
-            sample = Sample(
-                id=task_id,
-                input=construct_arc_prompt(train_examples, test_case["input"]),
-                target=format_grid(test_case["output"]),
-                metadata={
-                    "task_id": task_id,
-                    "test_idx": test_idx,
-                    "train_examples": train_examples,
-                    "test_input": test_case["input"],
-                    "test_output": test_case["output"],
-                },
-            )
-            samples.append(sample)
+        # Select one test case (randomly if multiple, otherwise the only one)
+        test_cases = data["test"]
+        test_case = rng.choice(test_cases) if len(test_cases) > 1 else test_cases[0]
+
+        sample = Sample(
+            id=task_id,
+            input=construct_arc_prompt(train_examples, test_case["input"]),
+            target=format_grid(test_case["output"]),
+            metadata={
+                "task_id": task_id,
+                "train_examples": train_examples,
+                "test_input": test_case["input"],
+                "test_output": test_case["output"],
+            },
+        )
+        samples.append(sample)
 
     dataset = MemoryDataset(samples=samples, name=f"arc_{split}")
 
@@ -123,6 +131,7 @@ def arc_scorer() -> Scorer:
 def arc(
     split: str = "training",
     prefill_config: PrefillConfig | None = None,
+    test_case_seed: int = 42,
     timeout: int | None = None,
 ) -> Task:
     """
@@ -131,6 +140,7 @@ def arc(
     Args:
         split: Dataset split to use ("training" or "evaluation")
         prefill_config: PrefillConfig for eval-time hints (optional)
+        test_case_seed: Seed for selecting test case when multiple exist (default: 42)
         timeout: Timeout in seconds for generation (default: None)
     """
     # When using prefill data, load directly from the prefill JSONL file
@@ -141,7 +151,7 @@ def arc(
             sample_fields=record_to_sample_prefill,
         )
     else:
-        dataset = get_arc_dataset(split=split, shuffle=True)
+        dataset = get_arc_dataset(split=split, shuffle=True, test_case_seed=test_case_seed)
 
     # Use generic solver with prefill support (no templates needed for ARC)
     solver = solver_with_prefill(

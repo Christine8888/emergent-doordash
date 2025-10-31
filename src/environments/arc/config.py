@@ -5,9 +5,13 @@ from environments.arc.arc import get_arc_dataset
 from environments.arc.utils import extract_answer, grade_arc_answer
 
 
-def get_dataset():
-    """Load ARC dataset from local files."""
-    return get_arc_dataset(split="training")
+def get_dataset(test_case_seed: int = 42):
+    """Load ARC dataset from local files.
+
+    Args:
+        test_case_seed: Seed for selecting test case when multiple exist (default: 42)
+    """
+    return get_arc_dataset(split="training", test_case_seed=test_case_seed)
 
 
 def extract_answer(response: str) -> str:
