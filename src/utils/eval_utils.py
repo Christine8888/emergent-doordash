@@ -128,11 +128,12 @@ def run_eval(
     return log[0]
 
 
-def get_valid_problem_ids(jsonl_paths: list[str]) -> set[str] | None:
+def get_valid_problem_ids(jsonl_paths: list[str], require_hint: bool = False) -> set[str] | None:
     """Get intersection of problem IDs across multiple JSONL files with Example objects.
 
     Args:
         jsonl_paths: List of paths to JSONL files containing Example objects
+        require_hint: If True, only include samples with non-empty hint field
 
     Returns:
         Set of IDs that appear in ALL files, or None if any file doesn't exist
@@ -162,6 +163,11 @@ def get_valid_problem_ids(jsonl_paths: list[str]) -> set[str] | None:
                     try:
                         data = json.loads(line)
                         example = Example.from_dict(data)
+
+                        # Skip if hint is required but missing or empty
+                        if require_hint and (not example.hint or not example.hint.strip()):
+                            continue
+
                         ids.add(example.id)
                     except (json.JSONDecodeError, KeyError, ValueError) as e:
                         logger.warning(f"{path}:{line_num}: Skipping invalid line - {e}")

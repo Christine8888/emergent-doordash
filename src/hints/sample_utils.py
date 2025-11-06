@@ -28,7 +28,7 @@ def create_base_parser(description: str) -> ArgumentParser:
                         help="Model ID")
     parser.add_argument("--temperature", type=float, default=1.0,
                         help="Sampling temperature")
-    parser.add_argument("--max-tokens", type=int, default=8192,
+    parser.add_argument("--max-tokens", type=int, default=32000,
                         help="Max tokens to generate")
     parser.add_argument("--max-concurrent", type=int, default=25,
                         help="Max concurrent requests")
@@ -40,7 +40,7 @@ def create_base_parser(description: str) -> ArgumentParser:
 
 
 def load_solved_ids(output_path: Path) -> set[str]:
-    """Load IDs that already have solutions."""
+    """Load IDs that already have solutions with valid hints."""
     if not output_path.exists():
         return set()
 
@@ -49,7 +49,9 @@ def load_solved_ids(output_path: Path) -> set[str]:
         for line in f:
             try:
                 data = json.loads(line)
-                solved_ids.add(data["id"])
+                # Only add if hint field exists and is non-empty
+                if data.get("hint") and data["hint"].strip():
+                    solved_ids.add(data["id"])
             except:
                 pass
     return solved_ids

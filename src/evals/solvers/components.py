@@ -122,14 +122,13 @@ def prefill(config: PrefillConfig) -> Solver:
     prefill_data = config.get_data()
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        # Require sample to exist in prefill data
-        if state.sample_id not in prefill_data:
-            raise KeyError(
-                f"Sample '{state.sample_id}' not found in prefill data. "
-                f"Available samples should be filtered using config.get_available_ids()"
-            )
-
+        # Only validate sample existence when actually using prefill
         if config.fraction > 0.0:
+            if state.sample_id not in prefill_data:
+                raise KeyError(
+                    f"Sample '{state.sample_id}' not found in prefill data. "
+                    f"Available samples should be filtered using config.get_available_ids()"
+                )
             # Add prefill as assistant message
             prefill_text = prefill_data[state.sample_id]
             state.messages.append(ChatMessageAssistant(content=prefill_text))
