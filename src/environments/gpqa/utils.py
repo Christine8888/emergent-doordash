@@ -1,5 +1,8 @@
+"""Utility functions for GPQA multiple choice extraction and grading."""
+
 import re
-from inspect_ai._util.answer import answer_character, answer_index
+from inspect_ai._util.answer import answer_character
+
 
 def format_answer_options(choices: list[str]) -> str:
     """Format choices as A) ... B) ... etc."""
@@ -8,26 +11,8 @@ def format_answer_options(choices: list[str]) -> str:
     )
 
 
-def prompt(question: str, choices: list[str], template: str) -> str:
-    """Format the multiple choice prompt."""
-    choices_text = format_answer_options(choices)
-    letters = ",".join(answer_character(i) for i in range(len(choices)))
-
-    return template.format(
-        choices=choices_text,
-        letters=letters,
-        question=question,
-    )
-
-def _normalize_answer(answer: str) -> str:
-    """Normalize answer to uppercase and remove whitespace."""
-    answer = answer.strip().upper()
-    # replace any instance of $
-    answer = re.sub(r'\$', '', answer)
-    return answer
-
-def _try_extract_answer_letter(completion: str) -> str | None:
-    """Try to extract answer letter from completion using multiple patterns.
+def extract_answer(completion: str, num_choices: int = 4) -> str:
+    """Extract single answer letter from completion (A, B, C, etc.).
 
     Supports various answer formats:
     - ANSWER: X or Answer: X
@@ -36,11 +21,17 @@ def _try_extract_answer_letter(completion: str) -> str | None:
     - Answer: X) (with parenthesis)
     - \\boxed{X} (LaTeX format)
     - X) (just letter with parenthesis, as fallback)
+    - Single letter (final fallback)
 
     Handles whitespace/newlines between "Answer" and the letter.
     Returns the LAST occurrence found (most recent answer).
 
-    Returns the extracted letter (uppercase) or string directly if no match found.
+    Args:
+        completion: The model's completion text
+        num_choices: Number of available choices (default: 4)
+
+    Returns:
+        The answer letter (A, B, C, etc.) or empty string if no valid answer found
     """
     # Define patterns to try (ordered by specificity)
     patterns = [
@@ -64,19 +55,36 @@ def _try_extract_answer_letter(completion: str) -> str | None:
 
     all_matches = []
 
+    # Normalize: uppercase, strip whitespace, remove $ signs
+    normalized = completion.strip().upper()
+    normalized = re.sub(r'\$', '', normalized)
+
     # Find all matches for all patterns
     for pattern in patterns:
-        matches = re.finditer(pattern, completion, flags=re.MULTILINE | re.DOTALL)
+        matches = re.finditer(pattern, normalized, flags=re.MULTILINE | re.DOTALL)
         for match in matches:
+            letter = match.group(1).strip().upper()
+            letter = re.sub(r'\$', '', letter)
             # Store (position, letter) to track order
-            all_matches.append((match.start(), match.group(1).strip().upper()))
+            all_matches.append((match.start(), letter))
 
     # Return the last match (most recent answer)
     if all_matches:
         all_matches.sort(key=lambda x: x[0])  # Sort by position
-        return all_matches[-1][1]  # Return the letter from last match
+        last_letter = all_matches[-1][1]  # Return the letter from last match
 
-    return completion.strip()
+        # Validate the letter is within valid range
+        if _validate_answer_letter(last_letter, num_choices):
+            return last_letter
+
+    # Final fallback: check if the entire completion (stripped) is just a single letter
+    stripped = completion.strip()
+    if len(stripped) == 1 and stripped.isalpha():
+        letter = stripped.upper()
+        if _validate_answer_letter(letter, num_choices):
+            return letter
+
+    return ""
 
 
 def _validate_answer_letter(letter: str, num_choices: int) -> bool:
@@ -85,25 +93,17 @@ def _validate_answer_letter(letter: str, num_choices: int) -> bool:
     return letter in allowed_options
 
 
-def parse_answer(completion: str, num_choices: int) -> str | None:
-    """Extract single answer from completion (A, B, C, etc.).
-
-    Attempts to find "ANSWER: X" pattern in the completion and validates
-    that the extracted letter corresponds to a valid choice.
+async def grade_answer(extracted_letter: str, target: str) -> bool:
+    """Grade GPQA answer by comparing extracted letter to target.
 
     Args:
-        completion: The model's completion text
-        num_choices: Number of available choices
+        extracted_letter: Extracted answer letter (single letter or empty string)
+        target: Target answer (single letter)
 
     Returns:
-        The answer letter (A, B, C, etc.) or None if no valid answer found
+        True if extracted letter matches target (case-insensitive)
     """
-    letter = _try_extract_answer_letter(_normalize_answer(completion))
+    if not extracted_letter:
+        return False
 
-    if letter is None:
-        return None
-
-    if _validate_answer_letter(letter, num_choices):
-        return letter
-
-    return None
+    return extracted_letter.upper() == target.upper()

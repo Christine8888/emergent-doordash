@@ -10,56 +10,55 @@ from evals.example import Example
 
 logger = logging.getLogger(__name__)
 
-# Module-level cache for few-shot data
-_FEWSHOT_DATA_CACHE: dict[str, dict[str, Example]] = {}
-
 
 @dataclass
 class FewShotConfig:
     """Configuration for few-shot examples.
 
-    Caches loaded data to avoid reloading for every solver invocation.
+    JSONL files must have standardized fields:
+    - id: sample identifier (required)
+    - question: the question text (required)
+    - response: the solution/response (required for few-shot)
+    - target: the target answer (optional)
 
     Args:
         path: Path to JSONL file containing few-shot data
-        id_field: Field name containing the sample ID
-        question_field: Field name containing the question (e.g., question with choices)
-        response_field: Field name containing the response
         num_examples: Number of examples to include (default: 5)
         seed: Random seed for sampling examples (default: 42)
         exclude_current: Whether to exclude the current sample from few-shot selection (default: True)
     """
 
     path: str
-    id_field: str = "id"
-    question_field: str = "question_with_choices"
-    response_field: str = "response"
     num_examples: int = 5
     seed: int = 42
     exclude_current: bool = True
 
+    def __post_init__(self):
+        """Load few-shot data immediately after initialization."""
+        self._data = load_fewshot_data(self)
+
     def get_data(self) -> dict[str, Example]:
-        """Get cached few-shot data, loading if necessary.
+        """Get few-shot data.
 
         Returns:
             Dictionary mapping sample IDs to Example objects
         """
-        # Use path as cache key
-        if self.path not in _FEWSHOT_DATA_CACHE:
-            logger.info(f"Loading few-shot data from {self.path}")
-            _FEWSHOT_DATA_CACHE[self.path] = load_fewshot_data(self)
-
-        return _FEWSHOT_DATA_CACHE[self.path]
+        return self._data
 
 
 def load_fewshot_data(config: FewShotConfig) -> dict[str, Example]:
     """Load few-shot data from JSONL file.
 
     Args:
-        config: FewShotConfig with path and field names
+        config: FewShotConfig with path
 
     Returns:
         Dictionary mapping sample IDs to Example objects
+
+    Raises:
+        FileNotFoundError: If few-shot file doesn't exist
+        KeyError: If required fields are missing
+        ValueError: If data is invalid
     """
     fewshot_data = {}
     fewshot_file = Path(config.path)
@@ -67,21 +66,26 @@ def load_fewshot_data(config: FewShotConfig) -> dict[str, Example]:
     if not fewshot_file.exists():
         raise FileNotFoundError(f"Few-shot file not found: {config.path}")
 
+    logger.info(f"Loading few-shot data from {config.path}")
+
     with open(fewshot_file) as f:
         for line_num, line in enumerate(f, 1):
             try:
                 data = json.loads(line)
-                sample_id = data.get(config.id_field)
-                question_text = data.get(config.question_field)
-                response_text = data.get(config.response_field)
 
-                if sample_id and question_text and response_text:
-                    fewshot_data[sample_id] = Example(
-                        question=question_text,
-                        response=response_text
-                    )
+                # Use Example.from_dict to enforce standard fields
+                example = Example.from_dict(data)
+
+                # Few-shot requires response field
+                if example.response:
+                    fewshot_data[example.id] = example
+                else:
+                    logger.warning(f"Line {line_num}: Missing 'response' field")
+
             except json.JSONDecodeError as e:
                 logger.warning(f"Line {line_num}: Invalid JSON - {e}")
+            except (KeyError, ValueError) as e:
+                logger.warning(f"Line {line_num}: {e}")
 
     logger.info(f"Loaded {len(fewshot_data)} few-shot examples from {config.path}")
     return fewshot_data

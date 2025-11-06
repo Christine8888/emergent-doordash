@@ -2,7 +2,7 @@
 
 from inspect_ai.dataset import Sample
 from environments.arc.arc import get_arc_dataset
-from environments.arc.utils import extract_answer, grade_arc_answer
+from environments.arc.utils import extract_answer as arc_extract_answer, grade_answer as arc_grade_answer
 
 
 def get_dataset(test_case_seed: int = 42):
@@ -16,13 +16,13 @@ def get_dataset(test_case_seed: int = 42):
 
 def extract_answer(response: str) -> str:
     """Extract answer from response."""
-    from environments.arc.utils import extract_answer as arc_extract_answer
     return arc_extract_answer(response)
 
 
 async def grade_answer(response: str, target: str) -> bool:
     """Grade ARC answer using normalization-based exact match."""
-    return await grade_arc_answer(response, target)
+    extracted = extract_answer(response)
+    return await arc_grade_answer(extracted, target)
 
 
 def format_prompt(sample: Sample) -> str:

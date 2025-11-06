@@ -2,8 +2,8 @@
 
 from inspect_ai.dataset import Sample
 from environments.aime.aime import get_aime_dataset
+from environments.math.math import DEFAULT_INSTRUCTIONS, DEFAULT_EXAMPLE_TEMPLATE
 from environments.math.utils import extract_answer as math_extract_answer, grade_math_answer
-from evals.solvers.math_solver import DEFAULT_INSTRUCTIONS, DEFAULT_EXAMPLE_TEMPLATE
 
 
 def get_dataset():

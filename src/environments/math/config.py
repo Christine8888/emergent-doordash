@@ -1,9 +1,8 @@
 """Configuration for MATH sampling script."""
 
 from inspect_ai.dataset import Sample
-from environments.math.math import get_math_dataset
+from environments.math.math import get_math_dataset, DEFAULT_INSTRUCTIONS, DEFAULT_EXAMPLE_TEMPLATE
 from environments.math.utils import extract_answer as math_extract_answer, grade_math_answer
-from evals.solvers.math_solver import DEFAULT_INSTRUCTIONS, DEFAULT_EXAMPLE_TEMPLATE
 
 
 def get_dataset(split: str = "train", shuffle: bool = False):

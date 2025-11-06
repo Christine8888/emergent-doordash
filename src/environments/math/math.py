@@ -10,14 +10,11 @@ Based on:
 2. https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/minerva_math
 3. https://github.com/EleutherAI/lm-evaluation-harness/blob/main/lm_eval/tasks/hendrycks_math
 """
-from evals.prefill import PrefillConfig
-from evals.fewshot import FewShotConfig
-from evals.solvers import math_solver
 from inspect_ai import Task, task
 from inspect_ai.dataset import json_dataset
 from inspect_ai.model import GenerateConfig, Model
 from inspect_ai.scorer import Score, Scorer, Target, accuracy, scorer, stderr
-from inspect_ai.solver import TaskState
+from inspect_ai.solver import Solver, TaskState
 from pathlib import Path
 
 from environments.math.utils import (
@@ -25,13 +22,24 @@ from environments.math.utils import (
     MathSubject,
     filter_dataset,
     record_to_sample,
-    record_to_sample_prefill,
-    sample_to_fewshot,
     score_helper,
 )
 
 DATASET_PATH = "DigitalLearningGmbH/MATH-lighteval"
 LOCAL_DATASET_DIR = Path(__file__).parent / "data"
+
+# Default templates for math problems
+DEFAULT_INSTRUCTIONS = """
+Solve the following math problem step by step. The last line of your response should be of the form "ANSWER: $ANSWER" (without quotes) where $ANSWER is the answer to the problem.
+""".strip()
+
+DEFAULT_EXAMPLE_TEMPLATE = """
+PROBLEM:
+{question}
+
+SOLUTION:
+{solution}
+""".strip()
 
 
 def get_math_dataset(
@@ -39,6 +47,7 @@ def get_math_dataset(
     levels: list[MathLevel] | MathLevel = [],
     subjects: list[MathSubject] | MathSubject = [],
     shuffle: bool = True,
+    sample_ids: set[str] | None = None,
 ):
     """
     Load MATH dataset from local JSONL files.
@@ -48,6 +57,7 @@ def get_math_dataset(
         levels: List of levels to filter on, 1 to 5
         subjects: List of subjects to filter on
         shuffle: Whether to shuffle the dataset
+        sample_ids: Optional set of sample IDs to filter to (default: None = use all)
 
     Returns:
         Inspect Dataset object
@@ -60,6 +70,14 @@ def get_math_dataset(
     )
     # Subset the data based on levels and/or subjects
     dataset = filter_dataset(dataset=dataset, levels=levels, subjects=subjects)
+
+    # Filter to specific sample IDs if provided
+    if sample_ids is not None:
+        dataset = dataset.filter(
+            name=f"{dataset.name}_filtered",
+            predicate=lambda sample: sample.id in sample_ids
+        )
+
     return dataset
 
 
@@ -68,47 +86,45 @@ def math(
     levels: list[MathLevel] | MathLevel = [],
     subjects: list[MathSubject] | MathSubject = [],
     split: str = "test",
-    instruction_template: str | None = None,
-    example_template: str | None = None,
-    fewshot_config: "FewShotConfig | None" = None,
-    prefill_config: "PrefillConfig | None" = None,
-    timeout: int | None = None,
+    sample_ids: set[str] | None = None,
+    solver: Solver | list[Solver] | None = None,
 ) -> Task:
     """
-    Inspect Task implementation for the MATH benchmark
+    Baseline MATH task.
+
+    This is the minimal task definition. For custom configurations (prefill, few-shot, etc.),
+    use solver composition in your experiment file.
 
     Args:
-        levels (list[MathLevel]): List of levels to filter on, 1 to 5.
-        subjects (list[MathSubject]): List of subjects to filter on.
-        split (str): Dataset split to use ("test", "train", or "validation")
-        instruction_template: Custom instruction template (overrides default)
-        example_template: Custom example template (overrides default)
-        fewshot_config: FewShotConfig for few-shot examples
-        prefill_config: PrefillConfig object for eval-time hints (test_hints.jsonl)
-        timeout: Timeout in seconds for generation (default: None)
+        levels: List of levels to filter on, 1 to 5
+        subjects: List of subjects to filter on
+        split: Dataset split to use ("test", "train", or "validation")
+        sample_ids: Optional set of sample IDs to filter to (default: None = use all)
+        solver: Custom solver or list of solvers. If None, uses basic generate() with instructions.
+
+    Returns:
+        Task configured for MATH evaluation
     """
-    # When using prefill data, load directly from the prefill JSONL file
-    # This automatically drops samples that do not have correct reasoning traces
-    if prefill_config:
-        dataset = json_dataset(
-            json_file=prefill_config.path,
-            sample_fields=record_to_sample_prefill,
-        )
-    else:
-        dataset = get_math_dataset(split=split, levels=levels, subjects=subjects, shuffle=True)
+    # Load dataset
+    dataset = get_math_dataset(
+        split=split,
+        levels=levels,
+        subjects=subjects,
+        shuffle=True,
+        sample_ids=sample_ids
+    )
+
+    # Use provided solver or create basic one
+    if solver is None:
+        from inspect_ai.solver import system_message, generate
+        solver = [
+            system_message(DEFAULT_INSTRUCTIONS),
+            generate()
+        ]
 
     return Task(
         dataset=dataset,
-        solver=math_solver(
-            instruction_template=instruction_template,
-            example_template=example_template,
-            fewshot_config=fewshot_config,
-            prefill_config=prefill_config,
-            timeout=timeout,
-            local_dataset_dir=LOCAL_DATASET_DIR,
-            record_to_sample=record_to_sample,
-            sample_to_fewshot=sample_to_fewshot,
-        ),
+        solver=solver,
         scorer=expression_exact_match_sympy(),
         config=GenerateConfig(temperature=1.0),
     )
