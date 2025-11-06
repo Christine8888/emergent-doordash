@@ -5,12 +5,10 @@ Dataset: fchollet/ARC-AGI
 https://github.com/fchollet/ARC-AGI
 """
 import json
-import os
 from pathlib import Path
-from typing import Any
 
 from inspect_ai import Task, task
-from inspect_ai.dataset import Dataset, MemoryDataset, Sample, json_dataset
+from inspect_ai.dataset import Dataset, MemoryDataset, Sample
 from inspect_ai.model import GenerateConfig
 from inspect_ai.scorer import CORRECT, INCORRECT, Score, Scorer, Target, accuracy, scorer, stderr
 from inspect_ai.solver import Solver, TaskState
@@ -77,29 +75,6 @@ def get_arc_dataset(split: str = "training", shuffle: bool = True, test_case_see
     return dataset
 
 
-def record_to_sample_prefill(record: dict[str, Any]) -> Sample:
-    """Convert prefill JSONL record to Inspect Sample.
-
-    Used when loading dataset from prefill file.
-
-    Args:
-        record: Dictionary with keys: id, question, response, target
-
-    Returns:
-        Sample with question as input and response preserved in metadata
-    """
-    return Sample(
-        id=record.get("id"),
-        input=record["question"],
-        target=record["target"],
-        metadata={
-            "task_id": record.get("task_id"),
-            "test_idx": record.get("test_idx"),
-            "response": record.get("response"),  # Store for prefill reference
-        },
-    )
-
-
 @scorer(metrics=[accuracy(), stderr()])
 def arc_scorer() -> Scorer:
     """Score ARC answers using exact match after normalization.
@@ -119,13 +94,11 @@ def arc_scorer() -> Scorer:
             score = Score(
                 value=CORRECT,
                 answer=extracted_answer,
-                explanation="Correct grid prediction",
             )
         else:
             score = Score(
                 value=INCORRECT,
                 answer=extracted_answer,
-                explanation="Incorrect grid prediction",
             )
 
         return score
@@ -166,8 +139,8 @@ def arc(
     # Use provided solver or create basic one
     # Note: ARC prompts are already fully constructed, so no instructions needed
     if solver is None:
-        from inspect_ai.solver import generate
-        solver = generate()
+        from evals.solvers import generate_with_continuation
+        solver = generate_with_continuation()
 
     return Task(
         dataset=dataset,

@@ -7,7 +7,7 @@ https://huggingface.co/datasets/di-zhang-fdu/AIME_1983_2024
 from typing import Any
 
 from inspect_ai import Task, task
-from inspect_ai.dataset import Sample, hf_dataset, json_dataset
+from inspect_ai.dataset import Sample, hf_dataset
 from inspect_ai.model import GenerateConfig
 from inspect_ai.scorer import Score, Scorer, Target, accuracy, scorer, stderr
 from inspect_ai.solver import Solver, TaskState
@@ -105,10 +105,10 @@ def aime(
 
     # Use provided solver or create basic one
     if solver is None:
-        from inspect_ai.solver import system_message, generate
+        from evals.solvers import format_prompt, generate_with_continuation
         solver = [
-            system_message(DEFAULT_INSTRUCTIONS),
-            generate()
+            format_prompt(instruction_template=DEFAULT_INSTRUCTIONS),
+            generate_with_continuation()
         ]
 
     return Task(

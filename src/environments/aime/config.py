@@ -16,11 +16,10 @@ def extract_answer(response: str) -> str:
     return math_extract_answer(response)
 
 
-async def grade_answer(response: str, target: str) -> bool:
+async def grade_answer(extracted_answer: str, target: str) -> bool:
     """Grade AIME answer using canonical math grader with sympy."""
-    answer = extract_answer(response)
     return await grade_math_answer(
-        answer=answer,
+        answer=extracted_answer,
         target=target,
         exact_match=True,
         use_sympy=True,

@@ -116,10 +116,10 @@ def math(
 
     # Use provided solver or create basic one
     if solver is None:
-        from inspect_ai.solver import system_message, generate
+        from evals.solvers import format_prompt, generate_with_continuation
         solver = [
-            system_message(DEFAULT_INSTRUCTIONS),
-            generate()
+            format_prompt(instruction_template=DEFAULT_INSTRUCTIONS),
+            generate_with_continuation()
         ]
 
     return Task(

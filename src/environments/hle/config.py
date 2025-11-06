@@ -15,10 +15,9 @@ def extract_answer(response: str) -> str:
     return gpqa_extract_answer(response, num_choices=4)
 
 
-async def grade_answer(response: str, target: str) -> bool:
+async def grade_answer(extracted_answer: str, target: str) -> bool:
     """Grade HLE answer using letter matching."""
-    extracted = extract_answer(response)
-    return await gpqa_grade_answer(extracted, target)
+    return await gpqa_grade_answer(extracted_answer, target)
 
 
 def format_prompt(sample: Sample) -> str:

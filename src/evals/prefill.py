@@ -68,12 +68,13 @@ class PrefillConfig:
     JSONL files must have standardized fields:
     - id: sample identifier (required)
     - question: the question text (required)
-    - response: the full response to use for prefill (required)
-    - target: the target answer (optional)
+    - target: the target answer (required)
+    - response: the full response from the model (required)
+    - hint: the hint to use for prefill (required)
 
     Args:
         path: Path to JSONL file containing prefill data
-        fraction: Fraction of words to include from response (0.0 to 1.0)
+        fraction: Fraction of words to include from hint (0.0 to 1.0)
     """
 
     path: str
@@ -98,39 +99,6 @@ class PrefillConfig:
             Set of sample IDs
         """
         return set(self._data.keys())
-
-
-def load_prefill_map(config: PrefillConfig) -> dict[str, str]:
-    """Load prefill data from JSONL file into a dictionary.
-
-    Args:
-        config: PrefillConfig with path and field names
-
-    Returns:
-        Dictionary mapping sample IDs to response texts
-    """
-    prefill_map = {}
-    prefill_file = Path(config.path)
-
-    if not prefill_file.exists():
-        raise FileNotFoundError(f"Prefill file not found: {config.path}")
-
-    with open(prefill_file) as f:
-        for line_num, line in enumerate(f, 1):
-            try:
-                data = json.loads(line)
-                sample_id = data.get(config.id_field)
-                response_text = data.get(config.response_field)
-
-                if sample_id and response_text:
-                    prefill_map[sample_id] = response_text
-                else:
-                    logger.warning(f"Line {line_num}: No sample ID or response text found in {data}")
-            except json.JSONDecodeError as e:
-                logger.warning(f"Line {line_num}: Invalid JSON - {e}")
-
-    logger.info(f"Loaded {len(prefill_map)} prefill entries from {config.path}")
-    return prefill_map
 
 
 def load_prefill_data(config: PrefillConfig) -> dict[str, str]:
@@ -163,10 +131,12 @@ def load_prefill_data(config: PrefillConfig) -> dict[str, str]:
                 # Use Example.from_dict to enforce standard fields
                 example = Example.from_dict(data)
 
-                # Compute prefill text from response
-                if example.response and config.fraction > 0.0:
+                # Compute prefill text from hint field
+                if example.hint and config.fraction > 0.0:
+                    # Ensure hint is a string for prefill
+                    hint_text = str(example.hint) if not isinstance(example.hint, str) else example.hint
                     prefill_text = get_prefill_fraction(
-                        example.response,
+                        hint_text,
                         fraction=config.fraction
                     )
                     prefill_data[example.id] = prefill_text

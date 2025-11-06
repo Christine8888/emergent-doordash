@@ -19,10 +19,9 @@ def extract_answer(response: str) -> str:
     return arc_extract_answer(response)
 
 
-async def grade_answer(response: str, target: str) -> bool:
+async def grade_answer(extracted_answer: str, target: str) -> bool:
     """Grade ARC answer using normalization-based exact match."""
-    extracted = extract_answer(response)
-    return await arc_grade_answer(extracted, target)
+    return await arc_grade_answer(extracted_answer, target)
 
 
 def format_prompt(sample: Sample) -> str:
