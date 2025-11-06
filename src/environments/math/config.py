@@ -1,9 +1,8 @@
 """Configuration for MATH sampling script."""
 
 from inspect_ai.dataset import Sample
-from environments.math.math import get_math_dataset
+from environments.math.math import get_math_dataset, DEFAULT_INSTRUCTIONS, DEFAULT_EXAMPLE_TEMPLATE
 from environments.math.utils import extract_answer as math_extract_answer, grade_math_answer
-from evals.solvers.math_solver import DEFAULT_INSTRUCTIONS, DEFAULT_EXAMPLE_TEMPLATE
 
 
 def get_dataset(split: str = "train", shuffle: bool = False):
@@ -16,11 +15,10 @@ def extract_answer(response: str) -> str:
     return math_extract_answer(response)
 
 
-async def grade_answer(response: str, target: str) -> bool:
+async def grade_answer(extracted_answer: str, target: str) -> bool:
     """Grade MATH answer using canonical math grader with sympy."""
-    answer = extract_answer(response)
     return await grade_math_answer(
-        answer=answer,
+        answer=extracted_answer,
         target=target,
         exact_match=True,
         use_sympy=True,

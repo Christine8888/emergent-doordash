@@ -4,7 +4,7 @@ from inspect_ai import eval
 from evals.prefill import PrefillConfig
 from evals.fewshot import FewShotConfig
 import logging
-from utils.inspect_utils import extract_scores_from_log, compute_bootstrap_over_epochs
+from utils.inspect_utils import extract_scores_from_log, compute_bootstrap_over_epochs, compute_pass_at_k
 import json
 from argparse import ArgumentParser
 
@@ -110,6 +110,7 @@ def run_eval_and_save(
 
     if args.epochs > 1 and bootstrap_metric:
         results["manual_bootstrap"] = compute_bootstrap_over_epochs(log[0], bootstrap_metric)
+        results["pass_at_k"] = compute_pass_at_k(log[0], bootstrap_metric)
 
     with open(output_filename, "w") as f:
         json.dump(results, f)

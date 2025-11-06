@@ -1,0 +1,38 @@
+{
+  "model": "vllm/gemma-3-270m-it",
+  "total_samples": 925,
+  "completed_samples": 925,
+  "choice": {
+    "accuracy": 0.06810810810810808,
+    "stderr": 0.010142692051503898,
+    "scorer": "choice"
+  },
+  "manual_bootstrap": {
+    "accuracy": 0.06776216216216217,
+    "stderr": 0.01582843000723038,
+    "scorer": "manual_bootstrap",
+    "epochs": 5
+  },
+  "pass_at_k": {
+    "1": {
+      "accuracy": 0.06839459459459461,
+      "stderr": 0.015411180520179698
+    },
+    "2": {
+      "accuracy": 0.12435135135135135,
+      "stderr": 0.01716075755052253
+    },
+    "3": {
+      "accuracy": 0.1712756756756757,
+      "stderr": 0.01593394326101177
+    },
+    "4": {
+      "accuracy": 0.21215675675675674,
+      "stderr": 0.012452391734029877
+    },
+    "5": {
+      "accuracy": 0.24864864864864866,
+      "stderr": 0.0
+    }
+  }
+}

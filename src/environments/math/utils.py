@@ -11,7 +11,7 @@ from inspect_ai.scorer import (
     INCORRECT,
     AnswerPattern,
     Score,
-    Target,
+   Target,
 )
 from inspect_ai.solver import TaskState
 
@@ -206,7 +206,7 @@ def extract_answer(completion: str) -> str:
     if boxed_answer:
         return remove_boxed(boxed_answer)
 
-    return ""
+    return completion.strip()
 
 
 def record_to_sample(record: dict[str, Any]) -> Sample:
@@ -355,6 +355,10 @@ async def normalize_final_answer(final_answer: str) -> str:
     final_answer = re.sub(r"(\\textbf\{)(.*?)(\})", "\\2", final_answer)
     final_answer = re.sub(r"(\\overline\{)(.*?)(\})", "\\2", final_answer)
     final_answer = re.sub(r"(\\boxed\{)(.*)(\})", "\\2", final_answer)
+    
+    # remove any instances of ANSWER: or Answer:
+    final_answer = re.sub(r"ANSWER: ", "", final_answer)
+    final_answer = re.sub(r"Answer: ", "", final_answer)
 
     # Normalize shorthand TeX:
     #  \fracab -> \frac{a}{b}
@@ -370,6 +374,8 @@ async def normalize_final_answer(final_answer: str) -> str:
     if final_answer.replace(",", "").isdigit():
         final_answer = final_answer.replace(",", "")
 
+    final_answer = re.sub(r"ANSWER: ", "", final_answer)
+    final_answer = re.sub(r"Answer: ", "", final_answer)
     return final_answer
 
 

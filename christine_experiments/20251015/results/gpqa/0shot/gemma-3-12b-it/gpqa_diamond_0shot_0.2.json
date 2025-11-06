@@ -1,0 +1,1 @@
+{"model": "vllm/gemma-3-12b-it", "total_samples": 925, "completed_samples": 925, "choice": {"accuracy": 0.4043243243243245, "stderr": 0.025466586331992627, "scorer": "choice"}, "manual_bootstrap": {"accuracy": 0.4050648648648649, "stderr": 0.02419849194511557, "scorer": "manual_bootstrap", "epochs": 5}}

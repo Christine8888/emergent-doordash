@@ -1,0 +1,39 @@
+{
+  "model": "vllm/OLMo-2-0425-1B-Instruct",
+  "total_samples": 925,
+  "completed_samples": 925,
+  "choice": {
+    "accuracy": 0.16216216216216198,
+    "stderr": 0.016736654482447783,
+    "scorer": "choice"
+  },
+  "manual_bootstrap": {
+    "accuracy": 0.16157837837837838,
+    "stderr": 0.021554175887141907,
+    "scorer": "manual_bootstrap",
+    "epochs": 5
+  },
+  "pass_at_k": {
+    "1": {
+      "accuracy": 0.16262702702702703,
+      "stderr": 0.021596339272619475
+    },
+    "2": {
+      "accuracy": 0.2681297297297297,
+      "stderr": 0.022713757926055473
+    },
+    "3": {
+      "accuracy": 0.34826486486486485,
+      "stderr": 0.020572492218609136
+    },
+    "4": {
+      "accuracy": 0.41484324324324323,
+      "stderr": 0.015400647914045325
+    },
+    "5": {
+      "accuracy": 0.4702702702702703,
+      "stderr": 0.0
+    }
+  },
+  "hint_fraction": 0.55
+}

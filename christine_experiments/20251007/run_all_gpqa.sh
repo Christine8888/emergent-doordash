@@ -18,7 +18,7 @@ export HF_HOME="/scr/biggest/cye/.cache/huggingface"
 
 # Format: "model_path:tensor_parallel"
 MODELS=(
-"Qwen/Qwen2.5-0.5B-Instruct:1"
+# "Qwen/Qwen2.5-0.5B-Instruct:1"
 "Qwen/Qwen2.5-1.5B-Instruct:1"
 "Qwen/Qwen2.5-3B-Instruct:1"
 "Qwen/Qwen2.5-7B-Instruct:1"
@@ -28,7 +28,11 @@ MODELS=(
 N_DEVICES=4
 MAX_CONNECTIONS=32
 HINT_FRACTIONS=(0.0 0.2 0.4 0.6 0.8 1.0)
+<<<<<<< HEAD
+FEWSHOTS=(0)
+=======
 FEWSHOTS=(0 5)
+>>>>>>> b1129f2279f2c00a8f6d3c5132ebfc7cad203150
 VLLM_PORT=5000
 VLLM_UTILS_DIR="$SPHINX/emergent-doordash/src/utils"
 EXPERIMENTS_DIR="$SPHINX/emergent-doordash/christine_experiments/20251007"
@@ -39,7 +43,7 @@ for MODEL_SPEC in "${MODELS[@]}"; do
     MODEL_NAME="${MODEL##*/}"
     MAX_WAIT=1200
 
-    echo "Starting vLLM server for $MODEL_NAME... on port $VLLM_PORT"
+    echo "Starting vLLM server for $MODEL_NAME on port $VLLM_PORT"
     $VLLM_UTILS_DIR/start_vllm.sh $MODEL $TP $MODEL_NAME $N_DEVICES $VLLM_PORT &
     VLLM_PID=$!
 
@@ -56,7 +60,6 @@ for MODEL_SPEC in "${MODELS[@]}"; do
         echo "  Waiting... (${ELAPSED}s elapsed)"
     done
 
-    echo "Running experiments for $MODEL_NAME..."
     for FEWSHOT in "${FEWSHOTS[@]}"; do
         LOG_DIR="$EXPERIMENTS_DIR/gpqa/${FEWSHOT}shot/$MODEL_NAME"
         
@@ -73,7 +76,7 @@ for MODEL_SPEC in "${MODELS[@]}"; do
         done
     done
 
-    echo "Stopping vLLM server for $MODEL_NAME..."
+    echo "Stopping vLLM server for $MODEL_NAME"
     kill $VLLM_PID 2>/dev/null || true
     $VLLM_UTILS_DIR/stop_vllm.sh
 

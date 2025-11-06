@@ -35,5 +35,5 @@ if __name__ == "__main__":
         task_kwargs=task_kwargs,
         args=args,
         output_filename=filename,
-        bootstrap_metric='choice'
+        bootstrap_metric={'scorer': 'gpqa_scorer', 'metric': 'accuracy'}
     )

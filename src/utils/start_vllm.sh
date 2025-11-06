@@ -20,49 +20,36 @@ BASE_PORT="${5:-9000}"
 MAX_LENGTH="${6:-12800}"
 CHAT_TEMPLATE="${7:-}"
 
-VLLM_PIDS=()
-LB_PID=""
+VLLM_PID=""
 SHUTTING_DOWN=false
 
 cleanup() {
     SHUTTING_DOWN=true
-    echo "Shutting down servers..."
+    echo "Shutting down server..."
 
-    [ -n "$LB_PID" ] && kill "$LB_PID" 2>/dev/null || true
-
-    for pid in "${VLLM_PIDS[@]}"; do
-        kill "$pid" 2>/dev/null || true
-    done
+    [ -n "$VLLM_PID" ] && kill "$VLLM_PID" 2>/dev/null || true
 
     sleep 5
     pkill -f "vllm serve" 2>/dev/null || true
-    pkill -f "load_balancer.py" 2>/dev/null || true
 
-    for port in $(seq ${BASE_PORT:-9000} $((${BASE_PORT:-9000} + 4))); do
-        lsof -ti:$port 2>/dev/null | xargs -r kill -9 2>/dev/null || true
-    done
+    lsof -ti:$BASE_PORT 2>/dev/null | xargs -r kill -9 2>/dev/null || true
 
-    rm -f /tmp/load_balancer_$$.py
     echo "Shutdown complete"
     exit 0
 }
 
 trap cleanup EXIT INT TERM
 
-# Check if ports are already in use and kill if needed
-MAX_PORT=$((BASE_PORT + 4))
-echo "Checking if ports $BASE_PORT-$MAX_PORT are free..."
-for port in $(seq $BASE_PORT $MAX_PORT); do
-    if lsof -ti:$port >/dev/null 2>&1; then
-        echo "Port $port is in use, killing existing process..."
-        lsof -ti:$port | xargs -r kill -9 2>/dev/null || true
-        sleep 1
-    fi
-done
+# Check if port is already in use and kill if needed
+echo "Checking if port $BASE_PORT is free..."
+if lsof -ti:$BASE_PORT >/dev/null 2>&1; then
+    echo "Port $BASE_PORT is in use, killing existing process..."
+    lsof -ti:$BASE_PORT | xargs -r kill -9 2>/dev/null || true
+    sleep 1
+fi
 
-# Also kill any stray vllm or load balancer processes
+# Kill any stray vllm processes
 pkill -f "vllm serve" 2>/dev/null || true
-pkill -f "load_balancer.py" 2>/dev/null || true
 sleep 2
 
 if [ $((N_DEVICES % TP)) -ne 0 ]; then
@@ -70,19 +57,23 @@ if [ $((N_DEVICES % TP)) -ne 0 ]; then
     exit 1
 fi
 
-NUM_INSTANCES=$((N_DEVICES / TP))
+# Calculate data parallel size
+DP=$((N_DEVICES / TP))
 
 VLLM_ARGS=(
     --dtype auto
     --max-model-len $MAX_LENGTH
     --tensor-parallel-size $TP
+    --data-parallel-size $DP
     --enable-prefix-caching
     --max-num-seqs 16
     --max-num-batched-tokens 65536
+    --limit-mm-per-prompt.image 4
     --enable-chunked-prefill
-    --gpu-memory-utilization 0.85
+    --gpu-memory-utilization 0.9
     --kv-cache-dtype auto
     --max-parallel-loading-workers 2
+    --port $BASE_PORT
 )
 
 [ -n "$MODEL_NAME" ] && VLLM_ARGS+=(--served-model-name "$MODEL_NAME")
@@ -92,127 +83,33 @@ if [ -n "$CHAT_TEMPLATE" ]; then
     VLLM_ARGS+=(--chat-template "$CHAT_TEMPLATE")
 fi
 
-echo "Starting $NUM_INSTANCES vLLM instance(s)"
+echo "Starting vLLM with native data parallelism"
 echo "Model: $MODEL_PATH"
-echo "TP: $TP | Devices: $N_DEVICES"
+echo "TP: $TP | DP: $DP | Total GPUs: $N_DEVICES"
+echo "Port: $BASE_PORT"
 
-for i in $(seq 0 $((NUM_INSTANCES - 1))); do
-    PORT=$((BASE_PORT + 1 + i))
-    GPU_START=$((i * TP))
-    GPU_END=$((GPU_START + TP - 1))
+CUDA_VISIBLE_DEVICES=$(seq 0 $((N_DEVICES - 1)) | tr '\n' ',' | sed 's/,$//')
 
-    CUDA_DEVICES=$(seq $GPU_START $GPU_END | tr '\n' ',' | sed 's/,$//')
+echo "Using GPU(s): $CUDA_VISIBLE_DEVICES"
+CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES vllm serve "$MODEL_PATH" "${VLLM_ARGS[@]}" &
+VLLM_PID=$!
 
-    echo "Starting instance $((i + 1)) on GPU(s) $CUDA_DEVICES (port $PORT)"
-    CUDA_VISIBLE_DEVICES=$CUDA_DEVICES vllm serve "$MODEL_PATH" "${VLLM_ARGS[@]}" --port $PORT &
-    VLLM_PIDS+=($!)
-    sleep 5
+echo "Waiting for server..."
+while ! curl -s http://localhost:$BASE_PORT/health >/dev/null 2>&1; do
+    [ "$SHUTTING_DOWN" = true ] && exit 0
+    sleep 2
 done
-
-echo "Waiting for servers..."
-for i in $(seq 0 $((NUM_INSTANCES - 1))); do
-    PORT=$((BASE_PORT + 1 + i))
-    while ! curl -s http://localhost:$PORT/health >/dev/null 2>&1; do
-        [ "$SHUTTING_DOWN" = true ] && exit 0
-        sleep 2
-    done
-    echo "Server on port $PORT ready"
-done
-
-# Create Python load balancer
-LB_SCRIPT="/tmp/load_balancer_$$.py"
-cat > "$LB_SCRIPT" << 'EOFPY'
-#!/usr/bin/env python3
-import http.server
-import socketserver
-import urllib.request
-import sys
-from itertools import cycle
-
-class LoadBalancingHandler(http.server.BaseHTTPRequestHandler):
-    backends = []
-    backend_cycle = None
-    
-    def do_GET(self):
-        self._proxy_request()
-    
-    def do_POST(self):
-        self._proxy_request()
-    
-    def do_PUT(self):
-        self._proxy_request()
-    
-    def do_DELETE(self):
-        self._proxy_request()
-    
-    def _proxy_request(self):
-        backend = next(self.backend_cycle)
-        
-        # Read request body if present
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_length) if content_length > 0 else None
-        
-        # Forward request
-        url = f"{backend}{self.path}"
-        headers = {k: v for k, v in self.headers.items() 
-                  if k.lower() not in ['host', 'connection']}
-        
-        try:
-            req = urllib.request.Request(url, data=body, headers=headers, method=self.command)
-            with urllib.request.urlopen(req, timeout=600) as response:
-                self.send_response(response.status)
-                for key, value in response.headers.items():
-                    if key.lower() not in ['connection', 'transfer-encoding']:
-                        self.send_header(key, value)
-                self.end_headers()
-                self.wfile.write(response.read())
-        except Exception as e:
-            self.send_error(502, f"Bad Gateway: {str(e)}")
-    
-    def log_message(self, format, *args):
-        sys.stdout.write(f"{self.address_string()} - {format % args}\n")
-
-if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python3 load_balancer.py <lb_port> <backend_port1> <backend_port2> ...")
-        sys.exit(1)
-
-    lb_port = int(sys.argv[1])
-    backend_ports = sys.argv[2:]
-    LoadBalancingHandler.backends = [f"http://localhost:{port}" for port in backend_ports]
-    LoadBalancingHandler.backend_cycle = cycle(LoadBalancingHandler.backends)
-
-    with socketserver.ThreadingTCPServer(("", lb_port), LoadBalancingHandler) as httpd:
-        print(f"Load balancer running on port {lb_port}")
-        print(f"Backends: {', '.join(LoadBalancingHandler.backends)}")
-        httpd.serve_forever()
-EOFPY
-
-chmod +x "$LB_SCRIPT"
-
-# Build port list for load balancer
-LB_PORTS=()
-for i in $(seq 0 $((NUM_INSTANCES - 1))); do
-    LB_PORTS+=($((BASE_PORT + 1 + i)))
-done
-
-echo "Starting Python load balancer..."
-python3 "$LB_SCRIPT" "$BASE_PORT" "${LB_PORTS[@]}" &
-LB_PID=$!
-
-sleep 2
 
 echo ""
 echo "============================================"
-echo "All servers started successfully!"
+echo "vLLM server started successfully!"
 echo "============================================"
-echo "Load balancer: http://localhost:$BASE_PORT"
-echo "Backend instances:"
-for i in $(seq 0 $((NUM_INSTANCES - 1))); do
-    echo "  Instance $((i + 1)): http://localhost:$((BASE_PORT + 1 + i))"
-done
+echo "Server: http://localhost:$BASE_PORT"
+echo "Tensor Parallel: $TP"
+echo "Data Parallel: $DP"
+echo "Total GPUs: $N_DEVICES"
 echo ""
-echo "Press Ctrl+C to stop all servers"
+echo "Press Ctrl+C to stop the server"
 echo "============================================"
 
 wait

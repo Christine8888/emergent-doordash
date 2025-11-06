@@ -1,6 +1,19 @@
-"""Custom solvers for evals."""
+"""Modular solver components for composing evaluation pipelines."""
 
-from .mcq_solver import multiple_choice_prefill
-from .math_solver import math_solver
+from .components import (
+    instructions,
+    fewshot,
+    prefill,
+    intext,
+    system_message,
+    generate,
+)
 
-__all__ = ["multiple_choice_prefill", "math_solver"]
+__all__ = [
+    "instructions",
+    "fewshot",
+    "prefill",
+    "intext",
+    "system_message",
+    "generate",
+]

@@ -1,0 +1,39 @@
+{
+  "model": "vllm/Qwen2.5-3B-Instruct",
+  "total_samples": 925,
+  "completed_samples": 925,
+  "choice": {
+    "accuracy": 0.5470270270270271,
+    "stderr": 0.028184836069759682,
+    "scorer": "choice"
+  },
+  "manual_bootstrap": {
+    "accuracy": 0.546254054054054,
+    "stderr": 0.023314630161062274,
+    "scorer": "manual_bootstrap",
+    "epochs": 5
+  },
+  "pass_at_k": {
+    "1": {
+      "accuracy": 0.5462756756756757,
+      "stderr": 0.023793167067951416
+    },
+    "2": {
+      "accuracy": 0.6739945945945945,
+      "stderr": 0.018392902845698597
+    },
+    "3": {
+      "accuracy": 0.7359405405405405,
+      "stderr": 0.01462738958021344
+    },
+    "4": {
+      "accuracy": 0.7722270270270271,
+      "stderr": 0.009755155966605438
+    },
+    "5": {
+      "accuracy": 0.7945945945945946,
+      "stderr": 0.0
+    }
+  },
+  "hint_fraction": 0.7
+}
