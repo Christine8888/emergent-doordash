@@ -17,9 +17,9 @@ export HF_HOME="/scr/biggest/cye/.cache/huggingface"
 export HOME="/scr-ssd/cye"
 
 MODELS=(
-"Qwen/Qwen2.5-0.5B-Instruct:1"
-"Qwen/Qwen2.5-1.5B-Instruct:1"
-"Qwen/Qwen2.5-3B-Instruct:1"
+#"Qwen/Qwen2.5-0.5B-Instruct:1"
+#"Qwen/Qwen2.5-1.5B-Instruct:1"
+#"Qwen/Qwen2.5-3B-Instruct:1"
 "Qwen/Qwen2.5-7B-Instruct:1"
 "Qwen/Qwen2.5-14B-Instruct:2"
 "Qwen/Qwen2.5-32B-Instruct:4"
@@ -30,7 +30,7 @@ MAX_CONNECTIONS=32
 HINT_FRACTIONS=(1.0 0.0 0.2 0.4 0.6 0.8)
 FEWSHOTS=(0)
 VLLM_PORT=3000
-MAX_LENGTH=16384
+MAX_LENGTH=32768
 EPOCHS=5
 VLLM_UTILS_DIR="$SPHINX/emergent-doordash/src/utils"
 CODE_DIR="$SPHINX/emergent-doordash/christine_experiments/20251030"
