@@ -31,5 +31,5 @@ if __name__ == "__main__":
         task_kwargs=task_kwargs,
         args=args,
         output_filename=filename,
-        bootstrap_metric='aime_scorer'
+        bootstrap_metric={'scorer': 'aime_scorer', 'metric': 'accuracy'}
     )

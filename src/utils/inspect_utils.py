@@ -31,21 +31,42 @@ def extract_scores_from_log(log: EvalLog) -> Dict[str, Any]:
 
     return results
 
-def group_by_sample_epoch(log: EvalLog, scorer: str) -> Dict[str, List[EvalLog]]:
-    """Group EvalLog by sample and epoch."""
+def group_by_sample_epoch(log: EvalLog, scorer: str, metric: str = 'accuracy') -> Dict[str, List[EvalLog]]:
+    """Group EvalLog by sample and epoch.
+
+    Args:
+        log: The evaluation log from Inspect
+        scorer: Name of the scorer to use (e.g., 'hle_scorer', 'gpqa_scorer')
+        metric: Name of the metric within the scorer (default: 'accuracy')
+
+    Returns:
+        Dictionary mapping sample ID to list of scores
+    """
     result = {}
     for sample in log.samples:
         if sample.id not in result:
             result[sample.id] = []
         score = 1 if sample.scores[scorer].value == 'C' else 0
         result[sample.id].append(score)
-    
+
     return result
 
-def compute_bootstrap_over_epochs(log: EvalLog, scorer: str, n_bootstrap: int = 1000) -> Dict[str, float]:
-    """Compute bootstrap over epochs."""
+def compute_bootstrap_over_epochs(log: EvalLog, scorer: Dict[str, str], n_bootstrap: int = 1000) -> Dict[str, float]:
+    """Compute bootstrap over epochs.
 
-    grouped = group_by_sample_epoch(log, scorer)
+    Args:
+        log: The evaluation log from Inspect
+        scorer: Dict with 'scorer' and optional 'metric' keys (e.g., {'scorer': 'hle_scorer', 'metric': 'accuracy'})
+                If 'metric' is not provided, defaults to 'accuracy'
+        n_bootstrap: Number of bootstrap samples
+
+    Returns:
+        Dictionary with accuracy, stderr, scorer, and epochs
+    """
+    scorer_name = scorer['scorer']
+    metric_name = scorer.get('metric', 'accuracy')
+
+    grouped = group_by_sample_epoch(log, scorer_name, metric_name)
     scores_grouped = list(grouped.values())
     n_epochs = len(scores_grouped[0])
     bootstraps = np.zeros(n_bootstrap)
@@ -62,7 +83,7 @@ def compute_bootstrap_over_epochs(log: EvalLog, scorer: str, n_bootstrap: int = 
     }
     return results
 
-def compute_pass_at_k(log: EvalLog, scorer: str, n_bootstrap: int = 1000) -> Dict[str, Dict[str, float]]:
+def compute_pass_at_k(log: EvalLog, scorer: Dict[str, str], n_bootstrap: int = 1000) -> Dict[str, Dict[str, float]]:
     """Compute pass@k for k=1 to k=n_epochs.
 
     For each k, randomly select k answers per question and check if at least 1 is correct.
@@ -70,13 +91,17 @@ def compute_pass_at_k(log: EvalLog, scorer: str, n_bootstrap: int = 1000) -> Dic
 
     Args:
         log: The evaluation log from Inspect
-        scorer: Name of the scorer to use
+        scorer: Dict with 'scorer' and optional 'metric' keys (e.g., {'scorer': 'hle_scorer', 'metric': 'accuracy'})
+                If 'metric' is not provided, defaults to 'accuracy'
         n_bootstrap: Number of bootstrap samples (default 1000)
 
     Returns:
         Dictionary mapping k (as string) to accuracy and stderr
     """
-    grouped = group_by_sample_epoch(log, scorer)
+    scorer_name = scorer['scorer']
+    metric_name = scorer.get('metric', 'accuracy')
+
+    grouped = group_by_sample_epoch(log, scorer_name, metric_name)
     scores_grouped = list(grouped.values())
     n_epochs = len(scores_grouped[0])
 

@@ -3,10 +3,11 @@
 Regenerate JSON result files from .eval files.
 
 Usage:
-    python regenerate_json_from_eval.py <eval_dir> [--bootstrap_metric METRIC] [--output_dir DIR]
+    python regenerate_json_from_eval.py <eval_dir> --scorer SCORER [--metric METRIC] [--output_dir DIR]
 
 Example:
-    python regenerate_json_from_eval.py results/gpqa/0shot/Qwen2.5-0.5B-Instruct --bootstrap_metric choice
+    python regenerate_json_from_eval.py results/gpqa/0shot/Qwen2.5-0.5B-Instruct --scorer gpqa_scorer
+    python regenerate_json_from_eval.py results/gpqa/0shot/Qwen2.5-0.5B-Instruct --scorer gpqa_scorer --metric accuracy
 """
 
 import sys
@@ -18,7 +19,7 @@ import json
 import argparse
 
 
-def regenerate_json(eval_file_path, output_dir=None, bootstrap_metric=None):
+def regenerate_json(eval_file_path, output_dir=None, scorer=None, metric=None):
     """Regenerate JSON from an .eval file."""
     eval_path = Path(eval_file_path)
 
@@ -43,7 +44,11 @@ def regenerate_json(eval_file_path, output_dir=None, bootstrap_metric=None):
     results = extract_scores_from_log(log)
 
     # Compute bootstrap statistics if requested
-    if bootstrap_metric:
+    if scorer:
+        bootstrap_metric = {'scorer': scorer}
+        if metric:
+            bootstrap_metric['metric'] = metric
+
         # Check if we have multiple epochs - try multiple ways to detect it
         n_epochs = None
         if hasattr(log.eval, 'epochs') and log.eval.epochs:
@@ -84,8 +89,10 @@ def regenerate_json(eval_file_path, output_dir=None, bootstrap_metric=None):
 def main():
     parser = argparse.ArgumentParser(description="Regenerate JSON files from .eval files")
     parser.add_argument("eval_dir", type=str, help="Directory containing .eval files")
-    parser.add_argument("--bootstrap_metric", type=str, default=None,
-                       help="Metric name for bootstrap calculation (e.g., 'choice' for MCQ tasks)")
+    parser.add_argument("--scorer", type=str, default=None,
+                       help="Scorer name for bootstrap calculation (e.g., 'gpqa_scorer', 'hle_scorer')")
+    parser.add_argument("--metric", type=str, default=None,
+                       help="Metric name for bootstrap calculation (default: 'accuracy')")
     parser.add_argument("--output_dir", type=str, default=None,
                        help="Output directory for JSON files (default: same as .eval file)")
 
@@ -104,13 +111,17 @@ def main():
         sys.exit(1)
 
     print(f"Found {len(eval_files)} .eval files")
-    print(f"Bootstrap metric: {args.bootstrap_metric or 'None'}")
+    if args.scorer:
+        metric_str = args.metric if args.metric else 'accuracy (default)'
+        print(f"Bootstrap metric: scorer='{args.scorer}', metric='{metric_str}'")
+    else:
+        print(f"Bootstrap metric: None")
     print("=" * 80)
 
     # Process each file
     for eval_file in eval_files:
         try:
-            regenerate_json(eval_file, args.output_dir, args.bootstrap_metric)
+            regenerate_json(eval_file, args.output_dir, args.scorer, args.metric)
         except Exception as e:
             print(f"  ERROR processing {eval_file.name}: {e}")
 

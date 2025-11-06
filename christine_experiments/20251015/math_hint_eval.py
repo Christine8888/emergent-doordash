@@ -33,5 +33,5 @@ if __name__ == "__main__":
         task_kwargs=task_kwargs,
         args=args,
         output_filename=filename,
-        bootstrap_metric='expression_exact_match_sympy'
+        bootstrap_metric={'scorer': 'expression_exact_match_sympy', 'metric': 'accuracy'}
     )
