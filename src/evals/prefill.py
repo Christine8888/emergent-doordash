@@ -119,17 +119,19 @@ def load_prefill_data(config: PrefillConfig) -> dict[str, str]:
     if not prefill_file.exists():
         raise FileNotFoundError(f"Prefill file not found: {config.path}")
 
-    logger.info(f"Loading prefill data from {config.path} (fraction={config.fraction})")
-
     with open(prefill_file) as f:
         for line_num, line in enumerate(f, 1):
             try:
                 data = json.loads(line)
                 example = Example.from_dict(data)
 
-                if example.hint and config.fraction > 0.0:
+                if example.hint:
                     assert isinstance(example.hint, str), "Hint must be a string"
-                    prefill_text = get_prefill_fraction(example.hint, fraction=config.fraction)
+                    # Only compute fraction if > 0.0, otherwise store full hint for validation
+                    if config.fraction > 0.0:
+                        prefill_text = get_prefill_fraction(example.hint, fraction=config.fraction)
+                    else:
+                        prefill_text = example.hint  # Full hint, but won't be used by solver
                     prefill_data[example.id] = prefill_text
 
             except json.JSONDecodeError as e:
@@ -137,5 +139,5 @@ def load_prefill_data(config: PrefillConfig) -> dict[str, str]:
             except (KeyError, ValueError) as e:
                 logger.warning(f"Line {line_num}: {e}")
 
-    logger.info(f"Loaded {len(prefill_data)} prefill entries from {config.path}")
+    logger.info(f"Loaded {len(prefill_data)} hints with fraction={config.fraction} from {config.path}")
     return prefill_data
