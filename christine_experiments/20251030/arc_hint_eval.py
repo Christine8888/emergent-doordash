@@ -8,7 +8,7 @@ from evals.solvers import instructions, prefill, generate
 
 logger = setup_logging()
 
-solver_name = "prefill"
+solver_name = "cot"
 eval_name = "arc"
 BASE_DIR = "/sphinx/u/cye/emergent-doordash/"
 DATA_PATH = f"{BASE_DIR}/christine_experiments/data/cot/arc_filtered_long.jsonl"
