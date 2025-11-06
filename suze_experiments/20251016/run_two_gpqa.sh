@@ -24,17 +24,26 @@ cleanup() {
 trap cleanup INT TERM
 
 MODEL_A="allenai/OLMo-2-0425-1B" # read from huggingface
+MODEL_A_NAME="OLMo-2-0425-1B"
 TP_A=1 # TP_A + TP_B = num gpus
+# choice                                                                                                         
+# accuracy  0.183                                                                                                
+# stderr    0.017  
 
 MODEL_B="/sphinx/u/suzeva/emergent-doordash/test_20251015_212536/checkpoint-14245"
+MODEL_B_NAME="OLMo-2-0425-1B-SFT"
 TP_B=1
+# accuracy  0.184                                                                                                
+# stderr    0.014  
 
 # Parallelism per launch (use TP per model for simplicity)
 N_DEVICES_DEFAULT=4
 
 MAX_CONNECTIONS=32
-HINT_FRACTIONS=(0.0 0.2 0.4 0.6 0.8 1.0)
-FEWSHOTS=(0)
+# TEMPORARY: Only 0% hint for MODEL_B - uncomment below to restore full sweep
+HINT_FRACTIONS=(0.0)
+# HINT_FRACTIONS=(0.0 0.2 0.4 0.6 0.8 1.0)  # UNCOMMENT to restore all hint fractions
+FEWSHOTS=(0.6)
 VLLM_PORT=6000 # check if port in use with lsof -i :6000
 EPOCHS=5
 
@@ -42,10 +51,11 @@ VLLM_UTILS_DIR="/afs/cs.stanford.edu/u/suzeva/emergent-doordash/suze_experiments
 CODE_DIR="/afs/cs.stanford.edu/u/suzeva/emergent-doordash/christine_experiments/20251015"
 EXPERIMENTS_DIR="/afs/cs.stanford.edu/u/suzeva/emergent-doordash/suze_experiments/20251016/results"
 
-# Build MODELS list from A and B
+# Build MODELS list from A and B: "path:TP:name"
+# TEMPORARY: Only MODEL_B - uncomment MODEL_A line below to restore both models
 MODELS=(
-"${MODEL_A}:${TP_A}"
-"${MODEL_B}:${TP_B}"
+"${MODEL_A}:${TP_A}:${MODEL_A_NAME}"
+"${MODEL_B}:${TP_B}:${MODEL_B_NAME}"
 )
 # ========================================================
 
@@ -67,8 +77,9 @@ echo "Initial cleanup complete."
 
 for MODEL_SPEC in "${MODELS[@]}"; do
     MODEL="${MODEL_SPEC%%:*}"
-    TP="${MODEL_SPEC##*:}"
-    MODEL_NAME="${MODEL##*/}"
+    TP="${MODEL_SPEC#*:}"
+    TP="${TP%%:*}"
+    MODEL_NAME="${MODEL_SPEC##*:}"
     MAX_WAIT=1200
 
     # Choose number of devices; simplest is equal to TP

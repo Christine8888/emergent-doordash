@@ -2,9 +2,11 @@ inspect-ai
 dotenv
 antlr4-python3-runtime==4.11
 huggingface_hub
+matplotlib
 transformers
 accelerate
 datasets
+seaborn
 omegaconf
 pandas
 wandb
