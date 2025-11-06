@@ -127,18 +127,11 @@ def load_prefill_data(config: PrefillConfig) -> dict[str, str]:
         for line_num, line in enumerate(f, 1):
             try:
                 data = json.loads(line)
-
-                # Use Example.from_dict to enforce standard fields
                 example = Example.from_dict(data)
 
-                # Compute prefill text from hint field
                 if example.hint and config.fraction > 0.0:
-                    # Ensure hint is a string for prefill
-                    hint_text = str(example.hint) if not isinstance(example.hint, str) else example.hint
-                    prefill_text = get_prefill_fraction(
-                        hint_text,
-                        fraction=config.fraction
-                    )
+                    assert isinstance(example.hint, str), "Hint must be a string"
+                    prefill_text = get_prefill_fraction(example.hint, fraction=config.fraction)
                     prefill_data[example.id] = prefill_text
 
             except json.JSONDecodeError as e:

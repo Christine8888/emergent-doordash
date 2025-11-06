@@ -77,14 +77,12 @@ def load_fewshot_data(config: FewShotConfig) -> dict[str, Example]:
             try:
                 data = json.loads(line)
 
-                # Use Example.from_dict to enforce standard fields
                 example = Example.from_dict(data)
 
-                # Few-shot requires response field
                 if example.response:
                     fewshot_data[example.id] = example
                 else:
-                    logger.warning(f"Line {line_num}: Missing 'response' field")
+                    logger.warning(f"Line {line_num}: Missing 'response' field, required for few-shot")
 
             except json.JSONDecodeError as e:
                 logger.warning(f"Line {line_num}: Invalid JSON - {e}")
@@ -156,11 +154,9 @@ def format_fewshot_examples(
             f"available after excluding current sample"
         )
 
-    # Sample examples deterministically based on seed
     rng = random.Random(hash(seed) if isinstance(seed, str) else seed)
     selected_ids = rng.sample(available_ids, min(n_examples, len(available_ids)))
 
-    # Format each example
     examples_text = []
     for sample_id in selected_ids:
         example_obj = fewshot_data[sample_id]

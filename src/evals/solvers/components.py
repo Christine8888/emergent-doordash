@@ -13,7 +13,7 @@ from inspect_ai.solver import Generate, Solver, solver
 from inspect_ai.solver import TaskState
 
 from evals.prefill import PrefillConfig
-from evals.fewshot import FewShotConfig, create_fewshot_message
+from evals.fewshot import FewShotConfig, format_fewshot_examples
 
 logger = logging.getLogger(__name__)
 
@@ -83,19 +83,15 @@ def fewshot(
 
         [config.suffix if provided]
     """
-    from evals.fewshot import format_fewshot_examples
-
-    # Load fewshot data at initialization time
     fewshot_data = config.get_data()
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        # Format few-shot examples
         examples_text = format_fewshot_examples(
             fewshot_data=fewshot_data,
             n_examples=config.num_examples,
             example_template=example_template,
             current_id=state.sample_id if config.exclude_current else None,
-            seed=state.sample_id,  # Use sample_id for per-sample determinism
+            seed=config.seed,
             prefix=config.prefix,
             suffix=config.suffix,
         )
