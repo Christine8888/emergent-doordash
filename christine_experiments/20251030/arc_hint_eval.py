@@ -2,7 +2,7 @@
 
 from utils.eval_utils import create_base_parser, setup_vllm_env, check_output_exists, run_eval
 from utils.setup import setup_logging
-from environments.arc.arc import arc_task, DEFAULT_INSTRUCTIONS
+from environments.arc.arc import arc, DEFAULT_INSTRUCTIONS
 from evals.prefill import PrefillConfig
 from evals.solvers import format_prompt, add_prefill, generate_with_continuation
 
@@ -34,7 +34,7 @@ if __name__ == "__main__":
         generate_with_continuation(timeout=args.timeout)
     ]
 
-    task = arc_task(sample_ids=sample_ids, solver=solver)
+    task = arc(sample_ids=sample_ids, solver=solver)
 
     run_eval(
         task=task,
