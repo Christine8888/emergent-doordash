@@ -15,8 +15,6 @@ DATA_PATH = f"{BASE_DIR}/christine_experiments/data/cot/arc_filtered_long.jsonl"
 
 if __name__ == "__main__":
     parser = create_base_parser(default_log_dir=f"./{eval_name}")
-    parser.add_argument("--hint_fraction", type=float, default=0.8)
-    parser.add_argument("--fewshot", type=int, default=0)
     args = parser.parse_args()
 
     setup_vllm_env(args.base_port)

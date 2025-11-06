@@ -37,6 +37,8 @@ def create_base_parser(default_log_dir: str):
     parser.add_argument("--base_port", type=int, default=9000, help="Base port for vLLM server")
     parser.add_argument("--max_tokens", type=int, default=None, help="Maximum tokens to generate")
     parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--fewshot", type=int, default=0, help="Number of fewshot examples")
+    parser.add_argument("--hint_fraction", type=float, default=1.0, help="Fraction of hint to provide")
     return parser
 
 
