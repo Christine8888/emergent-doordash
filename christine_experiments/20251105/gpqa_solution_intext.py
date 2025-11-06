@@ -1,9 +1,3 @@
-"""GPQA evaluation with prefill hints.
-
-Example usage:
-    python gpqa_hint_eval.py --model vllm/Qwen2.5-0.5B-Instruct --hint_fraction 0.8
-"""
-
 from utils.eval_utils import create_base_parser, setup_vllm_env, check_output_exists, run_eval, get_valid_problem_ids
 from utils.setup import setup_logging
 from environments.gpqa.gpqa import gpqa_diamond, DEFAULT_INSTRUCTIONS
