@@ -148,7 +148,7 @@ async def sample_until_correct(
                     pbar.update(1)
                     return result
                 else:
-                    logger.debug(f"  {sample_id}: got {extracted}, want {target}")
+                    logger.info(f"  {sample_id} [attempt {attempt + 1}/{max_retries}]: ANSWER: {extracted} | TARGET: {target}")
 
             except Exception as e:
                 logger.error(f"  {sample_id}: {e}")
