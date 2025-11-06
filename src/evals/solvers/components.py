@@ -139,6 +139,44 @@ def prefill(config: PrefillConfig) -> Solver:
 
 
 @solver
+def intext(config: PrefillConfig, prefix: str = "Here is part of a hint that may be helpful to your solution:\n") -> Solver:
+    """Add hint text inline to the user prompt.
+
+    Similar to prefill() but appends hint text to the user prompt instead of
+    adding an assistant message. The hint text is prefixed with a customizable
+    prefix string.
+
+    Args:
+        config: PrefillConfig with path, fraction, mode, and mask_token settings
+        prefix: Text to prepend to the hint (default: "Here is part of a hint that may be helpful to your solution:\\n")
+
+    Returns:
+        Solver that appends hint text to user prompt for the current sample
+
+    Raises:
+        KeyError: If sample_id is not in prefill data (when fraction > 0.0)
+    """
+    # Load hint data (sample_id -> hint_text)
+    hint_data = config.get_data()
+
+    async def solve(state: TaskState, generate: Generate) -> TaskState:
+        # Only validate sample existence when actually using hints
+        if config.fraction > 0.0:
+            if state.sample_id not in hint_data:
+                raise KeyError(
+                    f"Sample '{state.sample_id}' not found in hint data. "
+                    f"Available samples should be filtered using config.get_available_ids()"
+                )
+            # Append hint to user prompt
+            hint_text = hint_data[state.sample_id]
+            state.user_prompt.text = state.user_prompt.text + "\n\n" + prefix + hint_text
+
+        return state
+
+    return solve
+
+
+@solver
 def system_message(message: str) -> Solver:
     """Add a system message to the conversation.
 

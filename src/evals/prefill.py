@@ -2,6 +2,7 @@
 
 import json
 import logging
+import random
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,6 +60,47 @@ def get_prefill_fraction(reasoning: str, fraction: float = 0.5, stop_string: str
     return prefill_text
 
 
+def get_masked_text(text: str, fraction: float = 0.5, mask_token: str = "[MASK]") -> str:
+    """Replace a fraction of words in text with mask tokens.
+
+    Args:
+        text: The text to mask
+        fraction: Fraction of words to replace with masks (must be > 0.0 and <= 1.0)
+        mask_token: Token to use for masking
+
+    Returns:
+        Text with fraction of words replaced by mask tokens
+
+    Raises:
+        ValueError: If text is empty or fraction is invalid
+    """
+    if not text or not text.strip():
+        raise ValueError("Cannot mask empty text")
+
+    if fraction <= 0.0 or fraction > 1.0:
+        raise ValueError(f"Fraction must be > 0.0 and <= 1.0, got {fraction}")
+
+    tokens = re.split(r'(\s+)', text)
+    # Get indices of all non-whitespace tokens (actual words)
+    word_indices = [i for i, t in enumerate(tokens) if t.strip()]
+    num_words_to_mask = int(len(word_indices) * fraction)
+
+    if num_words_to_mask == 0:
+        raise ValueError(f"Fraction {fraction} results in 0 words to mask from {len(word_indices)} total words")
+
+    # Randomly select which word indices to mask
+    indices_to_mask = set(random.sample(word_indices, num_words_to_mask))
+
+    result = []
+    for i, token in enumerate(tokens):
+        if i in indices_to_mask:
+            result.append(mask_token)
+        else:
+            result.append(token)
+
+    return "".join(result).strip()
+
+
 @dataclass
 class PrefillConfig:
     """Configuration for prefill solver.
@@ -73,13 +115,20 @@ class PrefillConfig:
     Args:
         path: Path to JSONL file containing prefill data
         fraction: Fraction of words to include from hint (0.0 to 1.0)
+        mode: How to apply fraction - "sequential" cuts off after fraction*words,
+              "masked" replaces fraction*words with mask tokens
+        mask_token: Token to use for masking in masked mode
     """
 
     path: str
     fraction: float = 0.5
+    mode: str = "sequential"
+    mask_token: str = "[MASK]"
 
     def __post_init__(self):
         """Load prefill data immediately after initialization."""
+        if self.mode not in ["sequential", "masked"]:
+            raise ValueError(f"Mode must be 'sequential' or 'masked', got '{self.mode}'")
         self._data = load_prefill_data(self)
 
     def get_data(self) -> dict[str, str]:
@@ -129,7 +178,12 @@ def load_prefill_data(config: PrefillConfig) -> dict[str, str]:
                     assert isinstance(example.hint, str), "Hint must be a string"
                     # Only compute fraction if > 0.0, otherwise store full hint for validation
                     if config.fraction > 0.0:
-                        prefill_text = get_prefill_fraction(example.hint, fraction=config.fraction)
+                        if config.mode == "sequential":
+                            prefill_text = get_prefill_fraction(example.hint, fraction=config.fraction)
+                        elif config.mode == "masked":
+                            prefill_text = get_masked_text(example.hint, fraction=config.fraction, mask_token=config.mask_token)
+                        else:
+                            raise ValueError(f"Invalid mode: {config.mode}")
                     else:
                         prefill_text = example.hint  # Full hint, but won't be used by solver
                     prefill_data[example.id] = prefill_text
@@ -139,5 +193,5 @@ def load_prefill_data(config: PrefillConfig) -> dict[str, str]:
             except (KeyError, ValueError) as e:
                 logger.warning(f"Line {line_num}: {e}")
 
-    logger.info(f"Loaded {len(prefill_data)} hints with fraction={config.fraction} from {config.path}")
+    logger.info(f"Loaded {len(prefill_data)} hints with fraction={config.fraction}, mode={config.mode} from {config.path}")
     return prefill_data
