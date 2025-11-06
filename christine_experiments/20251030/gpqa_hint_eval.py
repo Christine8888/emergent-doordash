@@ -1,4 +1,4 @@
-from evals.hint_eval_utils import (
+from utils.eval_utils import (
     create_base_parser, setup_vllm_env, check_output_exists,
     create_configs, run_eval_and_save
 )

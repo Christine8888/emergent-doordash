@@ -67,19 +67,17 @@ def normalize_for_grading(text: str) -> str:
     return normalized
 
 
-async def grade_arc_answer(response: str, target: str) -> bool:
-    """Grade ARC answer by normalizing both response and target.
+async def grade_answer(extracted_answer: str, target: str) -> bool:
+    """Grade ARC answer by normalizing both extracted answer and target.
 
     Args:
-        response: Model's full response
+        extracted_answer: Extracted answer from model's response
         target: Target output grid as formatted string
 
     Returns:
-        True if normalized response matches normalized target
+        True if normalized extracted answer matches normalized target
     """
-    extracted = extract_answer(response)
-
-    norm_response = normalize_for_grading(extracted)
+    norm_response = normalize_for_grading(extracted_answer)
     norm_target = normalize_for_grading(target)
 
     return norm_response == norm_target

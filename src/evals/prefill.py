@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,44 +10,87 @@ from evals.example import Example
 
 logger = logging.getLogger(__name__)
 
-# Module-level cache for prefill data
-_PREFILL_DATA_CACHE: dict[str, dict[str, Example]] = {}
+
+def get_prefill_fraction(reasoning: str, fraction: float = 0.5, stop_string: str = "ANSWER:") -> str:
+    """Extract a fraction of the reasoning text for prefilling.
+
+    Args:
+        reasoning: The full reasoning text to extract from
+        fraction: Fraction of words to include (must be > 0.0)
+        stop_string: String to stop at if encountered
+
+    Returns:
+        Non-empty prefill text
+
+    Raises:
+        ValueError: If reasoning is empty, fraction is 0.0, or extracted text is empty
+    """
+    if not reasoning or not reasoning.strip():
+        raise ValueError("Cannot create prefill from empty reasoning text")
+
+    if fraction <= 0.0:
+        raise ValueError(f"Fraction must be > 0.0, got {fraction}")
+
+    # Split on whitespace while capturing it
+    tokens = re.split(r'(\s+)', reasoning)
+
+    # Filter to just words (non-whitespace tokens)
+    words = [t for t in tokens]
+    num_words = int(len(words) * fraction)
+
+    if num_words == 0:
+        raise ValueError(f"Fraction {fraction} results in 0 words from {len(words)} total words")
+
+    result = []
+    word_count = 0
+    for token in tokens:
+        if word_count >= num_words:
+            break
+        word_count += 1
+        result.append(token)
+
+        # add stop string to result but break afterwards
+        if token == stop_string:
+            break
+
+    prefill_text = "".join(result).strip()
+
+    if not prefill_text:
+        raise ValueError("Extracted prefill text is empty")
+
+    return prefill_text
 
 
 @dataclass
 class PrefillConfig:
     """Configuration for prefill solver.
 
-    Caches loaded data to avoid reloading for every solver invocation.
+    JSONL files must have standardized fields:
+    - id: sample identifier (required)
+    - question: the question text (required)
+    - target: the target answer (required)
+    - response: the full response from the model (required)
+    - hint: the hint to use for prefill (required)
 
     Args:
         path: Path to JSONL file containing prefill data
-        fraction: Fraction of words to include from response (0.0 to 1.0)
-        id_field: Field name containing the sample ID
-        question_field: Field name containing the question (e.g., question with choices)
-        response_field: Field name containing the response
-        target_field: Field name containing the target answer (optional)
+        fraction: Fraction of words to include from hint (0.0 to 1.0)
     """
 
     path: str
     fraction: float = 0.5
-    id_field: str = "id"
-    question_field: str = "question"
-    response_field: str = "response"
-    target_field: str = "target"
 
-    def get_data(self) -> dict[str, Example]:
-        """Get cached prefill data, loading if necessary.
+    def __post_init__(self):
+        """Load prefill data immediately after initialization."""
+        self._data = load_prefill_data(self)
+
+    def get_data(self) -> dict[str, str]:
+        """Get prefill data.
 
         Returns:
-            Dictionary mapping sample IDs to Example objects
+            Dictionary mapping sample IDs to prefill text (truncated by fraction)
         """
-        # Use path as cache key
-        if self.path not in _PREFILL_DATA_CACHE:
-            logger.info(f"Loading prefill data from {self.path}")
-            _PREFILL_DATA_CACHE[self.path] = load_prefill_data(self)
-
-        return _PREFILL_DATA_CACHE[self.path]
+        return self._data
 
     def get_available_ids(self) -> set[str]:
         """Get set of sample IDs that have prefill data available.
@@ -54,51 +98,22 @@ class PrefillConfig:
         Returns:
             Set of sample IDs
         """
-        prefill_data = self.get_data()
-        return set(prefill_data.keys())
+        return set(self._data.keys())
 
 
-def load_prefill_map(config: PrefillConfig) -> dict[str, str]:
-    """Load prefill data from JSONL file into a dictionary.
-
-    Args:
-        config: PrefillConfig with path and field names
-
-    Returns:
-        Dictionary mapping sample IDs to response texts
-    """
-    prefill_map = {}
-    prefill_file = Path(config.path)
-
-    if not prefill_file.exists():
-        raise FileNotFoundError(f"Prefill file not found: {config.path}")
-
-    with open(prefill_file) as f:
-        for line_num, line in enumerate(f, 1):
-            try:
-                data = json.loads(line)
-                sample_id = data.get(config.id_field)
-                response_text = data.get(config.response_field)
-
-                if sample_id and response_text:
-                    prefill_map[sample_id] = response_text
-                else:
-                    logger.warning(f"Line {line_num}: No sample ID or response text found in {data}")
-            except json.JSONDecodeError as e:
-                logger.warning(f"Line {line_num}: Invalid JSON - {e}")
-
-    logger.info(f"Loaded {len(prefill_map)} prefill entries from {config.path}")
-    return prefill_map
-
-
-def load_prefill_data(config: PrefillConfig) -> dict[str, Example]:
-    """Load prefill data from JSONL file.
+def load_prefill_data(config: PrefillConfig) -> dict[str, str]:
+    """Load prefill data from JSONL file and compute prefill text.
 
     Args:
-        config: PrefillConfig with path and field names
+        config: PrefillConfig with path and fraction
 
     Returns:
-        Dictionary mapping sample IDs to Example objects
+        Dictionary mapping sample IDs to prefill text (truncated by fraction)
+
+    Raises:
+        FileNotFoundError: If prefill file doesn't exist
+        KeyError: If required fields are missing
+        ValueError: If data is invalid or prefill text is empty
     """
     prefill_data = {}
     prefill_file = Path(config.path)
@@ -106,23 +121,30 @@ def load_prefill_data(config: PrefillConfig) -> dict[str, Example]:
     if not prefill_file.exists():
         raise FileNotFoundError(f"Prefill file not found: {config.path}")
 
+    logger.info(f"Loading prefill data from {config.path} (fraction={config.fraction})")
+
     with open(prefill_file) as f:
         for line_num, line in enumerate(f, 1):
             try:
                 data = json.loads(line)
-                sample_id = data.get(config.id_field)
-                question_text = data.get(config.question_field)
-                response_text = data.get(config.response_field)
-                target_text = data.get(config.target_field)  # Optional
 
-                if sample_id and question_text and response_text:
-                    prefill_data[sample_id] = Example(
-                        question=question_text,
-                        response=response_text,
-                        target=target_text
+                # Use Example.from_dict to enforce standard fields
+                example = Example.from_dict(data)
+
+                # Compute prefill text from hint field
+                if example.hint and config.fraction > 0.0:
+                    # Ensure hint is a string for prefill
+                    hint_text = str(example.hint) if not isinstance(example.hint, str) else example.hint
+                    prefill_text = get_prefill_fraction(
+                        hint_text,
+                        fraction=config.fraction
                     )
+                    prefill_data[example.id] = prefill_text
+
             except json.JSONDecodeError as e:
                 logger.warning(f"Line {line_num}: Invalid JSON - {e}")
+            except (KeyError, ValueError) as e:
+                logger.warning(f"Line {line_num}: {e}")
 
     logger.info(f"Loaded {len(prefill_data)} prefill entries from {config.path}")
     return prefill_data

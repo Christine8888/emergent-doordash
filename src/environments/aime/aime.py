@@ -7,27 +7,40 @@ https://huggingface.co/datasets/di-zhang-fdu/AIME_1983_2024
 from typing import Any
 
 from inspect_ai import Task, task
-from inspect_ai.dataset import Sample, hf_dataset, json_dataset
+from inspect_ai.dataset import Sample, hf_dataset
 from inspect_ai.model import GenerateConfig
 from inspect_ai.scorer import Score, Scorer, Target, accuracy, scorer, stderr
-from inspect_ai.solver import TaskState
+from inspect_ai.solver import Solver, TaskState
 
-from evals.prefill import PrefillConfig
-from evals.fewshot import FewShotConfig
-from evals.solvers import math_solver
+from environments.math.math import DEFAULT_INSTRUCTIONS
 from environments.math.utils import score_helper
 
 DATASET_PATH = "di-zhang-fdu/AIME_1983_2024"
 
 
-def get_aime_dataset(split: str = "train", shuffle: bool = True):
-    """Load AIME dataset from HuggingFace."""
-    return hf_dataset(
+def get_aime_dataset(split: str = "train", shuffle: bool = True, sample_ids: set[str] | None = None):
+    """Load AIME dataset from HuggingFace.
+
+    Args:
+        split: Dataset split to use
+        shuffle: Whether to shuffle the dataset
+        sample_ids: Optional set of sample IDs to filter to (default: None = use all)
+    """
+    dataset = hf_dataset(
         path=DATASET_PATH,
         split=split,
         sample_fields=record_to_sample,
         shuffle=shuffle,
     )
+
+    # Filter to specific sample IDs if provided
+    if sample_ids is not None:
+        dataset = dataset.filter(
+            name=f"{dataset.name}_filtered",
+            predicate=lambda sample: sample.id in sample_ids
+        )
+
+    return dataset
 
 
 def record_to_sample(record: dict[str, Any]) -> Sample:
@@ -70,42 +83,37 @@ def record_to_sample_prefill(record: dict[str, Any]) -> Sample:
 @task
 def aime(
     split: str = "train",
-    instruction_template: str | None = None,
-    example_template: str | None = None,
-    fewshot_config: FewShotConfig | None = None,
-    prefill_config: PrefillConfig | None = None,
-    timeout: int | None = None,
+    sample_ids: set[str] | None = None,
+    solver: Solver | list[Solver] | None = None,
 ) -> Task:
     """
-    Inspect Task implementation for the AIME benchmark.
+    Baseline AIME task.
+
+    This is the minimal task definition. For custom configurations (prefill, few-shot, etc.),
+    use solver composition in your experiment file.
 
     Args:
         split: Dataset split to use (default: "train", the only available split)
-        instruction_template: Custom instruction template (overrides default)
-        example_template: Custom example template (overrides default)
-        fewshot_config: FewShotConfig for few-shot examples
-        prefill_config: PrefillConfig object for eval-time hints
-        timeout: Timeout in seconds for generation (default: None)
+        sample_ids: Optional set of sample IDs to filter to (default: None = use all)
+        solver: Custom solver or list of solvers. If None, uses basic generate() with instructions.
+
+    Returns:
+        Task configured for AIME evaluation
     """
-    # When using prefill data, load directly from the prefill JSONL file
-    # This automatically drops samples that do not have correct reasoning traces
-    if prefill_config:
-        dataset = json_dataset(
-            json_file=prefill_config.path,
-            sample_fields=record_to_sample_prefill,
-        )
-    else:
-        dataset = get_aime_dataset(split=split, shuffle=True)
+    # Load dataset
+    dataset = get_aime_dataset(split=split, shuffle=True, sample_ids=sample_ids)
+
+    # Use provided solver or create basic one
+    if solver is None:
+        from evals.solvers import format_prompt, generate_with_continuation
+        solver = [
+            format_prompt(instruction_template=DEFAULT_INSTRUCTIONS),
+            generate_with_continuation()
+        ]
 
     return Task(
         dataset=dataset,
-        solver=math_solver(
-            instruction_template=instruction_template,
-            example_template=example_template,
-            fewshot_config=fewshot_config,
-            prefill_config=prefill_config,
-            timeout=timeout,
-        ),
+        solver=solver,
         scorer=aime_scorer(),
         config=GenerateConfig(temperature=1.0),
     )

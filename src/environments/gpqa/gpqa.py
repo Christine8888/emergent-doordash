@@ -10,17 +10,12 @@ from typing import Any
 from pathlib import Path
 
 from inspect_ai import Task, task
-from inspect_ai.dataset import Sample, csv_dataset, json_dataset
+from inspect_ai.dataset import Sample, csv_dataset
 from inspect_ai.scorer import CORRECT, INCORRECT, Score, Scorer, Target, accuracy, scorer, stderr
-from inspect_ai.solver import TaskState
+from inspect_ai.solver import Solver, TaskState
 
-from evals.solvers.mcq_utils import format_answer_options, parse_answer
-from evals.solvers.generic_solver import solver_with_prefill
-from evals.prefill import PrefillConfig
-from evals.fewshot import FewShotConfig
+from environments.gpqa.utils import format_answer_options, extract_answer, grade_answer
 
-# default epochs to run eval for
-DEFAULT_EPOCHS = 1
 LOCAL_DATA_DIR = Path(__file__).parent / "data"
 
 # Default instructions for GPQA
@@ -31,11 +26,12 @@ DEFAULT_INSTRUCTIONS = (
 )
 
 
-def get_gpqa_dataset(shuffle_seed: int = 42):
+def get_gpqa_dataset(shuffle_seed: int = 42, sample_ids: set[str] | None = None):
     """Load GPQA dataset with shuffled choices.
 
     Args:
         shuffle_seed: Random seed for shuffling choices (default: 42).
+        sample_ids: Optional set of sample IDs to filter to (default: None = use all)
     """
     import functools
 
@@ -46,49 +42,50 @@ def get_gpqa_dataset(shuffle_seed: int = 42):
             csv_file=str(LOCAL_DATA_DIR / "gpqa_diamond.csv"),
             sample_fields=record_to_sample_with_seed,
     )
+
+    # Filter to specific sample IDs if provided
+    if sample_ids is not None:
+        dataset = dataset.filter(
+            name=f"{dataset.name}_filtered",
+            predicate=lambda sample: sample.id in sample_ids
+        )
+
     return dataset
 @task
 def gpqa_diamond(
-    instruction_template: str | None = None,
-    example_template: str | None = None,
-    fewshot_config: FewShotConfig | None = None,
-    prefill_config: PrefillConfig | None = None,
     shuffle_seed: int | None = None,
-    timeout: int | None = 600,
+    sample_ids: set[str] | None = None,
+    solver: Solver | list[Solver] | None = None,
 ) -> Task:
-    """GPQA Diamond evaluation task.
+    """
+    Baseline GPQA Diamond task.
+
+    This is the minimal task definition. For custom configurations (prefill, few-shot, etc.),
+    use solver composition in your experiment file.
 
     Args:
-        instruction_template: Custom instruction template (overrides default)
-        example_template: Custom example template (overrides default)
-        fewshot_config: FewShotConfig for few-shot examples
-        prefill_config: PrefillConfig object for vLLM prefill (optional)
-        shuffle_seed: Random seed for shuffling choices. If None, uses alphabetical ordering.
-        timeout: Timeout in seconds for generation (default: 600)
-    """
-    # Use generic solver with prefill support
-    solver = solver_with_prefill(
-        instruction_template=instruction_template or DEFAULT_INSTRUCTIONS,
-        example_template=example_template,
-        fewshot_config=fewshot_config,
-        prefill_config=prefill_config,
-        timeout=timeout
-    )
+        shuffle_seed: Random seed for shuffling choices (default: 42)
+        sample_ids: Optional set of sample IDs to filter to (default: None = use all)
+        solver: Custom solver or list of solvers. If None, uses basic generate() with instructions.
 
-    # When using prefill data, load directly from the prefill JSONL file
-    if prefill_config:
-        dataset = json_dataset(
-            json_file=prefill_config.path,
-            sample_fields=record_to_sample_prefill,
-        )
-    else:
-        dataset = get_gpqa_dataset(shuffle_seed=shuffle_seed)
+    Returns:
+        Task configured for GPQA evaluation
+    """
+    # Load dataset
+    dataset = get_gpqa_dataset(shuffle_seed=shuffle_seed or 42, sample_ids=sample_ids)
+
+    # Use provided solver or create basic one
+    if solver is None:
+        from evals.solvers import format_prompt, generate_with_continuation
+        solver = [
+            format_prompt(instruction_template=DEFAULT_INSTRUCTIONS),
+            generate_with_continuation()
+        ]
 
     return Task(
         dataset=dataset,
         solver=solver,
         scorer=gpqa_scorer(),
-        epochs=DEFAULT_EPOCHS,
     )
 
 
@@ -148,18 +145,23 @@ def record_to_sample_prefill(record: dict[str, Any]) -> Sample:
 def gpqa_scorer() -> Scorer:
     """Score GPQA answers using letter extraction and comparison."""
     async def score(state: TaskState, target: Target) -> Score:
-        answer = parse_answer(state.output.completion, num_choices=4)
+        extracted_letter = extract_answer(state.output.completion, num_choices=4)
 
-        if answer and answer.upper() == target.text.upper():
+        correct = await grade_answer(
+            extracted_letter=extracted_letter,
+            target=target.text,
+        )
+
+        if correct:
             return Score(
                 value=CORRECT,
-                answer=answer,
+                answer=extracted_letter,
                 explanation="Correct answer",
             )
         else:
             return Score(
                 value=INCORRECT,
-                answer=answer or "",
+                answer=extracted_letter,
                 explanation="Incorrect answer",
             )
 

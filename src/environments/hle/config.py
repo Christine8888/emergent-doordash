@@ -2,7 +2,7 @@
 
 from inspect_ai.dataset import Sample
 from environments.hle.hle import get_hle_dataset, DEFAULT_INSTRUCTIONS
-from environments.hle.utils import extract_answer as hle_extract_answer, grade_hle_answer
+from environments.gpqa.utils import extract_answer as gpqa_extract_answer, grade_answer as gpqa_grade_answer
 
 
 def get_dataset():
@@ -12,12 +12,12 @@ def get_dataset():
 
 def extract_answer(response: str) -> str:
     """Extract answer from response."""
-    return hle_extract_answer(response)
+    return gpqa_extract_answer(response, num_choices=4)
 
 
-async def grade_answer(response: str, target: str) -> bool:
+async def grade_answer(extracted_answer: str, target: str) -> bool:
     """Grade HLE answer using letter matching."""
-    return await grade_hle_answer(response, target)
+    return await gpqa_grade_answer(extracted_answer, target)
 
 
 def format_prompt(sample: Sample) -> str:

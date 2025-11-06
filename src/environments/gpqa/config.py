@@ -2,7 +2,7 @@
 
 from inspect_ai.dataset import Sample
 from environments.gpqa.gpqa import get_gpqa_dataset, DEFAULT_INSTRUCTIONS
-from evals.solvers.mcq_utils import parse_answer
+from environments.gpqa.utils import extract_answer as gpqa_extract_answer, grade_answer as gpqa_grade_answer
 
 
 def get_dataset(shuffle_seed: int = 42):
@@ -16,13 +16,12 @@ def get_dataset(shuffle_seed: int = 42):
 
 def extract_answer(response: str) -> str:
     """Extract answer letter from response."""
-    return parse_answer(response, num_choices=4) or ""
+    return gpqa_extract_answer(response, num_choices=4)
 
 
-async def grade_answer(response: str, target: str) -> bool:
+async def grade_answer(extracted_answer: str, target: str) -> bool:
     """Grade GPQA answer by comparing extracted letter to target."""
-    answer = extract_answer(response)
-    return answer.upper() == target.upper() if answer else False
+    return await gpqa_grade_answer(extracted_answer, target)
 
 
 def format_prompt(sample: Sample) -> str:

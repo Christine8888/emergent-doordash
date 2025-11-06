@@ -7,14 +7,12 @@ https://huggingface.co/datasets/cais/hle
 from typing import Any
 
 from inspect_ai import Task, task
-from inspect_ai.dataset import Dataset, Sample, hf_dataset, json_dataset
+from inspect_ai.dataset import Dataset, Sample, hf_dataset
 from inspect_ai.model import GenerateConfig
 from inspect_ai.scorer import CORRECT, INCORRECT, Score, Scorer, Target, accuracy, scorer, stderr
-from inspect_ai.solver import TaskState, generate
+from inspect_ai.solver import Solver, TaskState
 
-from evals.prefill import PrefillConfig
-from evals.solvers.generic_solver import solver_with_prefill
-from environments.hle.utils import grade_hle_answer
+from environments.gpqa.utils import extract_answer, grade_answer
 
 DATASET_PATH = "cais/hle"
 
@@ -26,12 +24,13 @@ DEFAULT_INSTRUCTIONS = (
 )
 
 
-def get_hle_dataset(split: str = "test", shuffle: bool = True) -> Dataset:
+def get_hle_dataset(split: str = "test", shuffle: bool = True, sample_ids: set[str] | None = None) -> Dataset:
     """Load HLE dataset from HuggingFace, filtering for multiple choice without images.
 
     Args:
         split: Dataset split to use (default: "test", the only available split)
         shuffle: Whether to shuffle the dataset
+        sample_ids: Optional set of sample IDs to filter to (default: None = use all)
 
     Returns:
         Dataset with HLE samples
@@ -52,6 +51,13 @@ def get_hle_dataset(split: str = "test", shuffle: bool = True) -> Dataset:
             and not sample.metadata.get("has_image", False)
         ),
     )
+
+    # Filter to specific sample IDs if provided
+    if sample_ids is not None:
+        dataset = dataset.filter(
+            name=f"{dataset.name}_filtered",
+            predicate=lambda sample: sample.id in sample_ids
+        )
 
     return dataset
 
@@ -102,12 +108,9 @@ def record_to_sample_prefill(record: dict[str, Any]) -> Sample:
 def hle_scorer() -> Scorer:
     """Score HLE multiple choice answers using letter extraction and comparison."""
     async def score(state: TaskState, target: Target) -> Score:
-        # Import extract_answer to get the extracted letter for the answer field
-        from environments.hle.utils import extract_answer
+        extracted_letter = extract_answer(state.output.completion, num_choices=4)
 
-        extracted_letter = extract_answer(state.output.completion)
-
-        correct = await grade_hle_answer(
+        correct = await grade_answer(
             extracted_letter=extracted_letter,
             target=target.text,
         )
@@ -133,34 +136,51 @@ def hle_scorer() -> Scorer:
 @task
 def hle(
     split: str = "test",
-    prefill_config: PrefillConfig | None = None,
-    timeout: int | None = None,
+    sample_ids: set[str] | None = None,
+    solver: Solver | list[Solver] | None = None,
 ) -> Task:
     """
-    Inspect Task implementation for the HLE benchmark (multiple choice only).
+    Baseline HLE task (multiple choice only).
+
+    This is the minimal task definition. For custom configurations (prefill, few-shot, etc.),
+    use solver composition in your experiment file.
 
     Args:
         split: Dataset split to use (default: "test", the only available split)
-        prefill_config: PrefillConfig for eval-time hints (optional)
-        timeout: Timeout in seconds for generation (default: None)
-    """
-    # When using prefill data, load directly from the prefill JSONL file
-    # This automatically filters to only tasks with pre-fills available
-    if prefill_config:
-        dataset = json_dataset(
-            json_file=prefill_config.path,
-            sample_fields=record_to_sample_prefill,
-        )
-    else:
-        dataset = get_hle_dataset(split=split, shuffle=True)
+        sample_ids: Optional set of sample IDs to filter to (default: None = use all)
+        solver: Custom solver or list of solvers. If None, uses basic generate() with instructions.
 
-    # Use generic solver with prefill support
-    solver = solver_with_prefill(
-        instruction_template=DEFAULT_INSTRUCTIONS,
-        example_template=None,  # No example template - questions are standalone
-        prefill_config=prefill_config,
-        timeout=timeout,
-    )
+    Returns:
+        Task configured for HLE evaluation
+
+    Example:
+        # Baseline
+        task = hle()
+
+        # With prefill (in experiment file)
+        from evals.solvers import format_prompt, add_prefill, generate_with_continuation
+        from evals.prefill import PrefillConfig
+
+        prefill_config = PrefillConfig(path="path/to/hints.jsonl", fraction=0.8)
+        task = hle(
+            sample_ids=prefill_config.get_available_ids(),
+            solver=[
+                format_prompt(instruction_template=DEFAULT_INSTRUCTIONS),
+                add_prefill(prefill_config),
+                generate_with_continuation(timeout=600)
+            ]
+        )
+    """
+    # Load dataset
+    dataset = get_hle_dataset(split=split, shuffle=True, sample_ids=sample_ids)
+
+    # Use provided solver or create basic one
+    if solver is None:
+        from evals.solvers import format_prompt, generate_with_continuation
+        solver = [
+            format_prompt(instruction_template=DEFAULT_INSTRUCTIONS),
+            generate_with_continuation()
+        ]
 
     return Task(
         dataset=dataset,
