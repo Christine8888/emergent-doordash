@@ -10,6 +10,7 @@ def extract_answer(completion: str) -> str:
     - Answer with letter and parenthesis: Answer: C)
     - Answer with just letter: ANSWER: C (allows newlines between)
     - Fallback: Just letter followed by parenthesis (e.g., "C)")
+    - Final fallback: If completion is just a single letter (optionally with whitespace)
 
     Returns the LAST occurrence found (most recent answer).
     """
@@ -49,6 +50,11 @@ def extract_answer(completion: str) -> str:
     if all_matches:
         all_matches.sort(key=lambda x: x[0])  # Sort by position
         return all_matches[-1][1]  # Return the letter from last match
+
+    # Final fallback: check if the entire completion (stripped) is just a single letter
+    stripped = completion.strip()
+    if len(stripped) == 1 and stripped.isalpha():
+        return stripped.upper()
 
     return ""
 
