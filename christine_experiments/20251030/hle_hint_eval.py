@@ -11,7 +11,7 @@ logger = setup_logging()
 solver_name = "prefill"
 eval_name = "hle"
 BASE_DIR = "/sphinx/u/cye/emergent-doordash/"
-DATA_PATH = f"{BASE_DIR}/christine_experiments/20251030/hle_filtered_long.jsonl"
+DATA_PATH = f"{BASE_DIR}/christine_experiments/data/cot/hle_filtered_long.jsonl"
 
 if __name__ == "__main__":
     parser = create_base_parser(default_log_dir=f"./{eval_name}")
