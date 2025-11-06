@@ -1,10 +1,10 @@
 """HLE evaluation with prefill hints."""
 
-from utils.eval_utils import create_base_parser, setup_vllm_env, check_output_exists, run_eval
+from utils.eval_utils import create_base_parser, setup_vllm_env, check_output_exists, run_eval, get_valid_problem_ids
 from utils.setup import setup_logging
 from environments.hle.hle import hle, DEFAULT_INSTRUCTIONS
 from evals.prefill import PrefillConfig
-from evals.solvers import format_prompt, add_prefill, generate_with_continuation
+from evals.solvers import instructions, prefill, generate
 
 logger = setup_logging()
 
@@ -24,14 +24,16 @@ if __name__ == "__main__":
     filename = f"{args.log_dir}/{eval_name}_{solver_name}_{args.fewshot}shot_{args.hint_fraction}.json"
     check_output_exists(filename)
 
-    prefill_config = PrefillConfig(path=DATA_PATH, fraction=args.hint_fraction)
-    sample_ids = prefill_config.get_available_ids()
+    # Get valid problem IDs (intersection of all data files if multiple exist)
+    sample_ids = get_valid_problem_ids([DATA_PATH])
     logger.info(f"Running on {len(sample_ids)} samples with {args.hint_fraction} hint fraction")
 
+    prefill_config = PrefillConfig(path=DATA_PATH, fraction=args.hint_fraction)
+
     solver = [
-        format_prompt(instruction_template=DEFAULT_INSTRUCTIONS),
-        add_prefill(prefill_config),
-        generate_with_continuation(timeout=args.timeout)
+        instructions(DEFAULT_INSTRUCTIONS),
+        prefill(prefill_config),
+        generate(timeout=args.timeout)
     ]
 
     task = hle(sample_ids=sample_ids, solver=solver)

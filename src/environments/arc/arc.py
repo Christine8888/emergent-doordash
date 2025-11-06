@@ -17,6 +17,11 @@ from environments.arc.utils import construct_arc_prompt, format_grid, extract_an
 
 ARC_DATA_PATH = Path(__file__).parent / "ARC-AGI" / "data"
 
+# Default instructions for ARC
+DEFAULT_INSTRUCTIONS = (
+    "Find the common rule that maps an input grid to an output grid, given the examples below."
+)
+
 
 def get_arc_dataset(split: str = "training", shuffle: bool = True, test_case_seed: int = 42, sample_ids: set[str] | None = None) -> Dataset:
     """Load ARC dataset from local JSON files.
@@ -137,10 +142,13 @@ def arc(
     )
 
     # Use provided solver or create basic one
-    # Note: ARC prompts are already fully constructed, so no instructions needed
+    # Default solver: instructions then generate
     if solver is None:
-        from evals.solvers import generate_with_continuation
-        solver = generate_with_continuation()
+        from evals.solvers import instructions, generate
+        solver = [
+            instructions(DEFAULT_INSTRUCTIONS),
+            generate()
+        ]
 
     return Task(
         dataset=dataset,

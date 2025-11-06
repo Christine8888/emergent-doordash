@@ -16,10 +16,7 @@ def construct_arc_prompt(train_examples: list[dict], test_input: list[list[int]]
     Returns:
         Formatted prompt string
     """
-    prompt_parts = [
-        "Find the common rule that maps an input grid to an output grid, given the examples below.",
-        ""
-    ]
+    prompt_parts = []
 
     for i, example in enumerate(train_examples, 1):
         prompt_parts.append(f"Example {i}:")
