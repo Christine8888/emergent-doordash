@@ -19,7 +19,6 @@ DATA_PATH = f"{BASE_DIR}/christine_experiments/data/solution/{eval_name}.jsonl"
 
 if __name__ == "__main__":
     parser = create_base_parser(default_log_dir=f"./{solver_name}/{eval_name}")
-    parser.add_argument("--hint_fraction", type=float, default=0.8)
     args = parser.parse_args()
 
     setup_vllm_env(args.base_port)

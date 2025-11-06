@@ -18,7 +18,6 @@ DATA_PATH = f"{BASE_DIR}/christine_experiments/20251030/gpqa_diamond_samples_fil
 if __name__ == "__main__":
     # Parse arguments
     parser = create_base_parser(default_log_dir="./gpqa")
-    parser.add_argument("--hint_fraction", type=float, default=0.8)
     args = parser.parse_args()
 
     setup_vllm_env(args.base_port)
