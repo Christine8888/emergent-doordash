@@ -43,8 +43,8 @@ MAX_CONNECTIONS=32
 EPOCHS=10
 
 EVAL_NAME="gpqa"
-SOLVER_NAME="solution" 
-SCRIPT_PATH="$ROOT/christine_experiments/20251105/gpqa_solution.py"
+SOLVER_NAME="solution_intext_mask" 
+SCRIPT_PATH="$ROOT/christine_experiments/20251105/gpqa_solution_intext_mask.py"
 RESULTS_DIR="$ROOT/christine_experiments/20251105/results"
 
 LOG_DIR_TEMPLATE="$RESULTS_DIR/$EVAL_NAME/$SOLVER_NAME/{fewshot}shot/\$MODEL_NAME"

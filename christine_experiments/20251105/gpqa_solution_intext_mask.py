@@ -8,14 +8,14 @@ from utils.eval_utils import create_base_parser, setup_vllm_env, check_output_ex
 from utils.setup import setup_logging
 from environments.gpqa.gpqa import gpqa_diamond, DEFAULT_INSTRUCTIONS
 from evals.prefill import PrefillConfig
-from evals.solvers import instructions, prefill, generate
+from evals.solvers import instructions, intext, generate
 
 logger = setup_logging()
 
-solver_name = "cot"
+solver_name = "solution"
 eval_name = "gpqa"
 BASE_DIR = "/sphinx/u/cye/emergent-doordash/"
-DATA_PATH = f"{BASE_DIR}/christine_experiments/data/cot/gpqa_filtered.jsonl"
+DATA_PATH = f"{BASE_DIR}/christine_experiments/data/solution/{eval_name}.jsonl"
 
 if __name__ == "__main__":
     parser = create_base_parser(default_log_dir=f"./{solver_name}/{eval_name}")
@@ -29,11 +29,11 @@ if __name__ == "__main__":
     sample_ids = get_valid_problem_ids([DATA_PATH], require_hint=True)
     logger.info(f"Running on {len(sample_ids)} samples with {args.hint_fraction} hint fraction")
 
-    prefill_config = PrefillConfig(path=DATA_PATH, fraction=args.hint_fraction)
+    prefill_config = PrefillConfig(path=DATA_PATH, fraction=args.hint_fraction, mode = "masked")
 
     solver = [
         instructions(DEFAULT_INSTRUCTIONS),
-        prefill(prefill_config),
+        intext(prefill_config, prefix="Here is part of a hint that may be helpful to your solution:\n"),
         generate(timeout=args.timeout)
     ]
 
