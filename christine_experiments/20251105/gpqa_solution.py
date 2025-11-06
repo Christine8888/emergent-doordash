@@ -20,12 +20,11 @@ DATA_PATH = f"{BASE_DIR}/christine_experiments/data/solution/{eval_name}.jsonl"
 if __name__ == "__main__":
     parser = create_base_parser(default_log_dir=f"./{solver_name}/{eval_name}")
     parser.add_argument("--hint_fraction", type=float, default=0.8)
-    parser.add_argument("--fewshot", type=int, default=0)
     args = parser.parse_args()
 
     setup_vllm_env(args.base_port)
 
-    filename = f"{args.log_dir}/{eval_name}_{solver_name}_{args.fewshot}shot_{args.hint_fraction}.json"
+    filename = f"{args.log_dir}/{eval_name}_{solver_name}_0shot_{args.hint_fraction}.json"
     check_output_exists(filename)
 
     sample_ids = get_valid_problem_ids([DATA_PATH])
