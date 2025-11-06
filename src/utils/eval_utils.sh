@@ -25,19 +25,35 @@ check_all_outputs_exist() {
     local -n fewshots_ref="$5"
     local -n fractions_ref="$6"
 
+    local existing_files=()
+    local missing_files=()
+
     for fewshot in "${fewshots_ref[@]}"; do
         for hint_fraction in "${fractions_ref[@]}"; do
             # Replace {fewshot} in template
             local log_dir="${LOG_DIR_TEMPLATE//\{fewshot\}/$fewshot}"
             local filename="$log_dir/${EVAL_NAME}_${SOLVER_NAME}_${fewshot}shot_${hint_fraction}.json"
 
-            if [ ! -f "$filename" ]; then
-                return 1  # At least one file missing
+            if [ -f "$filename" ]; then
+                existing_files+=("$filename")
+            else
+                missing_files+=("$filename")
             fi
         done
     done
 
-    return 0  # All files exist
+    # Log what we found
+    if [ ${#existing_files[@]} -eq 0 ]; then
+        echo "  Found 0 existing output files for $MODEL_NAME"
+    else
+        echo "  Found ${#existing_files[@]} existing output file(s) for $MODEL_NAME:"
+        for file in "${existing_files[@]}"; do
+            echo "    ✓ $(basename "$file")"
+        done
+    fi
+
+    # Return 0 if all exist, 1 otherwise
+    [ ${#missing_files[@]} -eq 0 ]
 }
 
 # Cleanup function to stop vLLM

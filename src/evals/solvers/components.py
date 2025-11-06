@@ -38,36 +38,72 @@ def instructions(template: str) -> Solver:
 @solver
 def fewshot(
     config: FewShotConfig,
-    example_template: str = "{question}\n{response}"
+    example_template: str = "{question}\n{response}",
 ) -> Solver:
     """Add few-shot examples to the user prompt.
 
+    **How it works:**
+    This solver APPENDS examples to the end of the current prompt text.
+    Always excludes the current problem from few-shot selection.
+
+    **Execution order matters:**
+    - [instructions(), fewshot()] → [Instructions][Problem][Examples]
+    - [fewshot(), instructions()] → [Examples][Instructions][Problem] ← weird!
+
+    **Typical usage:**
+    Put fewshot() AFTER instructions() to get natural order:
+        solver = [
+            instructions("Solve the problem."),
+            fewshot(FewShotConfig(
+                path="hints.jsonl",
+                num_examples=3,
+                prefix="Here are some examples:",
+                suffix="Now solve:"
+            )),
+            prefill(config),
+            generate()
+        ]
+
     Args:
-        config: FewShotConfig with path and sampling settings
-        example_template: Template for formatting examples (default: "{question}\\n{response}")
+        config: FewShotConfig with path, num_examples, seed, prefix, suffix
+        example_template: Format string with {question} and {response} (default: "{question}\\n{response}")
 
     Returns:
-        Solver that adds few-shot examples
+        Solver that appends few-shot examples
+
+    Example final prompt structure:
+        [Instructions from instructions()]
+
+        [Current problem]
+
+        [config.prefix if provided]
+
+        [Example 1]
+        [Example 2]
+
+        [config.suffix if provided]
     """
-    # Load fewshot data
+    from evals.fewshot import format_fewshot_examples
+
+    # Load fewshot data at initialization time
     fewshot_data = config.get_data()
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        # Get current task text
-        current_task = state.user_prompt.text
-
-        # Create fewshot message
-        user_content = create_fewshot_message(
+        # Format few-shot examples
+        examples_text = format_fewshot_examples(
             fewshot_data=fewshot_data,
-            config=config,
-            instruction_template="",  # No instructions here, use instructions() solver
+            n_examples=config.num_examples,
             example_template=example_template,
-            current_task=current_task,
-            current_id=state.sample_id,
-            seed=state.sample_id,
+            current_id=state.sample_id if config.exclude_current else None,
+            seed=state.sample_id,  # Use sample_id for per-sample determinism
+            prefix=config.prefix,
+            suffix=config.suffix,
         )
 
-        state.user_prompt.text = user_content
+        # APPEND examples to current prompt (not prepend!)
+        if examples_text:
+            state.user_prompt.text = state.user_prompt.text + "\n\n" + examples_text
+
         return state
 
     return solve
