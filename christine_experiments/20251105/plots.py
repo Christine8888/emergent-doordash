@@ -1,5 +1,9 @@
 # %%
 import matplotlib.pyplot as plt
+import os
+import sys
+# append parent directory to sys.path
+sys.path.append("/Users/christineye/emergent-doordash/christine_experiments/20251105")
 from plotting import (
     load_all_results,
     plot_results,
@@ -39,7 +43,7 @@ MODELS = [
     "Qwen2.5-32B-Instruct",
 ]
 
-HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]#, 1.0]
 
 # =========================================
 
@@ -75,7 +79,7 @@ fig, ax = plot_results_rescaled(
     results=results,
     models=MODELS,
     hints=HINT_FRACTIONS,
-    title="GPQA: Error Rate vs Inverse Hint",
+    title="GPQA, solution-based hints",
     fit_scaling=False
 )
 plt.show()

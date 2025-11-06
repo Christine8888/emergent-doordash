@@ -61,15 +61,16 @@ def get_prefill_fraction(reasoning: str, fraction: float = 0.5, stop_string: str
 
 
 def get_masked_text(text: str, fraction: float = 0.5, mask_token: str = "[MASK]") -> str:
-    """Replace a fraction of words in text with mask tokens.
+    """Mask words in text, showing only a fraction of the original words.
 
     Args:
         text: The text to mask
-        fraction: Fraction of words to replace with masks (must be > 0.0 and <= 1.0)
+        fraction: Fraction of words to SHOW (must be > 0.0 and <= 1.0)
+                 fraction=1.0 shows all (masks 0%), fraction=0.0 shows none (masks 100%)
         mask_token: Token to use for masking
 
     Returns:
-        Text with fraction of words replaced by mask tokens
+        Text with (1-fraction) of words replaced by mask tokens
 
     Raises:
         ValueError: If text is empty or fraction is invalid
@@ -83,10 +84,12 @@ def get_masked_text(text: str, fraction: float = 0.5, mask_token: str = "[MASK]"
     tokens = re.split(r'(\s+)', text)
     # Get indices of all non-whitespace tokens (actual words)
     word_indices = [i for i, t in enumerate(tokens) if t.strip()]
-    num_words_to_mask = int(len(word_indices) * fraction)
+    # fraction represents how much to SHOW, so we mask (1 - fraction)
+    num_words_to_mask = int(len(word_indices) * (1 - fraction))
 
     if num_words_to_mask == 0:
-        raise ValueError(f"Fraction {fraction} results in 0 words to mask from {len(word_indices)} total words")
+        # fraction=1.0 → show all, mask nothing
+        return text
 
     # Randomly select which word indices to mask
     indices_to_mask = set(random.sample(word_indices, num_words_to_mask))
@@ -114,9 +117,9 @@ class PrefillConfig:
 
     Args:
         path: Path to JSONL file containing prefill data
-        fraction: Fraction of words to include from hint (0.0 to 1.0)
-        mode: How to apply fraction - "sequential" cuts off after fraction*words,
-              "masked" replaces fraction*words with mask tokens
+        fraction: Fraction of words to show from hint (0.0 to 1.0)
+        mode: How to apply fraction - "sequential" shows first fraction*words,
+              "masked" shows fraction*words at random positions (masks the rest)
         mask_token: Token to use for masking in masked mode
     """
 

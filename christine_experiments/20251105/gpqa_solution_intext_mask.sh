@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=gpqa_soln
-#SBATCH --output=gpqa_soln.out
-#SBATCH --error=gpqa_soln.err
+#SBATCH --job-name=gpqa_soln_intext_mask
+#SBATCH --output=gpqa_soln_intext_mask.out
+#SBATCH --error=gpqa_soln_intext_mask.err
 #SBATCH --time=20:00:00
 #SBATCH --partition=sphinx
 #SBATCH --gpus=4
