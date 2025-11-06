@@ -135,12 +135,19 @@ async def sample_until_correct(
 
                 if correct:
                     # Create Example with hint from response_to_hint function
+                    hint = response_to_hint(response)
+
+                    # Only save if hint is non-empty
+                    if not hint or not hint.strip():
+                        logger.warning(f"  {sample_id}: Answer correct but hint extraction failed, retrying")
+                        continue
+
                     example = Example(
                         id=sample_id,
                         question=question,
                         target=target,
                         response=response,
-                        hint=response_to_hint(response),
+                        hint=hint,
                         prompt=prompt,
                     )
                     # Add extra fields to dict
