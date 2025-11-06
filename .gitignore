@@ -1,5 +1,7 @@
 # Christine's stuff
 *.env
+*.slurm
+*.tok
 CLAUDE.md
 *.eval
 .claude/
