@@ -32,7 +32,13 @@ check_all_outputs_exist() {
         for hint_fraction in "${fractions_ref[@]}"; do
             # Replace {fewshot} in template
             local log_dir="${LOG_DIR_TEMPLATE//\{fewshot\}/$fewshot}"
-            local filename="$log_dir/${EVAL_NAME}_${SOLVER_NAME}_${fewshot}shot_${hint_fraction}.json"
+
+            # Format filename based on whether solver_name is empty
+            if [ -z "$SOLVER_NAME" ]; then
+                local filename="$log_dir/${EVAL_NAME}_${fewshot}shot_${hint_fraction}.json"
+            else
+                local filename="$log_dir/${EVAL_NAME}_${SOLVER_NAME}_${fewshot}shot_${hint_fraction}.json"
+            fi
 
             if [ -f "$filename" ]; then
                 existing_files+=("$filename")

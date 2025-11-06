@@ -25,7 +25,7 @@ MAX_CONNECTIONS=32
 EPOCHS=5
 
 EVAL_NAME="hle"
-SOLVER_NAME=""
+SOLVER_NAME="cot"
 SCRIPT_PATH="$ROOT/christine_experiments/20251030/hle_hint_eval.py"
 RESULTS_DIR="$ROOT/christine_experiments/20251030/results"
 
