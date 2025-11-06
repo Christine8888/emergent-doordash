@@ -59,18 +59,17 @@ def extract_answer(completion: str) -> str:
     return ""
 
 
-async def grade_hle_answer(response: str, target: str) -> bool:
+async def grade_hle_answer(extracted_letter: str, target: str) -> bool:
     """Grade HLE multiple choice answer.
 
     Args:
-        response: Model's full response
+        extracted_letter: Extracted answer letter (single letter or empty string)
         target: Target answer (single letter)
 
     Returns:
         True if extracted letter matches target (case-insensitive)
     """
-    extracted = extract_answer(response)
-    if not extracted:
+    if not extracted_letter:
         return False
 
-    return extracted.upper() == target.upper()
+    return extracted_letter.upper() == target.upper()

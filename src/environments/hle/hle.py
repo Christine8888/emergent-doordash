@@ -102,21 +102,26 @@ def record_to_sample_prefill(record: dict[str, Any]) -> Sample:
 def hle_scorer() -> Scorer:
     """Score HLE multiple choice answers using letter extraction and comparison."""
     async def score(state: TaskState, target: Target) -> Score:
+        # Import extract_answer to get the extracted letter for the answer field
+        from environments.hle.utils import extract_answer
+
+        extracted_letter = extract_answer(state.output.completion)
+
         correct = await grade_hle_answer(
-            response=state.output.completion,
+            extracted_letter=extracted_letter,
             target=target.text,
         )
 
         if correct:
             score = Score(
                 value=CORRECT,
-                answer=state.output.completion,
+                answer=extracted_letter,
                 explanation="Correct answer",
             )
         else:
             score = Score(
                 value=INCORRECT,
-                answer=state.output.completion,
+                answer=extracted_letter,
                 explanation="Incorrect answer",
             )
 
