@@ -1,9 +1,21 @@
 #!/bin/bash
+#SBATCH --job-name=gpqa_soln
+#SBATCH --output=gpqa_soln.out
+#SBATCH --error=gpqa_soln.err
+#SBATCH --time=20:00:00
+#SBATCH --partition=gpu
+#SBATCH --gpus=4
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64GB
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
 
 ROOT="$SPHINX/emergent-doordash"
 export HF_HOME="/scr/biggest/cye/.cache/huggingface"
 export HOME="/scr-ssd/cye"
+
 source "$ROOT/src/utils/eval_utils.sh"
+
 trap cleanup INT TERM
 
 MODELS=(
@@ -29,7 +41,7 @@ SOLVER_NAME="solution"
 SCRIPT_PATH="$ROOT/christine_experiments/20251105/gpqa_solution.py"
 RESULTS_DIR="$ROOT/christine_experiments/20251105/results"
 
-LOG_DIR_TEMPLATE="$RESULTS_DIR/$EVAL_NAME/$SOLVER_NAME/\$MODEL_NAME"
+LOG_DIR_TEMPLATE="$RESULTS_DIR/$EVAL_NAME/$SOLVER_NAME/{fewshot}shot/\$MODEL_NAME"
 
 run_model_sweep \
     "$SCRIPT_PATH" \
