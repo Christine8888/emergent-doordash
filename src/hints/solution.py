@@ -12,7 +12,7 @@ def extract_solution(x: str) -> str:
 def extract_answer(response: str) -> str:
     """Extract answer from response using <answer> </answer> tags, to verify the answer is correct."""
     match = re.search(r"<answer>(.*?)</answer>", response, re.DOTALL)
-    return match.group(1).strip() if match else ""
+    return match.group(1).strip() if match else response
 
 def format_solution_prompt(sample: Sample) -> str:
     prompt = "Solve the following problem by thinking carefully step by step.\n\n"
