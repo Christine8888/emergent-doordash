@@ -1,4 +1,20 @@
 #!/bin/bash
+#SBATCH --job-name=arc_cot
+#SBATCH --output=arc_cot.out
+#SBATCH --error=arc_cot.err
+#SBATCH --time=24:00:00
+#SBATCH --partition=sphinx
+#SBATCH --gpus=4
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64GB
+#SBATCH --nodes=1
+#SBATCH --account=nlp
+#SBATCH --ntasks-per-node=1
+
+export SPHINX=/sphinx/u/cye
+source /scr-ssd/cye/.venv/bin/activate
+export HF_TOKEN=$(cat $SPHINX/emergent-doordash/hf.tok)
+cd $SPHINX/emergent-doordash/christine_experiments/20251030
 
 ROOT="$SPHINX/emergent-doordash"
 export HF_HOME="/scr/biggest/cye/.cache/huggingface"
