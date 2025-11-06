@@ -12,7 +12,7 @@ from evals.solvers import instructions, intext, generate
 
 logger = setup_logging()
 
-solver_name = "solution"
+solver_name = "solution_intext"
 eval_name = "gpqa"
 BASE_DIR = "/sphinx/u/cye/emergent-doordash/"
 DATA_PATH = f"{BASE_DIR}/christine_experiments/data/solution/{eval_name}.jsonl"
