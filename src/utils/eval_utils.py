@@ -13,6 +13,7 @@ from inspect_ai import eval
 from inspect_ai.dataset import Sample
 from utils.setup import setup_env, setup_logging
 from utils.inspect_utils import extract_scores_from_log, compute_bootstrap_over_epochs, compute_pass_at_k
+from evals.example import Example
 
 setup_env()
 logger = setup_logging()
@@ -123,3 +124,62 @@ def run_eval(
         json.dump(results, f)
 
     return log[0]
+
+
+def get_valid_problem_ids(jsonl_paths: list[str]) -> set[str] | None:
+    """Get intersection of problem IDs across multiple JSONL files with Example objects.
+
+    Args:
+        jsonl_paths: List of paths to JSONL files containing Example objects
+
+    Returns:
+        Set of IDs that appear in ALL files, or None if any file doesn't exist
+        or is empty
+
+    Example:
+        >>> ids = get_valid_problem_ids([
+        ...     "data/cot/gpqa.jsonl",
+        ...     "data/solution/gpqa.jsonl"
+        ... ])
+        >>> print(f"Found {len(ids)} common problems")
+    """
+    if not jsonl_paths:
+        return None
+
+    id_sets = []
+
+    for path in jsonl_paths:
+        if not os.path.exists(path):
+            logger.warning(f"File not found: {path}")
+            return None
+
+        ids = set()
+        try:
+            with open(path) as f:
+                for line_num, line in enumerate(f, 1):
+                    try:
+                        data = json.loads(line)
+                        example = Example.from_dict(data)
+                        ids.add(example.id)
+                    except (json.JSONDecodeError, KeyError, ValueError) as e:
+                        logger.warning(f"{path}:{line_num}: Skipping invalid line - {e}")
+
+            if not ids:
+                logger.warning(f"No valid IDs found in {path}")
+                return None
+
+            id_sets.append(ids)
+            logger.info(f"Loaded {len(ids)} IDs from {path}")
+
+        except Exception as e:
+            logger.error(f"Error reading {path}: {e}")
+            return None
+
+    # Compute intersection of all ID sets
+    valid_ids = id_sets[0]
+    for id_set in id_sets[1:]:
+        valid_ids &= id_set
+
+    logger.info(f"Found {len(valid_ids)} problems common to all {len(jsonl_paths)} files")
+
+    return valid_ids if valid_ids else None

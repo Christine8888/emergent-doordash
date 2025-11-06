@@ -55,7 +55,7 @@ def get_hle_dataset(split: str = "test", shuffle: bool = True, sample_ids: set[s
     # Filter to specific sample IDs if provided
     if sample_ids is not None:
         dataset = dataset.filter(
-            name=f"{dataset.name}_filtered",
+            name=f"{dataset.name}",
             predicate=lambda sample: sample.id in sample_ids
         )
 
@@ -158,16 +158,16 @@ def hle(
         task = hle()
 
         # With prefill (in experiment file)
-        from evals.solvers import format_prompt, add_prefill, generate_with_continuation
+        from evals.solvers import instructions, prefill, generate
         from evals.prefill import PrefillConfig
 
         prefill_config = PrefillConfig(path="path/to/hints.jsonl", fraction=0.8)
         task = hle(
             sample_ids=prefill_config.get_available_ids(),
             solver=[
-                format_prompt(instruction_template=DEFAULT_INSTRUCTIONS),
-                add_prefill(prefill_config),
-                generate_with_continuation(timeout=600)
+                instructions(DEFAULT_INSTRUCTIONS),
+                prefill(prefill_config),
+                generate(timeout=600)
             ]
         )
     """
@@ -176,10 +176,10 @@ def hle(
 
     # Use provided solver or create basic one
     if solver is None:
-        from evals.solvers import format_prompt, generate_with_continuation
+        from evals.solvers import instructions, generate
         solver = [
-            format_prompt(instruction_template=DEFAULT_INSTRUCTIONS),
-            generate_with_continuation()
+            instructions(DEFAULT_INSTRUCTIONS),
+            generate()
         ]
 
     return Task(

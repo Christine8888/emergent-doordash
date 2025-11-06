@@ -36,7 +36,7 @@ def get_aime_dataset(split: str = "train", shuffle: bool = True, sample_ids: set
     # Filter to specific sample IDs if provided
     if sample_ids is not None:
         dataset = dataset.filter(
-            name=f"{dataset.name}_filtered",
+            name=f"{dataset.name}",
             predicate=lambda sample: sample.id in sample_ids
         )
 
@@ -105,10 +105,10 @@ def aime(
 
     # Use provided solver or create basic one
     if solver is None:
-        from evals.solvers import format_prompt, generate_with_continuation
+        from evals.solvers import instructions, generate
         solver = [
-            format_prompt(instruction_template=DEFAULT_INSTRUCTIONS),
-            generate_with_continuation()
+            instructions(DEFAULT_INSTRUCTIONS),
+            generate()
         ]
 
     return Task(
