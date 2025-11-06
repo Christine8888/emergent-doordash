@@ -31,10 +31,7 @@ def get_prefill_fraction(reasoning: str, fraction: float = 0.5, stop_string: str
     if fraction <= 0.0:
         raise ValueError(f"Fraction must be > 0.0, got {fraction}")
 
-    # Split on whitespace while capturing it
     tokens = re.split(r'(\s+)', reasoning)
-
-    # Filter to just words (non-whitespace tokens)
     words = [t for t in tokens]
     num_words = int(len(words) * fraction)
 
@@ -50,6 +47,7 @@ def get_prefill_fraction(reasoning: str, fraction: float = 0.5, stop_string: str
         result.append(token)
 
         # add stop string to result but break afterwards
+        # this is so we use hint fraction = 1.0 and still stop before the actual answer
         if token == stop_string:
             break
 
