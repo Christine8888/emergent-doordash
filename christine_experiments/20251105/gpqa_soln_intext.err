@@ -1,0 +1,73 @@
+[1;36m(APIServer pid=1253261)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:   0% Completed | 0/17 [00:00<?, ?it/s]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:   6% Completed | 1/17 [00:00<00:05,  2.86it/s]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  12% Completed | 2/17 [00:00<00:06,  2.26it/s]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  18% Completed | 3/17 [00:01<00:06,  2.13it/s]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  24% Completed | 4/17 [00:02<00:07,  1.73it/s]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  29% Completed | 5/17 [00:03<00:10,  1.19it/s]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  35% Completed | 6/17 [00:03<00:07,  1.40it/s]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  41% Completed | 7/17 [00:05<00:10,  1.06s/it]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  47% Completed | 8/17 [00:07<00:12,  1.35s/it]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  53% Completed | 9/17 [00:08<00:10,  1.29s/it]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  59% Completed | 10/17 [00:09<00:07,  1.13s/it]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  65% Completed | 11/17 [00:11<00:08,  1.37s/it]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  71% Completed | 12/17 [00:13<00:07,  1.55s/it]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  76% Completed | 13/17 [00:14<00:05,  1.43s/it]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  82% Completed | 14/17 [00:15<00:03,  1.23s/it]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  88% Completed | 15/17 [00:17<00:02,  1.40s/it]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards:  94% Completed | 16/17 [00:17<00:01,  1.22s/it]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards: 100% Completed | 17/17 [00:19<00:00,  1.22s/it]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Loading safetensors checkpoint shards: 100% Completed | 17/17 [00:19<00:00,  1.13s/it]
+[1;36m(Worker_TP0 pid=1257725)[0;0m 
+[1;36m(Worker_TP0 pid=1257725)[0;0m Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  14%|█▍        | 1/7 [00:00<00:00,  7.35it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  29%|██▊       | 2/7 [00:00<00:00,  8.45it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  43%|████▎     | 3/7 [00:00<00:00,  7.55it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  57%|█████▋    | 4/7 [00:00<00:00,  6.99it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  71%|███████▏  | 5/7 [00:00<00:00,  7.00it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  86%|████████▌ | 6/7 [00:00<00:00,  6.91it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:01<00:00,  6.47it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:01<00:00,  6.89it/s]
+[1;36m(Worker_TP0 pid=1257725)[0;0m Capturing CUDA graphs (decode, FULL):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):  20%|██        | 1/5 [00:00<00:00,  8.26it/s]Capturing CUDA graphs (decode, FULL):  40%|████      | 2/5 [00:00<00:00,  8.83it/s]Capturing CUDA graphs (decode, FULL):  80%|████████  | 4/5 [00:00<00:00, 10.13it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 10.04it/s]
+[1;36m(APIServer pid=1253261)[0;0m INFO:     Started server process [1253261]
+[1;36m(APIServer pid=1253261)[0;0m INFO:     Waiting for application startup.
+[1;36m(APIServer pid=1253261)[0;0m INFO:     Application startup complete.
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 1.0 hint fraction
+Loaded 183 hints with fraction=1.0, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.0 hint fraction
+Loaded 183 hints with fraction=0.0, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.9 hint fraction
+Loaded 183 hints with fraction=0.9, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.8 hint fraction
+Loaded 183 hints with fraction=0.8, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.7 hint fraction
+Loaded 183 hints with fraction=0.7, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.6 hint fraction
+Loaded 183 hints with fraction=0.6, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.5 hint fraction
+Loaded 183 hints with fraction=0.5, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.4 hint fraction
+Loaded 183 hints with fraction=0.4, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.3 hint fraction
+Loaded 183 hints with fraction=0.3, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.2 hint fraction
+Loaded 183 hints with fraction=0.2, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.1 hint fraction
+Loaded 183 hints with fraction=0.1, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+[1;36m(APIServer pid=1253261)[0;0m INFO:     Shutting down
+[1;36m(APIServer pid=1253261)[0;0m INFO:     Waiting for application shutdown.
+[1;36m(APIServer pid=1253261)[0;0m INFO:     Application shutdown complete.
