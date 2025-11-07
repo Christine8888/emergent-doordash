@@ -60,7 +60,7 @@ def get_prefill_fraction(reasoning: str, fraction: float = 0.5, stop_string: str
     return prefill_text
 
 
-def get_masked_text(text: str, fraction: float = 0.5, mask_token: str = "[MASK]") -> str:
+def get_masked_text(text: str, fraction: float = 0.5, mask_token: str = "[MASK]", stop_string: str = "ANSWER:") -> str:
     """Mask words in text, showing only a fraction of the original words.
 
     Args:
@@ -68,9 +68,10 @@ def get_masked_text(text: str, fraction: float = 0.5, mask_token: str = "[MASK]"
         fraction: Fraction of words to SHOW (must be > 0.0 and <= 1.0)
                  fraction=1.0 shows all (masks 0%), fraction=0.0 shows none (masks 100%)
         mask_token: Token to use for masking
+        stop_string: String to stop before if encountered (exclusive)
 
     Returns:
-        Text with (1-fraction) of words replaced by mask tokens
+        Text with (1-fraction) of words replaced by mask tokens, stopping before stop_string
 
     Raises:
         ValueError: If text is empty or fraction is invalid
@@ -80,6 +81,10 @@ def get_masked_text(text: str, fraction: float = 0.5, mask_token: str = "[MASK]"
 
     if fraction <= 0.0 or fraction > 1.0:
         raise ValueError(f"Fraction must be > 0.0 and <= 1.0, got {fraction}")
+
+    # Stop before stop_string if present (exclusive)
+    if stop_string in text:
+        text = text[:text.index(stop_string)].strip()
 
     tokens = re.split(r'(\s+)', text)
     # Get indices of all non-whitespace tokens (actual words)
@@ -121,12 +126,14 @@ class PrefillConfig:
         mode: How to apply fraction - "sequential" shows first fraction*words,
               "masked" shows fraction*words at random positions (masks the rest)
         mask_token: Token to use for masking in masked mode
+        stop_string: String to stop at - inclusive for sequential, exclusive for masked
     """
 
     path: str
     fraction: float = 0.5
     mode: str = "sequential"
     mask_token: str = "[MASK]"
+    stop_string: str = "ANSWER:"
 
     def __post_init__(self):
         """Load prefill data immediately after initialization."""
@@ -182,9 +189,9 @@ def load_prefill_data(config: PrefillConfig) -> dict[str, str]:
                     # Only compute fraction if > 0.0, otherwise store full hint for validation
                     if config.fraction > 0.0:
                         if config.mode == "sequential":
-                            prefill_text = get_prefill_fraction(example.hint, fraction=config.fraction)
+                            prefill_text = get_prefill_fraction(example.hint, fraction=config.fraction, stop_string=config.stop_string)
                         elif config.mode == "masked":
-                            prefill_text = get_masked_text(example.hint, fraction=config.fraction, mask_token=config.mask_token)
+                            prefill_text = get_masked_text(example.hint, fraction=config.fraction, mask_token=config.mask_token, stop_string=config.stop_string)
                         else:
                             raise ValueError(f"Invalid mode: {config.mode}")
                     else:
