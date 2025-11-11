@@ -21,21 +21,18 @@ class SavableBaseModel(BaseModel):
 
 
 class ModelAnswer(SavableBaseModel):
+    model: str
     cot: str
     extracted_answer: str
     is_correct: bool
     prompt: Optional[str] = None
 
-class COT_Response(SavableBaseModel):
-    model: str
-    cot: str
-
 class Datum(SavableBaseModel):
     id: str
     ground_truth_answer: str
     question: str
-    ground_truth_cot_responses: Optional[List[COT_Response]] = None # list of responses from different models
-    sampled_answers: Optional[List[ModelAnswer]] = None
+    ground_truth_cot_responses: List[ModelAnswer] = [] # list of responses from different models
+    sampled_answers: List[ModelAnswer] = []
 
 
 
