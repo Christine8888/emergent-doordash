@@ -23,6 +23,7 @@ core
 # Suze's stuff
 *.jsonl
 wandb/*
+*.json
 
 # Christine stuff
 !christine_experiments/**/*.jsonl
