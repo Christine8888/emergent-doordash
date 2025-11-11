@@ -11,6 +11,8 @@ import os
 from src.data.datasets import AIME2025, Dataset, ModelAnswer
 from src.models.query_api import query_model_api
 
+NUM_SAMPLES = 1
+
 
 def set_seed(seed: int):
     random.seed(seed)
@@ -26,10 +28,10 @@ def main():
     save_path = os.path.join(save_dir, "aime_cot.json")
 
     # query a model with one specific question
-    models = ["o3-2025-04-16", "gpt-5-2025-08-07", "claude-opus-4-1", "claude-sonnet-4-5"]
+    models = ["gpt-5-nano-2025-08-07", "o3-2025-04-16", "gpt-5-2025-08-07", "claude-opus-4-1-20250805", "claude-sonnet-4-5-20250929"]
     # models = ["gpt-5-nano-2025-08-07"] # for testing; low cost
 
-    cot_samples = random.sample(cot_dataset.data, 4)
+    cot_samples = random.sample(cot_dataset.data, NUM_SAMPLES)
     for cot_sample in cot_samples:
 
         for model in models:

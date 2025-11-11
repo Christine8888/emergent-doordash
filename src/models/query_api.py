@@ -27,6 +27,8 @@ def export():
 # Load up environment variables
 export()
 
+DEBUG_QUERIES = True  # Set to False to disable printing outgoing request payloads
+
 GEMINI_CLIENT = genai.Client(vertexai=True, project="hai-gcp-new-models", location="us-central1")
 
 OPENAI_CLIENT = openai.OpenAI()
@@ -54,14 +56,16 @@ OPENAI_MODELS: List[str] = [
 ANTHROPIC_MODELS: List[str] = [
     "claude-3-5-sonnet-latest",
     "claude-3-opus-latest",
-    "claude-opus-4-1",
-    "claude-sonnet-4-5",
+    "claude-sonnet-4-5-20250929",
+    "claude-opus-4-1-20250805",
 ]
 
 input_token_costs = {
     "gpt-4.1-mini-2025-04-14": 0.4 / 1_000_000,
     "claude-3-5-sonnet-latest": 3.0 / 1_000_000,
     "claude-3-opus-latest": 15.0 / 1_000_000,
+    "claude-sonnet-4-5-20250929": 3 / 1_000_000,
+    "claude-opus-4-1-20250805": 15 / 1_000_000,
     "gpt-3.5-turbo-0125": 0.5 / 1_000_000,
     "gpt-4-0613": 30 / 1_000_000,
     "gpt-4o-2024-05-13": 5 / 1_000_000,
@@ -78,6 +82,8 @@ output_token_costs = {
     "gpt-4.1-mini-2025-04-14": 0.1 / 1_000_000,
     "claude-3-5-sonnet-latest": 15.0 / 1_000_000,
     "claude-3-opus-latest": 75.0 / 1_000_000,
+    "claude-sonnet-4-5-20250929": 15.0 / 1_000_000,
+    "claude-opus-4-1-20250805": 75.0 / 1_000_000,
     "gpt-3.5-turbo-0125": 1.5 / 1_000_000,
     "gpt-4-0613": 60 / 1_000_000,
     "gpt-4o-2024-05-13": 15 / 1_000_000,
@@ -140,10 +146,11 @@ def parse_openai_response(response: openai.ChatCompletion, model: str) -> QueryR
 
 
 def parse_anthropic_response(response: anthropic.types.Message, model: str) -> QueryResult:
-    assert len(response.content) == 1
-
-    content_block = response.content[0]
-    response_text = content_block.text if hasattr(content_block, "text") else ""
+    texts: List[str] = []
+    for block in response.content:
+        if hasattr(block, "text") and isinstance(block.text, str):
+            texts.append(block.text)
+    response_text = "".join(texts)
 
     input_token_count = response.usage.input_tokens
     output_token_count = response.usage.output_tokens
@@ -170,22 +177,38 @@ def single_query_google(prompt: str, model: str) -> QueryResult:
 
 
 def single_query_openai(prompt: str, model: str) -> QueryResult:
-    batch_response = OPENAI_CLIENT.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    messages = [{"role": "user", "content": prompt}]
+    if DEBUG_QUERIES:
+        print(f"[OPENAI] model={model}")
+        print(f"[OPENAI] messages={messages}")
+    start_time = time.time()
+    batch_response = OPENAI_CLIENT.chat.completions.create(model=model, messages=messages)
+    elapsed_ms = (time.time() - start_time) * 1000.0
+    if DEBUG_QUERIES:
+        print(f"[OPENAI] latency_ms={elapsed_ms:.0f}")
 
     return parse_openai_response(batch_response, model)
 
 
 def single_query_anthropic(prompt: str, model: str) -> QueryResult:
-    response = ANTHROPIC_CLIENT.messages.create(
+    messages = [{"role": "user", "content": prompt}]
+    if DEBUG_QUERIES:
+        print(f"[ANTHROPIC] model={model}")
+        print(f"[ANTHROPIC] messages={messages}")
+        print(f"[ANTHROPIC] max_tokens=16000 (streaming)")
+    start_time = time.time()
+    with ANTHROPIC_CLIENT.messages.stream(
         model=model,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
         max_tokens=16000,
-    )
-
-    return parse_anthropic_response(response, model)
+    ) as stream:
+        for _ in stream.text_stream:
+            pass
+        final_message = stream.get_final_message()
+    elapsed_ms = (time.time() - start_time) * 1000.0
+    if DEBUG_QUERIES:
+        print(f"[ANTHROPIC] latency_ms={elapsed_ms:.0f}")
+    return parse_anthropic_response(final_message, model)
 
 
 def query_model_api(prompt: str, model: str) -> QueryResult:
