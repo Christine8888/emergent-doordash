@@ -1,131 +1,437 @@
-[1;36m(APIServer pid=3096200)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m Process EngineCore_DP0:
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m Traceback (most recent call last):
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/sailhome/cye/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/multiprocessing/process.py", line 314, in _bootstrap
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     self.run()
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/sailhome/cye/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/multiprocessing/process.py", line 108, in run
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     self._target(*self._args, **self._kwargs)
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/core.py", line 712, in run_engine_core
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     raise e
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/core.py", line 695, in run_engine_core
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     engine_core = DPEngineCoreProc(*args, **kwargs)
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/core.py", line 965, in __init__
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     super().__init__(vllm_config, local_client, handshake_address,
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/core.py", line 498, in __init__
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     super().__init__(vllm_config, executor_class, log_stats,
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/core.py", line 83, in __init__
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     self.model_executor = executor_class(vllm_config)
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/executor/executor_base.py", line 54, in __init__
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     self._init_executor()
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/executor/uniproc_executor.py", line 53, in _init_executor
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     self.collective_rpc("init_worker", args=([kwargs], ))
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/executor/uniproc_executor.py", line 83, in collective_rpc
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     return [run_method(self.driver_worker, method, args, kwargs)]
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/utils/__init__.py", line 3122, in run_method
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     return func(*args, **kwargs)
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m            ^^^^^^^^^^^^^^^^^^^^^
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/worker/worker_base.py", line 212, in init_worker
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     worker_class = resolve_obj_by_qualname(
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m                    ^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/utils/__init__.py", line 2680, in resolve_obj_by_qualname
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     module = importlib.import_module(module_name)
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/sailhome/cye/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/importlib/__init__.py", line 126, in import_module
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     return _bootstrap._gcd_import(name[level:], package, level)
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "<frozen importlib._bootstrap>", line 1204, in _gcd_import
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "<frozen importlib._bootstrap>", line 1176, in _find_and_load
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "<frozen importlib._bootstrap>", line 1147, in _find_and_load_unlocked
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "<frozen importlib._bootstrap>", line 690, in _load_unlocked
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "<frozen importlib._bootstrap_external>", line 940, in exec_module
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/worker/gpu_worker.py", line 34, in <module>
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     from vllm.v1.worker.gpu_model_runner import GPUModelRunner
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/worker/gpu_model_runner.py", line 69, in <module>
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     from vllm.v1.attention.backends.flash_attn import AttentionMetadata
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/attention/backends/flash_attn.py", line 154, in <module>
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     class FlashAttentionMetadataBuilder(
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/attention/backends/flash_attn.py", line 175, in FlashAttentionMetadataBuilder
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     if get_flash_attn_version() == 3 else AttentionCGSupport.UNIFORM_BATCH
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m        ^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/attention/utils/fa_utils.py", line 56, in get_flash_attn_version
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     if not is_fa_version_supported(fa_version):
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/vllm_flash_attn/flash_attn_interface.py", line 55, in is_fa_version_supported
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     return _is_fa2_supported(device)[0]
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m            ^^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/vllm_flash_attn/flash_attn_interface.py", line 35, in _is_fa2_supported
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     if torch.cuda.get_device_capability(device)[0] < 8:
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/cuda/__init__.py", line 600, in get_device_capability
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     prop = get_device_properties(device)
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/cuda/__init__.py", line 616, in get_device_properties
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     _lazy_init()  # will define _get_device_properties
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     ^^^^^^^^^^^^
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/cuda/__init__.py", line 412, in _lazy_init
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m     torch._C._cuda_init()
-[1;36m(EngineCore_DP0 pid=3097002)[0;0m RuntimeError: CUDA driver initialization failed, you might not have a CUDA gpu.
-[1;36m(APIServer pid=3096200)[0;0m Traceback (most recent call last):
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/bin/vllm", line 10, in <module>
-[1;36m(APIServer pid=3096200)[0;0m     sys.exit(main())
-[1;36m(APIServer pid=3096200)[0;0m              ^^^^^^
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/entrypoints/cli/main.py", line 54, in main
-[1;36m(APIServer pid=3096200)[0;0m     args.dispatch_function(args)
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/entrypoints/cli/serve.py", line 57, in cmd
-[1;36m(APIServer pid=3096200)[0;0m     uvloop.run(run_server(args))
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/uvloop/__init__.py", line 105, in run
-[1;36m(APIServer pid=3096200)[0;0m     return runner.run(wrapper())
-[1;36m(APIServer pid=3096200)[0;0m            ^^^^^^^^^^^^^^^^^^^^^
-[1;36m(APIServer pid=3096200)[0;0m   File "/sailhome/cye/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/asyncio/runners.py", line 118, in run
-[1;36m(APIServer pid=3096200)[0;0m     return self._loop.run_until_complete(task)
-[1;36m(APIServer pid=3096200)[0;0m            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(APIServer pid=3096200)[0;0m   File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/uvloop/__init__.py", line 61, in wrapper
-[1;36m(APIServer pid=3096200)[0;0m     return await main
-[1;36m(APIServer pid=3096200)[0;0m            ^^^^^^^^^^
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py", line 1884, in run_server
-[1;36m(APIServer pid=3096200)[0;0m     await run_server_worker(listen_address, sock, args, **uvicorn_kwargs)
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py", line 1902, in run_server_worker
-[1;36m(APIServer pid=3096200)[0;0m     async with build_async_engine_client(
-[1;36m(APIServer pid=3096200)[0;0m   File "/sailhome/cye/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/contextlib.py", line 210, in __aenter__
-[1;36m(APIServer pid=3096200)[0;0m     return await anext(self.gen)
-[1;36m(APIServer pid=3096200)[0;0m            ^^^^^^^^^^^^^^^^^^^^^
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py", line 180, in build_async_engine_client
-[1;36m(APIServer pid=3096200)[0;0m     async with build_async_engine_client_from_engine_args(
-[1;36m(APIServer pid=3096200)[0;0m   File "/sailhome/cye/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/contextlib.py", line 210, in __aenter__
-[1;36m(APIServer pid=3096200)[0;0m     return await anext(self.gen)
-[1;36m(APIServer pid=3096200)[0;0m            ^^^^^^^^^^^^^^^^^^^^^
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py", line 225, in build_async_engine_client_from_engine_args
-[1;36m(APIServer pid=3096200)[0;0m     async_llm = AsyncLLM.from_vllm_config(
-[1;36m(APIServer pid=3096200)[0;0m                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/utils/__init__.py", line 1572, in inner
-[1;36m(APIServer pid=3096200)[0;0m     return fn(*args, **kwargs)
-[1;36m(APIServer pid=3096200)[0;0m            ^^^^^^^^^^^^^^^^^^^
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/async_llm.py", line 207, in from_vllm_config
-[1;36m(APIServer pid=3096200)[0;0m     return cls(
-[1;36m(APIServer pid=3096200)[0;0m            ^^^^
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/async_llm.py", line 134, in __init__
-[1;36m(APIServer pid=3096200)[0;0m     self.engine_core = EngineCoreClient.make_async_mp_client(
-[1;36m(APIServer pid=3096200)[0;0m                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 101, in make_async_mp_client
-[1;36m(APIServer pid=3096200)[0;0m     return DPLBAsyncMPClient(*client_args)
-[1;36m(APIServer pid=3096200)[0;0m            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 1125, in __init__
-[1;36m(APIServer pid=3096200)[0;0m     super().__init__(vllm_config, executor_class, log_stats,
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 975, in __init__
-[1;36m(APIServer pid=3096200)[0;0m     super().__init__(vllm_config, executor_class, log_stats,
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 769, in __init__
-[1;36m(APIServer pid=3096200)[0;0m     super().__init__(
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/core_client.py", line 448, in __init__
-[1;36m(APIServer pid=3096200)[0;0m     with launch_core_engines(vllm_config, executor_class,
-[1;36m(APIServer pid=3096200)[0;0m   File "/sailhome/cye/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/python3.11/contextlib.py", line 144, in __exit__
-[1;36m(APIServer pid=3096200)[0;0m     next(self.gen)
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/utils.py", line 732, in launch_core_engines
-[1;36m(APIServer pid=3096200)[0;0m     wait_for_engine_startup(
-[1;36m(APIServer pid=3096200)[0;0m   File "/scr-ssd/cye/.venv/lib/python3.11/site-packages/vllm/v1/engine/utils.py", line 785, in wait_for_engine_startup
-[1;36m(APIServer pid=3096200)[0;0m     raise RuntimeError("Engine core initialization failed. "
-[1;36m(APIServer pid=3096200)[0;0m RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}
+[1;36m(APIServer pid=2456867)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
+[1;36m(EngineCore_DP0 pid=2457291)[0;0m Loading safetensors checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+[1;36m(EngineCore_DP0 pid=2457291)[0;0m Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.34it/s]
+[1;36m(EngineCore_DP0 pid=2457291)[0;0m Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  4.34it/s]
+[1;36m(EngineCore_DP0 pid=2457291)[0;0m 
+[1;36m(EngineCore_DP0 pid=2457291)[0;0m Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  14%|█▍        | 1/7 [00:02<00:15,  2.54s/it]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  86%|████████▌ | 6/7 [00:02<00:00,  3.03it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:02<00:00,  2.62it/s]
+[1;36m(EngineCore_DP0 pid=2457291)[0;0m Capturing CUDA graphs (decode, FULL):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):  80%|████████  | 4/5 [00:00<00:00, 35.04it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 38.40it/s]
+[1;36m(APIServer pid=2456867)[0;0m INFO:     Started server process [2456867]
+[1;36m(APIServer pid=2456867)[0;0m INFO:     Waiting for application startup.
+[1;36m(APIServer pid=2456867)[0;0m INFO:     Application startup complete.
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 1.0 hint fraction
+Loaded 183 hints with fraction=1.0, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.0 hint fraction
+Loaded 183 hints with fraction=0.0, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.9 hint fraction
+Loaded 183 hints with fraction=0.9, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.8 hint fraction
+Loaded 183 hints with fraction=0.8, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.7 hint fraction
+Loaded 183 hints with fraction=0.7, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.6 hint fraction
+Loaded 183 hints with fraction=0.6, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.5 hint fraction
+Loaded 183 hints with fraction=0.5, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.4 hint fraction
+Loaded 183 hints with fraction=0.4, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.3 hint fraction
+Loaded 183 hints with fraction=0.3, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.2 hint fraction
+Loaded 183 hints with fraction=0.2, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.1 hint fraction
+Loaded 183 hints with fraction=0.1, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+[rank1]:[W1107 14:18:08.938312625 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank2]:[W1107 14:18:08.941146763 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank0]:[W1107 14:18:08.965768378 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank3]:[W1107 14:18:08.966142223 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank3]:[W1107 14:18:09.406351016 TCPStore.cpp:125] [c10d] recvValue failed on SocketImpl(fd=71, addr=[::ffff:127.0.0.1]:57578, remote=[::ffff:127.0.0.1]:40997): Failed to recv, got 0 bytes. Connection was likely closed. Did the remote server shutdown or crash?
+Exception raised from recvBytes at /pytorch/torch/csrc/distributed/c10d/Utils.hpp:682 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x80 (0x151c58e1beb0 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x5d694d1 (0x151c9a89d4d1 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #2: <unknown function> + 0x5d6a8cd (0x151c9a89e8cd in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #3: <unknown function> + 0x5d6b47a (0x151c9a89f47a in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #4: c10d::TCPStore::check(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) + 0x31e (0x151c9a89a19e in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #5: c10d::ProcessGroupNCCL::HeartbeatMonitor::runLoop() + 0x398 (0x151c59d7fb18 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xd6df4 (0x151c3d5c3df4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #7: <unknown function> + 0x8609 (0x151cb76ce609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #8: clone + 0x43 (0x151cb748f353 in /lib/x86_64-linux-gnu/libc.so.6)
+
+[rank3]:[W1107 14:18:09.420455013 ProcessGroupNCCL.cpp:1783] [PG ID 0 PG GUID 0 Rank 3] Failed to check the "should dump" flag on TCPStore, (maybe TCPStore server has shut down too early), with error: Failed to recv, got 0 bytes. Connection was likely closed. Did the remote server shutdown or crash?
+[1;36m(APIServer pid=2456867)[0;0m INFO:     Shutting down
+[1;36m(APIServer pid=2456867)[0;0m INFO:     Waiting for application shutdown.
+[1;36m(APIServer pid=2456867)[0;0m INFO:     Application shutdown complete.
+[1;36m(APIServer pid=2707903)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
+[1;36m(EngineCore_DP0 pid=2708134)[0;0m Loading safetensors checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+[1;36m(EngineCore_DP0 pid=2708134)[0;0m Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  1.11it/s]
+[1;36m(EngineCore_DP0 pid=2708134)[0;0m Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  1.11it/s]
+[1;36m(EngineCore_DP0 pid=2708134)[0;0m 
+[1;36m(EngineCore_DP0 pid=2708134)[0;0m Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  14%|█▍        | 1/7 [00:00<00:02,  2.23it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  71%|███████▏  | 5/7 [00:00<00:00, 11.27it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:00<00:00, 11.44it/s]
+[1;36m(EngineCore_DP0 pid=2708134)[0;0m Capturing CUDA graphs (decode, FULL):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 47.83it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 47.76it/s]
+[1;36m(APIServer pid=2707903)[0;0m INFO:     Started server process [2707903]
+[1;36m(APIServer pid=2707903)[0;0m INFO:     Waiting for application startup.
+[1;36m(APIServer pid=2707903)[0;0m INFO:     Application startup complete.
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 1.0 hint fraction
+Loaded 183 hints with fraction=1.0, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.0 hint fraction
+Loaded 183 hints with fraction=0.0, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.9 hint fraction
+Loaded 183 hints with fraction=0.9, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.8 hint fraction
+Loaded 183 hints with fraction=0.8, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.7 hint fraction
+Loaded 183 hints with fraction=0.7, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.6 hint fraction
+Loaded 183 hints with fraction=0.6, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.5 hint fraction
+Loaded 183 hints with fraction=0.5, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.4 hint fraction
+Loaded 183 hints with fraction=0.4, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.3 hint fraction
+Loaded 183 hints with fraction=0.3, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.2 hint fraction
+Loaded 183 hints with fraction=0.2, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.1 hint fraction
+Loaded 183 hints with fraction=0.1, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+[rank1]:[W1107 14:56:08.063594371 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank2]:[W1107 14:56:08.071295094 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank0]:[W1107 14:56:08.073807556 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank3]:[W1107 14:56:08.074983408 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[1;36m(APIServer pid=2707903)[0;0m INFO:     Shutting down
+[1;36m(APIServer pid=2707903)[0;0m INFO:     Waiting for application shutdown.
+[1;36m(APIServer pid=2707903)[0;0m INFO:     Application shutdown complete.
+[1;36m(APIServer pid=2753169)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
+[1;36m(EngineCore_DP0 pid=2753389)[0;0m Loading safetensors checkpoint shards:   0% Completed | 0/2 [00:00<?, ?it/s]
+[1;36m(EngineCore_DP0 pid=2753389)[0;0m Loading safetensors checkpoint shards:  50% Completed | 1/2 [00:00<00:00,  1.00it/s]
+[1;36m(EngineCore_DP0 pid=2753389)[0;0m Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:01<00:00,  1.27it/s]
+[1;36m(EngineCore_DP0 pid=2753389)[0;0m Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:01<00:00,  1.22it/s]
+[1;36m(EngineCore_DP0 pid=2753389)[0;0m 
+[1;36m(EngineCore_DP0 pid=2753389)[0;0m Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  43%|████▎     | 3/7 [00:00<00:00, 21.47it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  86%|████████▌ | 6/7 [00:00<00:00, 24.34it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:00<00:00, 24.06it/s]
+[1;36m(EngineCore_DP0 pid=2753389)[0;0m Capturing CUDA graphs (decode, FULL):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 45.81it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 45.75it/s]
+[1;36m(APIServer pid=2753169)[0;0m INFO:     Started server process [2753169]
+[1;36m(APIServer pid=2753169)[0;0m INFO:     Waiting for application startup.
+[1;36m(APIServer pid=2753169)[0;0m INFO:     Application startup complete.
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 1.0 hint fraction
+Loaded 183 hints with fraction=1.0, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.0 hint fraction
+Loaded 183 hints with fraction=0.0, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.9 hint fraction
+Loaded 183 hints with fraction=0.9, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.8 hint fraction
+Loaded 183 hints with fraction=0.8, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.7 hint fraction
+Loaded 183 hints with fraction=0.7, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.6 hint fraction
+Loaded 183 hints with fraction=0.6, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.5 hint fraction
+Loaded 183 hints with fraction=0.5, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.4 hint fraction
+Loaded 183 hints with fraction=0.4, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.3 hint fraction
+Loaded 183 hints with fraction=0.3, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.2 hint fraction
+Loaded 183 hints with fraction=0.2, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.1 hint fraction
+Loaded 183 hints with fraction=0.1, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+[rank1]:[W1107 16:15:52.248784960 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank3]:[W1107 16:15:52.272478721 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank0]:[W1107 16:15:52.282046733 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank2]:[W1107 16:15:52.321303325 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[1;36m(APIServer pid=2753169)[0;0m INFO:     Shutting down
+[1;36m(APIServer pid=2753169)[0;0m INFO:     Waiting for application shutdown.
+[1;36m(APIServer pid=2753169)[0;0m INFO:     Application shutdown complete.
+[1;36m(APIServer pid=2832482)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
+[1;36m(EngineCore_DP0 pid=2832606)[0;0m Loading safetensors checkpoint shards:   0% Completed | 0/4 [00:00<?, ?it/s]
+[1;36m(EngineCore_DP0 pid=2832606)[0;0m Loading safetensors checkpoint shards:  25% Completed | 1/4 [00:07<00:22,  7.65s/it]
+[1;36m(EngineCore_DP0 pid=2832606)[0;0m Loading safetensors checkpoint shards:  50% Completed | 2/4 [00:08<00:07,  3.93s/it]
+[1;36m(EngineCore_DP0 pid=2832606)[0;0m Loading safetensors checkpoint shards:  75% Completed | 3/4 [00:10<00:02,  2.68s/it]
+[1;36m(EngineCore_DP0 pid=2832606)[0;0m Loading safetensors checkpoint shards: 100% Completed | 4/4 [00:11<00:00,  2.11s/it]
+[1;36m(EngineCore_DP0 pid=2832606)[0;0m Loading safetensors checkpoint shards: 100% Completed | 4/4 [00:11<00:00,  2.85s/it]
+[1;36m(EngineCore_DP0 pid=2832606)[0;0m 
+[1;36m(EngineCore_DP0 pid=2832606)[0;0m Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  14%|█▍        | 1/7 [00:01<00:07,  1.17s/it]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  71%|███████▏  | 5/7 [00:01<00:00,  5.08it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:01<00:00,  5.26it/s]
+[1;36m(EngineCore_DP0 pid=2832606)[0;0m Capturing CUDA graphs (decode, FULL):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 51.51it/s]
+[1;36m(APIServer pid=2832482)[0;0m INFO:     Started server process [2832482]
+[1;36m(APIServer pid=2832482)[0;0m INFO:     Waiting for application startup.
+[1;36m(APIServer pid=2832482)[0;0m INFO:     Application startup complete.
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 1.0 hint fraction
+Loaded 183 hints with fraction=1.0, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.0 hint fraction
+Loaded 183 hints with fraction=0.0, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.9 hint fraction
+Loaded 183 hints with fraction=0.9, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.8 hint fraction
+Loaded 183 hints with fraction=0.8, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.7 hint fraction
+Loaded 183 hints with fraction=0.7, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.6 hint fraction
+Loaded 183 hints with fraction=0.6, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.5 hint fraction
+Loaded 183 hints with fraction=0.5, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.4 hint fraction
+Loaded 183 hints with fraction=0.4, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.3 hint fraction
+Loaded 183 hints with fraction=0.3, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.2 hint fraction
+Loaded 183 hints with fraction=0.2, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.1 hint fraction
+Loaded 183 hints with fraction=0.1, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+[rank0]:[W1107 17:21:19.524769202 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank2]:[W1107 17:21:19.530899031 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank1]:[W1107 17:21:19.540334390 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank3]:[W1107 17:21:19.552223844 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank1]:[W1107 17:21:19.758135724 TCPStore.cpp:125] [c10d] recvValue failed on SocketImpl(fd=72, addr=[::ffff:127.0.0.1]:36372, remote=[::ffff:127.0.0.1]:45811): Failed to recv, got 0 bytes. Connection was likely closed. Did the remote server shutdown or crash?
+Exception raised from recvBytes at /pytorch/torch/csrc/distributed/c10d/Utils.hpp:682 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x80 (0x1519de171eb0 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x5d694d1 (0x151a1fbf34d1 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #2: <unknown function> + 0x5d6a8cd (0x151a1fbf48cd in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #3: <unknown function> + 0x5d6b47a (0x151a1fbf547a in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #4: c10d::TCPStore::check(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) + 0x31e (0x151a1fbf019e in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #5: c10d::ProcessGroupNCCL::HeartbeatMonitor::runLoop() + 0x398 (0x1519df0d5b18 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xd6df4 (0x1519c2919df4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #7: <unknown function> + 0x8609 (0x151a3ca24609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #8: clone + 0x43 (0x151a3c7e5353 in /lib/x86_64-linux-gnu/libc.so.6)
+
+[rank1]:[W1107 17:21:19.772310991 ProcessGroupNCCL.cpp:1783] [PG ID 0 PG GUID 0 Rank 1] Failed to check the "should dump" flag on TCPStore, (maybe TCPStore server has shut down too early), with error: Failed to recv, got 0 bytes. Connection was likely closed. Did the remote server shutdown or crash?
+[rank2]:[W1107 17:21:19.758267590 TCPStore.cpp:125] [c10d] recvValue failed on SocketImpl(fd=72, addr=[::ffff:127.0.0.1]:36368, remote=[::ffff:127.0.0.1]:45811): Failed to recv, got 0 bytes. Connection was likely closed. Did the remote server shutdown or crash?
+Exception raised from recvBytes at /pytorch/torch/csrc/distributed/c10d/Utils.hpp:682 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x80 (0x1463f0fe6eb0 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x5d694d1 (0x146432a684d1 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #2: <unknown function> + 0x5d6a8cd (0x146432a698cd in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #3: <unknown function> + 0x5d6b47a (0x146432a6a47a in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #4: c10d::TCPStore::check(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) + 0x31e (0x146432a6519e in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #5: c10d::ProcessGroupNCCL::HeartbeatMonitor::runLoop() + 0x398 (0x1463f1f4ab18 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xd6df4 (0x1463d578edf4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #7: <unknown function> + 0x8609 (0x14644f899609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #8: clone + 0x43 (0x14644f65a353 in /lib/x86_64-linux-gnu/libc.so.6)
+
+[rank3]:[W1107 17:21:19.758139670 TCPStore.cpp:125] [c10d] recvValue failed on SocketImpl(fd=72, addr=[::ffff:127.0.0.1]:36354, remote=[::ffff:127.0.0.1]:45811): Failed to recv, got 0 bytes. Connection was likely closed. Did the remote server shutdown or crash?
+Exception raised from recvBytes at /pytorch/torch/csrc/distributed/c10d/Utils.hpp:682 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x80 (0x154d913c5eb0 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x5d694d1 (0x154dd2e474d1 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #2: <unknown function> + 0x5d6a8cd (0x154dd2e488cd in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #3: <unknown function> + 0x5d6b47a (0x154dd2e4947a in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #4: c10d::TCPStore::check(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) + 0x31e (0x154dd2e4419e in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #5: c10d::ProcessGroupNCCL::HeartbeatMonitor::runLoop() + 0x398 (0x154d92329b18 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xd6df4 (0x154d75b6ddf4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #7: <unknown function> + 0x8609 (0x154defc78609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #8: clone + 0x43 (0x154defa39353 in /lib/x86_64-linux-gnu/libc.so.6)
+
+[rank2]:[W1107 17:21:19.772514346 ProcessGroupNCCL.cpp:1783] [PG ID 0 PG GUID 0 Rank 2] Failed to check the "should dump" flag on TCPStore, (maybe TCPStore server has shut down too early), with error: Failed to recv, got 0 bytes. Connection was likely closed. Did the remote server shutdown or crash?
+[rank3]:[W1107 17:21:19.772577983 ProcessGroupNCCL.cpp:1783] [PG ID 0 PG GUID 0 Rank 3] Failed to check the "should dump" flag on TCPStore, (maybe TCPStore server has shut down too early), with error: Failed to recv, got 0 bytes. Connection was likely closed. Did the remote server shutdown or crash?
+[1;36m(APIServer pid=2832482)[0;0m INFO:     Shutting down
+[1;36m(APIServer pid=2832482)[0;0m INFO:     Waiting for application shutdown.
+[1;36m(APIServer pid=2832482)[0;0m INFO:     Application shutdown complete.
+[1;36m(APIServer pid=2876676)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
+[1;36m(Worker_DP0_TP0 pid=2877023)[0;0m Loading safetensors checkpoint shards:   0% Completed | 0/8 [00:00<?, ?it/s]
+[1;36m(Worker_DP0_TP0 pid=2877023)[0;0m Loading safetensors checkpoint shards:  12% Completed | 1/8 [00:00<00:01,  3.75it/s]
+[1;36m(Worker_DP0_TP0 pid=2877023)[0;0m Loading safetensors checkpoint shards:  25% Completed | 2/8 [00:01<00:03,  1.52it/s]
+[1;36m(Worker_DP0_TP0 pid=2877023)[0;0m Loading safetensors checkpoint shards:  38% Completed | 3/8 [00:02<00:03,  1.27it/s]
+[1;36m(Worker_DP0_TP0 pid=2877023)[0;0m Loading safetensors checkpoint shards:  50% Completed | 4/8 [00:03<00:03,  1.17it/s]
+[1;36m(Worker_DP0_TP0 pid=2877023)[0;0m Loading safetensors checkpoint shards:  62% Completed | 5/8 [00:04<00:02,  1.13it/s]
+[1;36m(Worker_DP0_TP0 pid=2877023)[0;0m Loading safetensors checkpoint shards:  75% Completed | 6/8 [00:04<00:01,  1.18it/s]
+[1;36m(Worker_DP0_TP0 pid=2877023)[0;0m Loading safetensors checkpoint shards:  88% Completed | 7/8 [00:05<00:00,  1.20it/s]
+[1;36m(Worker_DP0_TP0 pid=2877023)[0;0m Loading safetensors checkpoint shards: 100% Completed | 8/8 [00:06<00:00,  1.19it/s]
+[1;36m(Worker_DP0_TP0 pid=2877023)[0;0m Loading safetensors checkpoint shards: 100% Completed | 8/8 [00:06<00:00,  1.24it/s]
+[1;36m(Worker_DP0_TP0 pid=2877023)[0;0m 
+[1;36m(Worker_DP0_TP0 pid=2877023)[0;0m Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  29%|██▊       | 2/7 [00:00<00:00, 11.46it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  57%|█████▋    | 4/7 [00:00<00:00, 13.97it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  86%|████████▌ | 6/7 [00:00<00:00, 15.57it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:00<00:00, 14.51it/s]
+[1;36m(Worker_DP0_TP0 pid=2877023)[0;0m Capturing CUDA graphs (decode, FULL):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):  40%|████      | 2/5 [00:00<00:00, 18.08it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 20.52it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 20.17it/s]
+[1;36m(APIServer pid=2876676)[0;0m INFO:     Started server process [2876676]
+[1;36m(APIServer pid=2876676)[0;0m INFO:     Waiting for application startup.
+[1;36m(APIServer pid=2876676)[0;0m INFO:     Application startup complete.
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 1.0 hint fraction
+Loaded 183 hints with fraction=1.0, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.0 hint fraction
+Loaded 183 hints with fraction=0.0, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.9 hint fraction
+Loaded 183 hints with fraction=0.9, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.8 hint fraction
+Loaded 183 hints with fraction=0.8, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.7 hint fraction
+Loaded 183 hints with fraction=0.7, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.6 hint fraction
+Loaded 183 hints with fraction=0.6, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.5 hint fraction
+Loaded 183 hints with fraction=0.5, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.4 hint fraction
+Loaded 183 hints with fraction=0.4, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.3 hint fraction
+Loaded 183 hints with fraction=0.3, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.2 hint fraction
+Loaded 183 hints with fraction=0.2, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.1 hint fraction
+Loaded 183 hints with fraction=0.1, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+[1;36m(APIServer pid=2876676)[0;0m INFO:     Shutting down
+[1;36m(APIServer pid=2876676)[0;0m INFO:     Waiting for application shutdown.
+[1;36m(APIServer pid=2876676)[0;0m INFO:     Application shutdown complete.
+[1;36m(APIServer pid=2910412)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:   0% Completed | 0/17 [00:00<?, ?it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:   6% Completed | 1/17 [00:00<00:05,  2.76it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  12% Completed | 2/17 [00:00<00:05,  2.63it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  18% Completed | 3/17 [00:01<00:05,  2.48it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  24% Completed | 4/17 [00:01<00:05,  2.42it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  29% Completed | 5/17 [00:02<00:04,  2.46it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  35% Completed | 6/17 [00:02<00:04,  2.49it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  41% Completed | 7/17 [00:02<00:03,  2.51it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  47% Completed | 8/17 [00:03<00:03,  2.52it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  53% Completed | 9/17 [00:03<00:03,  2.54it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  59% Completed | 10/17 [00:03<00:02,  2.55it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  65% Completed | 11/17 [00:04<00:02,  2.55it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  71% Completed | 12/17 [00:04<00:01,  2.55it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  76% Completed | 13/17 [00:05<00:01,  2.54it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  82% Completed | 14/17 [00:05<00:01,  2.81it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  88% Completed | 15/17 [00:05<00:00,  2.76it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards:  94% Completed | 16/17 [00:06<00:00,  2.69it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards: 100% Completed | 17/17 [00:06<00:00,  2.64it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Loading safetensors checkpoint shards: 100% Completed | 17/17 [00:06<00:00,  2.58it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m 
+[1;36m(Worker_TP0 pid=2910623)[0;0m Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  29%|██▊       | 2/7 [00:00<00:00, 17.68it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  71%|███████▏  | 5/7 [00:00<00:00, 20.90it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:00<00:00, 20.39it/s]
+[1;36m(Worker_TP0 pid=2910623)[0;0m Capturing CUDA graphs (decode, FULL):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):  60%|██████    | 3/5 [00:00<00:00, 26.55it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 27.43it/s]
+[1;36m(APIServer pid=2910412)[0;0m INFO:     Started server process [2910412]
+[1;36m(APIServer pid=2910412)[0;0m INFO:     Waiting for application startup.
+[1;36m(APIServer pid=2910412)[0;0m INFO:     Application startup complete.
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 1.0 hint fraction
+Loaded 183 hints with fraction=1.0, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.0 hint fraction
+Loaded 183 hints with fraction=0.0, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.9 hint fraction
+Loaded 183 hints with fraction=0.9, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.8 hint fraction
+Loaded 183 hints with fraction=0.8, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.7 hint fraction
+Loaded 183 hints with fraction=0.7, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.6 hint fraction
+Loaded 183 hints with fraction=0.6, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.5 hint fraction
+Loaded 183 hints with fraction=0.5, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.4 hint fraction
+Loaded 183 hints with fraction=0.4, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.3 hint fraction
+Loaded 183 hints with fraction=0.3, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.2 hint fraction
+Loaded 183 hints with fraction=0.2, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Loaded 183 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+Found 183 problems common to all 1 files
+Running on 183 samples with 0.1 hint fraction
+Loaded 183 hints with fraction=0.1, mode=masked from /sphinx/u/cye/emergent-doordash//christine_experiments/data/solution/gpqa.jsonl
+[1;36m(APIServer pid=2910412)[0;0m INFO:     Shutting down
+[1;36m(APIServer pid=2910412)[0;0m INFO:     Waiting for application shutdown.
+[1;36m(APIServer pid=2910412)[0;0m INFO:     Application shutdown complete.
