@@ -19,14 +19,9 @@ from plotting import (
 
 # Choose folder structure:
 # Option 1: New structure (with solver subfolder)
-BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251030/results/hle"
-SOLVER = None #"solution"  # Set to None for old structure
-FILENAME_TEMPLATE = "hle_cot_0shot_{hint}.json"
-
-# Option 2: Old structure (no solver subfolder)
-# BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251030/results/hle"
-# SOLVER = None
-# FILENAME_TEMPLATE = "hle_0shot_{hint}.json"
+BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251030/results/arc"
+SOLVER = None # "solution_intext_mask"  # Set to None for old structure
+FILENAME_TEMPLATE = "arc_cot_0shot_{hint}.json"
 
 CONDITION = "0shot"
 GRADER_FIELD = "manual_bootstrap"
@@ -43,7 +38,7 @@ MODELS = [
     "Qwen2.5-32B-Instruct",
 ]
 
-HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]#], 1.0]
 
 # =========================================
 
@@ -69,7 +64,7 @@ fig, ax = plot_results(
     results=results,
     models=MODELS,
     hints=HINT_FRACTIONS,
-    title="HLE, using CoT-based hints"
+    title="GPQA, using solution-based hints"
 )
 plt.show()
 
@@ -79,7 +74,7 @@ fig, ax = plot_results_rescaled(
     results=results,
     models=MODELS,
     hints=HINT_FRACTIONS,
-    title="HLE, COT-based hints",
+    title="ARC, prefilling CoT",
     fit_scaling=False
 )
 plt.show()

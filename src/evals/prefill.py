@@ -85,6 +85,8 @@ def get_masked_text(text: str, fraction: float = 0.5, mask_token: str = "[MASK]"
     # Stop before stop_string if present (exclusive)
     if stop_string in text:
         text = text[:text.index(stop_string)].strip()
+    else:
+        logger.warning(f"Stop string {stop_string} not found in {text}")
 
     tokens = re.split(r'(\s+)', text)
     # Get indices of all non-whitespace tokens (actual words)
