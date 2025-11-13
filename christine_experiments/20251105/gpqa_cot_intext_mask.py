@@ -23,11 +23,11 @@ if __name__ == "__main__":
     sample_ids = get_valid_problem_ids([DATA_PATH], require_hint=True)
     logger.info(f"Running on {len(sample_ids)} samples with {args.hint_fraction} hint fraction")
 
-    prefill_config = PrefillConfig(path=DATA_PATH, fraction=args.hint_fraction)
+    prefill_config = PrefillConfig(path=DATA_PATH, fraction=args.hint_fraction, mode = "masked")
 
     solver = [
         instructions(DEFAULT_INSTRUCTIONS),
-        intext(prefill_config, prefix="Here is part of a hint that may be helpful to your solution:\n", mode = "masked"),
+        intext(prefill_config, prefix="Here is part of a hint that may be helpful to your solution:\n"),
         generate(timeout=args.timeout)
     ]
 
