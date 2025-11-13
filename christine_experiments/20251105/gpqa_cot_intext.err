@@ -149,3 +149,7 @@ Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/c
 Found 185 problems common to all 1 files
 Running on 185 samples with 0.4 hint fraction
 Loaded 185 hints with fraction=0.4, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.3 hint fraction
+Loaded 185 hints with fraction=0.3, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
