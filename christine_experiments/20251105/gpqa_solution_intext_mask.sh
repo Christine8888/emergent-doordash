@@ -24,18 +24,16 @@ source "$ROOT/src/utils/eval_utils.sh"
 
 trap cleanup INT TERM
 
-MODELS=(
-    "Qwen/Qwen2.5-0.5B-Instruct:1"
+MODELS=("Qwen/Qwen2.5-0.5B-Instruct:1"
     "Qwen/Qwen2.5-1.5B-Instruct:1"
     "Qwen/Qwen2.5-3B-Instruct:1"
     "Qwen/Qwen2.5-7B-Instruct:1"
     "Qwen/Qwen2.5-14B-Instruct:2"
-    "Qwen/Qwen2.5-32B-Instruct:4"
-)
+    "Qwen/Qwen2.5-32B-Instruct:4")
 
 FEWSHOTS=(0)
 # HINT_FRACTIONS=(1.0 0.0 0.9 0.8 0.7 0.6 0.5 0.4 0.3 0.2 0.1)
-HINT_FRACTIONS = (0.95 0.85 0.75 0.65 0.55 0.45 0.35 0.25 0.15 0.05)
+HINT_FRACTIONS=(0.95 0.85 0.75 0.65 0.55 0.45 0.35 0.25 0.15 0.05)
 
 N_DEVICES=4
 VLLM_PORT=3000

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=gpqa_cot
+#SBATCH --job-name=gpqa_cot_intext
 #SBATCH --output=gpqa_cot_intext.out
 #SBATCH --error=gpqa_cot_intext.err
 #SBATCH --time=20:00:00

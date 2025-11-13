@@ -1,0 +1,151 @@
+[1;36m(APIServer pid=2154032)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
+[1;36m(EngineCore_DP0 pid=2154229)[0;0m Loading safetensors checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+[1;36m(EngineCore_DP0 pid=2154229)[0;0m Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  1.45it/s]
+[1;36m(EngineCore_DP0 pid=2154229)[0;0m Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  1.45it/s]
+[1;36m(EngineCore_DP0 pid=2154229)[0;0m 
+[1;36m(EngineCore_DP0 pid=2154229)[0;0m Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  14%|█▍        | 1/7 [00:07<00:43,  7.25s/it]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  71%|███████▏  | 5/7 [00:07<00:02,  1.10s/it]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:07<00:00,  1.06s/it]
+[1;36m(EngineCore_DP0 pid=2154229)[0;0m Capturing CUDA graphs (decode, FULL):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 47.53it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 47.46it/s]
+[1;36m(APIServer pid=2154032)[0;0m INFO:     Started server process [2154032]
+[1;36m(APIServer pid=2154032)[0;0m INFO:     Waiting for application startup.
+[1;36m(APIServer pid=2154032)[0;0m INFO:     Application startup complete.
+Output file /sphinx/u/cye/emergent-doordash/christine_experiments/20251105/results/gpqa/cot_intext/0shot/Qwen2.5-1.5B-Instruct/gpqa_cot_intext_0shot_1.0.json already exists. Skipping evaluation.
+Output file /sphinx/u/cye/emergent-doordash/christine_experiments/20251105/results/gpqa/cot_intext/0shot/Qwen2.5-1.5B-Instruct/gpqa_cot_intext_0shot_0.0.json already exists. Skipping evaluation.
+Output file /sphinx/u/cye/emergent-doordash/christine_experiments/20251105/results/gpqa/cot_intext/0shot/Qwen2.5-1.5B-Instruct/gpqa_cot_intext_0shot_0.9.json already exists. Skipping evaluation.
+Output file /sphinx/u/cye/emergent-doordash/christine_experiments/20251105/results/gpqa/cot_intext/0shot/Qwen2.5-1.5B-Instruct/gpqa_cot_intext_0shot_0.8.json already exists. Skipping evaluation.
+Output file /sphinx/u/cye/emergent-doordash/christine_experiments/20251105/results/gpqa/cot_intext/0shot/Qwen2.5-1.5B-Instruct/gpqa_cot_intext_0shot_0.7.json already exists. Skipping evaluation.
+Output file /sphinx/u/cye/emergent-doordash/christine_experiments/20251105/results/gpqa/cot_intext/0shot/Qwen2.5-1.5B-Instruct/gpqa_cot_intext_0shot_0.6.json already exists. Skipping evaluation.
+Output file /sphinx/u/cye/emergent-doordash/christine_experiments/20251105/results/gpqa/cot_intext/0shot/Qwen2.5-1.5B-Instruct/gpqa_cot_intext_0shot_0.5.json already exists. Skipping evaluation.
+Output file /sphinx/u/cye/emergent-doordash/christine_experiments/20251105/results/gpqa/cot_intext/0shot/Qwen2.5-1.5B-Instruct/gpqa_cot_intext_0shot_0.4.json already exists. Skipping evaluation.
+Output file /sphinx/u/cye/emergent-doordash/christine_experiments/20251105/results/gpqa/cot_intext/0shot/Qwen2.5-1.5B-Instruct/gpqa_cot_intext_0shot_0.3.json already exists. Skipping evaluation.
+Output file /sphinx/u/cye/emergent-doordash/christine_experiments/20251105/results/gpqa/cot_intext/0shot/Qwen2.5-1.5B-Instruct/gpqa_cot_intext_0shot_0.2.json already exists. Skipping evaluation.
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.1 hint fraction
+Loaded 185 hints with fraction=0.1, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+[rank1]:[W1113 13:07:13.205352148 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank0]:[W1113 13:07:13.238876548 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank2]:[W1113 13:07:13.248873562 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank3]:[W1113 13:07:13.249976016 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[1;36m(APIServer pid=2154032)[0;0m INFO:     Shutting down
+[1;36m(APIServer pid=2154032)[0;0m INFO:     Waiting for application shutdown.
+[1;36m(APIServer pid=2154032)[0;0m INFO:     Application shutdown complete.
+[1;36m(APIServer pid=2160969)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
+[1;36m(EngineCore_DP0 pid=2161132)[0;0m Loading safetensors checkpoint shards:   0% Completed | 0/2 [00:00<?, ?it/s]
+[1;36m(EngineCore_DP0 pid=2161132)[0;0m Loading safetensors checkpoint shards:  50% Completed | 1/2 [00:00<00:00,  1.03it/s]
+[1;36m(EngineCore_DP0 pid=2161132)[0;0m Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:02<00:00,  1.23s/it]
+[1;36m(EngineCore_DP0 pid=2161132)[0;0m Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:02<00:00,  1.19s/it]
+[1;36m(EngineCore_DP0 pid=2161132)[0;0m 
+[1;36m(EngineCore_DP0 pid=2161132)[0;0m Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  14%|█▍        | 1/7 [00:02<00:17,  2.97s/it]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  57%|█████▋    | 4/7 [00:03<00:01,  1.70it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:03<00:00,  2.21it/s]
+[1;36m(EngineCore_DP0 pid=2161132)[0;0m Capturing CUDA graphs (decode, FULL):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):  80%|████████  | 4/5 [00:00<00:00, 38.43it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 39.66it/s]
+[1;36m(APIServer pid=2160969)[0;0m INFO:     Started server process [2160969]
+[1;36m(APIServer pid=2160969)[0;0m INFO:     Waiting for application startup.
+[1;36m(APIServer pid=2160969)[0;0m INFO:     Application startup complete.
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 1.0 hint fraction
+Loaded 185 hints with fraction=1.0, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.0 hint fraction
+Loaded 185 hints with fraction=0.0, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.9 hint fraction
+Loaded 185 hints with fraction=0.9, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.8 hint fraction
+Loaded 185 hints with fraction=0.8, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.7 hint fraction
+Loaded 185 hints with fraction=0.7, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.6 hint fraction
+Loaded 185 hints with fraction=0.6, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.5 hint fraction
+Loaded 185 hints with fraction=0.5, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.4 hint fraction
+Loaded 185 hints with fraction=0.4, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.3 hint fraction
+Loaded 185 hints with fraction=0.3, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.2 hint fraction
+Loaded 185 hints with fraction=0.2, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.1 hint fraction
+Loaded 185 hints with fraction=0.1, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+[rank1]:[W1113 14:28:24.055641853 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank3]:[W1113 14:28:24.062338342 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank0]:[W1113 14:28:24.100273215 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank2]:[W1113 14:28:24.124357235 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank2]:[W1113 14:28:25.685782159 TCPStore.cpp:125] [c10d] recvValue failed on SocketImpl(fd=73, addr=[::ffff:127.0.0.1]:42874, remote=[::ffff:127.0.0.1]:41213): Failed to recv, got 0 bytes. Connection was likely closed. Did the remote server shutdown or crash?
+Exception raised from recvBytes at /pytorch/torch/csrc/distributed/c10d/Utils.hpp:682 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x80 (0x14c02f5fbeb0 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x5d694d1 (0x14c07107d4d1 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #2: <unknown function> + 0x5d6a8cd (0x14c07107e8cd in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #3: <unknown function> + 0x5d6b47a (0x14c07107f47a in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #4: c10d::TCPStore::check(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&) + 0x31e (0x14c07107a19e in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cpu.so)
+frame #5: c10d::ProcessGroupNCCL::HeartbeatMonitor::runLoop() + 0x398 (0x14c03055fb18 in /scr-ssd/cye/.venv/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xd6df4 (0x14c013da1df4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #7: <unknown function> + 0x8609 (0x14c08deae609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #8: clone + 0x43 (0x14c08dc6f353 in /lib/x86_64-linux-gnu/libc.so.6)
+
+[rank2]:[W1113 14:28:25.698378332 ProcessGroupNCCL.cpp:1783] [PG ID 0 PG GUID 0 Rank 2] Failed to check the "should dump" flag on TCPStore, (maybe TCPStore server has shut down too early), with error: Failed to recv, got 0 bytes. Connection was likely closed. Did the remote server shutdown or crash?
+[1;36m(APIServer pid=2160969)[0;0m INFO:     Shutting down
+[1;36m(APIServer pid=2160969)[0;0m INFO:     Waiting for application shutdown.
+[1;36m(APIServer pid=2160969)[0;0m INFO:     Application shutdown complete.
+[1;36m(APIServer pid=2221075)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
+[1;36m(EngineCore_DP0 pid=2221274)[0;0m Loading safetensors checkpoint shards:   0% Completed | 0/4 [00:00<?, ?it/s]
+[1;36m(EngineCore_DP0 pid=2221274)[0;0m Loading safetensors checkpoint shards:  25% Completed | 1/4 [00:01<00:03,  1.05s/it]
+[1;36m(EngineCore_DP0 pid=2221274)[0;0m Loading safetensors checkpoint shards:  50% Completed | 2/4 [00:03<00:03,  1.84s/it]
+[1;36m(EngineCore_DP0 pid=2221274)[0;0m Loading safetensors checkpoint shards:  75% Completed | 3/4 [00:05<00:01,  1.90s/it]
+[1;36m(EngineCore_DP0 pid=2221274)[0;0m Loading safetensors checkpoint shards: 100% Completed | 4/4 [00:07<00:00,  1.89s/it]
+[1;36m(EngineCore_DP0 pid=2221274)[0;0m Loading safetensors checkpoint shards: 100% Completed | 4/4 [00:07<00:00,  1.82s/it]
+[1;36m(EngineCore_DP0 pid=2221274)[0;0m 
+[1;36m(EngineCore_DP0 pid=2221274)[0;0m Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  14%|█▍        | 1/7 [00:06<00:39,  6.61s/it]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  71%|███████▏  | 5/7 [00:06<00:02,  1.01s/it]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:06<00:00,  1.03it/s]
+[1;36m(EngineCore_DP0 pid=2221274)[0;0m Capturing CUDA graphs (decode, FULL):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 46.73it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 46.68it/s]
+[1;36m(APIServer pid=2221075)[0;0m INFO:     Started server process [2221075]
+[1;36m(APIServer pid=2221075)[0;0m INFO:     Waiting for application startup.
+[1;36m(APIServer pid=2221075)[0;0m INFO:     Application startup complete.
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 1.0 hint fraction
+Loaded 185 hints with fraction=1.0, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.0 hint fraction
+Loaded 185 hints with fraction=0.0, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.9 hint fraction
+Loaded 185 hints with fraction=0.9, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.8 hint fraction
+Loaded 185 hints with fraction=0.8, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.7 hint fraction
+Loaded 185 hints with fraction=0.7, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.6 hint fraction
+Loaded 185 hints with fraction=0.6, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.5 hint fraction
+Loaded 185 hints with fraction=0.5, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Loaded 185 IDs from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
+Found 185 problems common to all 1 files
+Running on 185 samples with 0.4 hint fraction
+Loaded 185 hints with fraction=0.4, mode=sequential from /sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl
