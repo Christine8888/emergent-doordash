@@ -91,7 +91,8 @@ fig, ax = plot_results_by_model_size(
     fit_scaling = False,
     include_cross = True,
     fit_models=["Qwen2.5-0.5B-Instruct", "Qwen2.5-1.5B-Instruct"],
-    exclude_hint=[0.0, 0.9, 0.8, 0.7, 0.6, 0.5],
+    exclude_hint=[0.0],
+    transform_hint=True,
 )
 plt.show()
 

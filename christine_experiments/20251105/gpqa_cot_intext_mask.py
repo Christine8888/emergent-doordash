@@ -8,7 +8,7 @@ logger = setup_logging()
 
 solver_name = "cot_intext_mask"
 eval_name = "gpqa"
-BASE_DIR = "/sphinx/u/cye/emergent-doordash/"
+BASE_DIR = "/sphinx/u/cye/emergent-doordash"
 DATA_PATH = f"{BASE_DIR}/christine_experiments/data/cot/{eval_name}.jsonl"
 
 if __name__ == "__main__":

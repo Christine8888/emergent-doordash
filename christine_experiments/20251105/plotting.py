@@ -310,7 +310,8 @@ def plot_results_by_model_size(results: Dict, models: List[str], hints: List[flo
                                fit_models = None,
                                fit_joint: bool = False,
                                include_cross: bool = True,
-                               exclude_hint = None):
+                               exclude_hint = None,
+                               transform_hint: bool = False):
     """Plot results with model size on x-axis and hints as different colors.
 
     Args:
@@ -327,13 +328,21 @@ def plot_results_by_model_size(results: Dict, models: List[str], hints: List[flo
             - List[str]: use specific model names
         fit_joint: If True, fit joint model
         include_cross: If True, fit σ(α*C + β*H + γ*C*H + δ), else σ(α*C + β*H + δ)
-            where C is log(model_size) and H is hint_fraction
+            where C is log(model_size) and H is hint variable
         exclude_hint: Hint fraction(s) to exclude from joint fit. Can be:
             - None: include all hints (default)
             - float: exclude single hint value (e.g., 0)
             - List[float]: exclude multiple hint values (e.g., [0, 0.1])
+        transform_hint: If True, use H = 1/(1-hint) instead of H = hint
     """
     from scipy.optimize import curve_fit
+
+    def hint_transform(hint_val):
+        """Transform hint fraction if transform_hint is True."""
+        if transform_hint:
+            return np.log(1 / (1 - hint_val))
+        else:
+            return hint_val
 
     def sigmoid(x, m, b):
         return 1 / (1 + np.exp(-(m * np.log(x) + b)))
@@ -398,7 +407,7 @@ def plot_results_by_model_size(results: Dict, models: List[str], hints: List[flo
                 accuracy, stderr = results[model][hint]
                 if accuracy is not None and model in fit_model_names:
                     C_all.append(np.log(size))
-                    H_all.append(hint)
+                    H_all.append(hint_transform(hint))
                     y_all.append(accuracy)
 
         min_points = 4 if include_cross else 3
@@ -497,7 +506,7 @@ def plot_results_by_model_size(results: Dict, models: List[str], hints: List[flo
                 x_smooth = np.logspace(np.log10(min(x_vals)),
                                       np.log10(max(x_vals)), 100)
                 C_smooth = np.log(x_smooth)
-                H_smooth = np.full_like(C_smooth, hint)
+                H_smooth = np.full_like(C_smooth, hint_transform(hint))
                 CH_smooth = np.array([C_smooth, H_smooth])
 
                 if include_cross:
@@ -520,6 +529,12 @@ def plot_results_by_model_size(results: Dict, models: List[str], hints: List[flo
         for hint_idx, hint in enumerate(hints):
             color = colors[hint_idx]
 
+            # Create base label with transformed value if applicable
+            if transform_hint:
+                base_label = f"{hint} (H'={hint_transform(hint):.2f})"
+            else:
+                base_label = f"{hint}"
+
             if hint in hint_params:
                 if fit_scaling:
                     h_fit, m_fit, b_fit = hint_params[hint]
@@ -527,9 +542,9 @@ def plot_results_by_model_size(results: Dict, models: List[str], hints: List[flo
                 else:
                     m_fit, b_fit = hint_params[hint]
                     equation = f"σ({m_fit:.2f}·log(x) {b_fit:+.2f})"
-                label_text = f"{hint}: {equation}"
+                label_text = f"{base_label}: {equation}"
             else:
-                label_text = f"{hint}"
+                label_text = base_label
 
             handle = Line2D([0], [0], color=color, linewidth=2, marker='o', markersize=8)
             hint_handles.append(handle)
@@ -537,12 +552,15 @@ def plot_results_by_model_size(results: Dict, models: List[str], hints: List[flo
 
         # Add note about dashed lines if using joint fit
         if fit_joint and joint_params is not None:
+            H_label = "H'" if transform_hint else "H"
             if include_cross:
                 alpha, beta, gamma, delta = joint_params
-                joint_eq = f"σ({alpha:.2f}C {beta:+.2f}H {gamma:+.2f}CH {delta:+.2f})"
+                joint_eq = f"σ({alpha:.2f}C {beta:+.2f}{H_label} {gamma:+.2f}C{H_label} {delta:+.2f})"
             else:
                 alpha, beta, delta = joint_params
-                joint_eq = f"σ({alpha:.2f}C {beta:+.2f}H {delta:+.2f})"
+                joint_eq = f"σ({alpha:.2f}C {beta:+.2f}{H_label} {delta:+.2f})"
+            if transform_hint:
+                joint_eq += " (H'=1/(1-H)-1)"
             hint_handles.append(Line2D([0], [0], color='gray', linestyle='--', linewidth=2))
             hint_labels.append(f'{joint_eq}')
 
@@ -556,14 +574,18 @@ def plot_results_by_model_size(results: Dict, models: List[str], hints: List[flo
             color = colors[hint_idx]
             handle = Line2D([0], [0], color=color, linewidth=2, marker='o', markersize=8)
             hint_handles.append(handle)
-            hint_labels.append(f"{hint}")
+            if transform_hint:
+                hint_labels.append(f"{hint} (H'={hint_transform(hint):.2f})")
+            else:
+                hint_labels.append(f"{hint}")
 
+        H_label = "H'" if transform_hint else "H"
         if include_cross:
             alpha, beta, gamma, delta = joint_params
-            joint_eq = f"σ({alpha:.2f}C {beta:+.2f}H {gamma:+.2f}CH {delta:+.2f})"
+            joint_eq = f"σ({alpha:.2f}C {beta:+.2f}{H_label} {gamma:+.2f}C{H_label} {delta:+.2f})"
         else:
             alpha, beta, delta = joint_params
-            joint_eq = f"σ({alpha:.2f}C {beta:+.2f}H {delta:+.2f})"
+            joint_eq = f"σ({alpha:.2f}C {beta:+.2f}{H_label} {delta:+.2f})"
         hint_handles.append(Line2D([0], [0], color='gray', linestyle='--', linewidth=2))
         hint_labels.append(f'{joint_eq}')
 
