@@ -10,9 +10,10 @@ import random
 import numpy as np
 import torch
 import re
+import hashlib
 from typing import List
 
-from src.data.datasets import AIME2025, Dataset, ModelAnswer, ProblemHints, HintsDataset
+from src.data.datasets import AIME2025, Dataset, ModelAnswer, ModelHints, HintsDatum, HintsDataset
 from src.models.query import query_model_batch, query_model, ModelConfig, ModelType, OPENAI_MODELS, ANTHROPIC_MODELS, GOOGLE_MODELS
 
 NUM_SAMPLES = 4
@@ -25,23 +26,38 @@ def set_seed(seed: int):
     torch.cuda.manual_seed_all(seed)
 
 
-def create_hints_prompt(question: str, cot: str) -> str:
-    """Create a prompt asking the model to provide 10 equal-level hints."""
-    return f"""You correctly solved the following problem:
+HINTS_PROMPT_TEMPLATE = """
+You previously solved this problem:
 
-Problem: {question}
+Problem:
+{question}
 
 Your solution:
 {cot}
 
-Please provide 10 hints that are equally helpful to solve this problem. Format your response as a numbered list with exactly 10 hints, one per line, like:
+Create 10 independent hints. Each hint must:
+- Stand alone and be clear without reading any other hint.
+- Contain unique information that does not overlap with the others.
+- Be roughly equal in usefulness.
+- Avoid revealing the full solution.
 
-1. First hint
-2. Second hint
+Format:
+1. Hint one
+2. Hint two
 ...
-10. Tenth hint
+10. Hint ten
 
-Provide exactly 10 hints:"""
+Provide exactly 10 hints:
+"""
+
+
+def get_prompt_template_hash() -> str:
+    """Get hash of the current prompt template to detect changes."""
+    return hashlib.md5(HINTS_PROMPT_TEMPLATE.encode()).hexdigest()[:8]
+
+
+def create_hints_prompt(question: str, cot: str) -> str:
+    return HINTS_PROMPT_TEMPLATE.format(question=question, cot=cot)
 
 
 def extract_hints_from_response(response_text: str) -> List[str]:
@@ -87,6 +103,7 @@ def main():
     # query a model with one specific question
     # models = ["o3-2025-04-16", "gpt-5-2025-08-07", "claude-opus-4-1-20250805", "claude-sonnet-4-5-20250929", "Qwen/Qwen-7B-Chat", "Qwen/Qwen2.5-7B-Instruct", "deepseek-ai/DeepSeek-V3.1", "moonshotai/Kimi-K2-Thinking"]
     # models = ["gpt-5-nano-2025-08-07"] # for testing; low cost
+    # models = ["o3-2025-04-16", "gpt-5-2025-08-07", "claude-opus-4-1-20250805", "claude-sonnet-4-5-20250929"]
     models = ["claude-sonnet-4-5-20250929"]
 
     cot_samples = random.sample(cot_dataset.data, NUM_SAMPLES)
@@ -119,7 +136,7 @@ def main():
             # Check if this model already has a response for this question with this exact prompt
             has_existing_response = any(
                 response.model == model_name and response.prompt == prompt
-                for response in cot_sample.ground_truth_cot_responses
+                for response in cot_sample.cot_responses
             )
             if not has_existing_response:
                 prompts.append(prompt)
@@ -151,40 +168,74 @@ def main():
                     is_correct=is_correct,
                     prompt=cot_sample.question
                 )
-                cot_sample.ground_truth_cot_responses.append(model_answer)
+                cot_sample.cot_responses.append(model_answer)
                 
                 # If correct, ask for hints
                 if is_correct:
-                    print(f"Model {model_name} got correct answer for problem {cot_sample.id}, requesting hints...")
-                    hints_prompt = create_hints_prompt(cot_sample.question, query_result.response_text)
-                    hints_result = query_model(hints_prompt, model_config)
-                    hints_list = extract_hints_from_response(hints_result.response_text)
-                    
-                    # Check if hints already exist for this problem/model combination
-                    existing_hints_idx = None
-                    for idx, existing_hint in enumerate(hints_dataset.hints):
-                        if existing_hint.problem_id == cot_sample.id and existing_hint.model == model_name:
-                            existing_hints_idx = idx
+                    # Find or create HintsDatum for this problem
+                    hints_datum = None
+                    for datum in hints_dataset.data:
+                        if datum.id == cot_sample.id:
+                            hints_datum = datum
                             break
                     
-                    problem_hints = ProblemHints(
-                        problem_id=cot_sample.id,
-                        question=cot_sample.question,
-                        model=model_name,
-                        hints=hints_list,
-                        model_cot=query_result.response_text
-                    )
+                    if hints_datum is None:
+                        # Create new HintsDatum
+                        hints_datum = HintsDatum(
+                            id=cot_sample.id,
+                            question=cot_sample.question,
+                            hints=[]
+                        )
+                        hints_dataset.data.append(hints_datum)
                     
-                    if existing_hints_idx is not None:
-                        # Update existing hints
-                        hints_dataset.hints[existing_hints_idx] = problem_hints
-                        print(f"Updated hints for problem {cot_sample.id}")
+                    # Check if hints already exist for this model with the same prompt template
+                    current_template_hash = get_prompt_template_hash()
+                    existing_model_hints_idx = None
+                    model_exists_with_different_template = False
+                    for idx, model_hints in enumerate(hints_datum.hints):
+                        if model_hints.model == model_name:
+                            # Check if prompt template matches
+                            if model_hints.prompt_template_hash == current_template_hash:
+                                existing_model_hints_idx = idx
+                            else:
+                                model_exists_with_different_template = True
+                                existing_model_hints_idx = idx  # Store index for replacement
+                            break
+                    
+                    # Only generate hints if they don't exist with the same template
+                    if existing_model_hints_idx is None or model_exists_with_different_template:
+                        if model_exists_with_different_template:
+                            print(f"Model {model_name} got correct answer for problem {cot_sample.id}, regenerating hints (prompt template changed)...")
+                        else:
+                            print(f"Model {model_name} got correct answer for problem {cot_sample.id}, requesting hints...")
+                        hints_prompt = create_hints_prompt(cot_sample.question, query_result.response_text)
+                        hints_result = query_model(hints_prompt, model_config)
+                        hints_list = extract_hints_from_response(hints_result.response_text)
+                        
+                        model_hints = ModelHints(
+                            model=model_name,
+                            hints=hints_list,
+                            model_cot=query_result.response_text,
+                            prompt_template_hash=current_template_hash,
+                            prompt=hints_prompt
+                        )
+                        
+                        if existing_model_hints_idx is not None:
+                            # Replace hints generated with different template
+                            hints_datum.hints[existing_model_hints_idx] = model_hints
+                            print(f"Regenerated hints for problem {cot_sample.id}, model {model_name}")
+                        else:
+                            # Add new hints
+                            hints_datum.hints.append(model_hints)
+                            print(f"Added hints for problem {cot_sample.id}, model {model_name}")
+                        
+                        # Save hints immediately (will be sorted at the end)
+                        hints_dataset.save_to_file(hints_path)
+                        print(f"Saved hints to {hints_path}")
                     else:
-                        # Add new hints
-                        hints_dataset.hints.append(problem_hints)
-                        print(f"Added hints for problem {cot_sample.id}")
+                        print(f"Hints already exist for problem {cot_sample.id}, model {model_name} with same prompt template, skipping...")
                     
-                    # Save hints immediately
+                    # Save hints immediately (will be sorted at the end)
                     hints_dataset.save_to_file(hints_path)
                     print(f"Saved hints to {hints_path}")
             
@@ -198,34 +249,73 @@ def main():
         print(f"Checking for correct answers that need hints for model {model_name}...")
         for cot_sample in cot_samples:
             # Find all correct responses from this model (only process if is_correct == True)
-            for response in cot_sample.ground_truth_cot_responses:
+            for response in cot_sample.cot_responses:
                 if response.model == model_name and response.is_correct:
-                    # Check if hints already exist for this problem/model combination
-                    has_existing_hints = any(
-                        hint.problem_id == cot_sample.id and hint.model == model_name
-                        for hint in hints_dataset.hints
-                    )
+                    # Find or create HintsDatum for this problem
+                    hints_datum = None
+                    for datum in hints_dataset.data:
+                        if datum.id == cot_sample.id:
+                            hints_datum = datum
+                            break
+                    
+                    # Check if hints already exist for this model with the same prompt template
+                    current_template_hash = get_prompt_template_hash()
+                    has_existing_hints = False
+                    existing_model_hints_idx = None
+                    if hints_datum is not None:
+                        for idx, model_hints in enumerate(hints_datum.hints):
+                            if model_hints.model == model_name:
+                                # Check if prompt template matches
+                                if model_hints.prompt_template_hash == current_template_hash:
+                                    has_existing_hints = True
+                                existing_model_hints_idx = idx
+                                break
                     
                     if not has_existing_hints:
-                        print(f"Found correct answer for problem {cot_sample.id} without hints, generating hints...")
+                        if existing_model_hints_idx is not None:
+                            print(f"Found correct answer for problem {cot_sample.id} with different prompt template, regenerating hints...")
+                        else:
+                            print(f"Found correct answer for problem {cot_sample.id} without hints, generating hints...")
                         hints_prompt = create_hints_prompt(cot_sample.question, response.cot)
                         hints_result = query_model(hints_prompt, model_config)
                         hints_list = extract_hints_from_response(hints_result.response_text)
                         
-                        problem_hints = ProblemHints(
-                            problem_id=cot_sample.id,
-                            question=cot_sample.question,
+                        if hints_datum is None:
+                            # Create new HintsDatum
+                            hints_datum = HintsDatum(
+                                id=cot_sample.id,
+                                question=cot_sample.question,
+                                hints=[]
+                            )
+                            hints_dataset.data.append(hints_datum)
+                        
+                        model_hints = ModelHints(
                             model=model_name,
                             hints=hints_list,
-                            model_cot=response.cot
+                            model_cot=response.cot,
+                            prompt_template_hash=current_template_hash,
+                            prompt=hints_prompt
                         )
                         
-                        hints_dataset.hints.append(problem_hints)
-                        print(f"Added hints for problem {cot_sample.id}")
+                        if existing_model_hints_idx is not None:
+                            # Replace hints generated with different template
+                            hints_datum.hints[existing_model_hints_idx] = model_hints
+                            print(f"Regenerated hints for problem {cot_sample.id}, model {model_name} (prompt template changed)")
+                        else:
+                            # Add new hints
+                            hints_datum.hints.append(model_hints)
+                            print(f"Added hints for problem {cot_sample.id}, model {model_name}")
                         
-                        # Save hints immediately
+                        # Save hints immediately (will be sorted at the end)
                         hints_dataset.save_to_file(hints_path)
                         print(f"Saved hints to {hints_path}")
+        
+        # Sort all hints by question order at the end (matching cot_dataset order)
+        print(f"Sorting hints to match cot_dataset order...")
+        # Create a mapping from problem_id to its index in cot_dataset
+        problem_id_to_index = {datum.id: idx for idx, datum in enumerate(cot_dataset.data)}
+        hints_dataset.data.sort(key=lambda d: problem_id_to_index.get(d.id, len(cot_dataset.data)))
+        hints_dataset.save_to_file(hints_path)
         
         # Additional cleanup for local models to free GPU memory
         if model_type == ModelType.LOCAL:
@@ -236,9 +326,6 @@ def main():
             print(f"Cleaned up GPU memory after {model_name}")
 
 
-    # TODO read from file and compare outputs from different models
-    # TODO query more models for CoT and compare
-    # TODO try different hinting strategies with these CoT
     # (see aime_cot.json; not saved to github!)
 
 

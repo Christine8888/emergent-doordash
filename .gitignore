@@ -25,6 +25,7 @@ core
 wandb/*
 *.json
 !aime_cot.json
+!aime_hints.json
 
 # Christine stuff
 !christine_experiments/**/*.jsonl

@@ -4,7 +4,7 @@
       "id": "bb2069b5",
       "ground_truth_answer": "70",
       "question": "Find the sum of all integer bases $b>9$ for which $17_{b}$ is a divisor of $97_{b}$.",
-      "ground_truth_cot_responses": [
+      "cot_responses": [
         {
           "model": "o3-2025-04-16",
           "cot": "Interpret 17_b and 97_b as ordinary integers written in base b.\n\n17_b  = 1·b + 7 = b + 7  \n97_b  = 9·b + 7 = 9b + 7\n\nWe want 17_b to divide 97_b, i.e.\n\n9b + 7 = k (b + 7) for some positive integer k.\n\nSolve for b:\n\n9b + 7 = k b + 7k  \nb(9 – k) = 7(k – 1)  \nb = 7(k – 1)/(9 – k).\n\nSince b > 9 and the base is positive, we need 1 ≤ k < 9 (k = 9 makes the left side zero, impossible, and k > 9 makes the left side negative).\n\nCheck k = 1,…,8:\n\nk=1 → b = 0 (discard)  \nk=2 → b = 1 (discard)  \nk=3 → b = 7/3 (not integer)  \nk=4 → b = 21/5 (not integer)  \nk=5 → b = 7 (discard, b ≤ 9)  \nk=6 → b = 35/3 (not integer)  \nk=7 → b = 42/2 = 21 (valid)  \nk=8 → b = 49 (valid)\n\nThus the bases satisfying the condition are b = 21 and b = 49.\n\nSum of the bases: 21 + 49 = 70.",
@@ -54,21 +54,21 @@
       "id": "39011b14",
       "ground_truth_answer": "588",
       "question": "On $\\triangle ABC$ points $A,D,E$, and $B$ lie that order on side $\\overline{AB}$ with $AD=4, DE=16$, and $EB=8$. Points $A,F,G$, and $C$ lie in that order on side $\\overline{AC}$ with $AF=13, FG=52$, and $GC=26$. Let $M$ be the reflection of $D$ through $F$, and let $N$ be the reflection of $G$ through $E$. Quadrilateral $DEGF$ has area 288. Find the area of heptagon $AFNBCEM$.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "8b9031ff",
       "ground_truth_answer": "16",
       "question": "The 9 members of a baseball team went to an ice cream parlor after their game. Each player had a singlescoop cone of chocolate, vanilla, or strawberry ice cream. At least one player chose each flavor, and the number of players who chose chocolate was greater than the number of players who chose vanilla, which was greater than the number of players who chose strawberry. Let $N$ be the number of different assignments of flavors to players that meet these conditions. Find the remainder when $N$ is divided by 1000.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "0a923d23",
       "ground_truth_answer": "117",
       "question": "Find the number of ordered pairs $(x,y)$, where both $x$ and $y$ are integers between $-100$ and $100$, inclusive, such that $12x^{2}-xy-6y^{2}=0$.",
-      "ground_truth_cot_responses": [
+      "cot_responses": [
         {
           "model": "o3-2025-04-16",
           "cot": "Rewrite the given homogeneous quadratic\n\n  12x² – xy – 6y² = 0   (1)\n\nAssume (x,y) ≠ (0,0).  \nLet k = y/x (so x ≠ 0).  Substituting y = kx into (1):\n\n  12x² – kx² – 6k²x² = 0  \n  x²(12 – k – 6k²) = 0 ⟹ 6k² + k – 12 = 0.\n\nSolve 6k² + k – 12 = 0:\n\n Δ = 1 + 4·6·12 = 289 = 17²  \n k = [–1 ± 17] / 12 ⇒ k = 4/3   or   k = –3/2.\n\nHence every non-zero solution must satisfy\n y = (4/3)x      or      y = (–3/2)x.\n\n--------------------------------------------------------------------\n1.  y = (4/3)x  \n For y to be integral, x must be a multiple of 3:  x = 3k, y = 4k.\n\n Bounds: |x| ≤ 100 ⇒ |3k| ≤ 100 ⇒ |k| ≤ 33  \n     |y| ≤ 100 ⇒ |4k| ≤ 100 ⇒ |k| ≤ 25\n\n Thus |k| ≤ 25, i.e. k ∈ {-25,-24,…,24,25} → 51 ordered pairs.\n\n--------------------------------------------------------------------\n2.  y = –(3/2)x  \n Here x must be even:  x = 2k, y = –3k.\n\n Bounds: |x| ≤ 100 ⇒ |2k| ≤ 100 ⇒ |k| ≤ 50  \n     |y| ≤ 100 ⇒ |3k| ≤ 100 ⇒ |k| ≤ 33\n\n Thus |k| ≤ 33, i.e. k ∈ {-33,-32,…,32,33} → 67 ordered pairs.\n\n--------------------------------------------------------------------\n3.  The point (0,0)\n\nBoth families include k = 0, giving (x,y) = (0,0), which must be counted once.\n\n--------------------------------------------------------------------\nTotal distinct integer solutions\n\n 51 (first family) + 67 (second family) – 1 (duplicate (0,0)) = 117.\n\nTherefore, the number of ordered pairs (x,y) with −100 ≤ x,y ≤ 100 satisfying 12x² – xy – 6y² = 0 is\n\n  117",
@@ -118,119 +118,119 @@
       "id": "dd6f47bd",
       "ground_truth_answer": "279",
       "question": "There are $8!=40320$ eight-digit positive integers that use each of the digits $1,2,3,4,5,6,7,8$ exactly once. Let $N$ be the number of these integers that are divisible by 22. Find the difference between $N$ and 2025.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "64699548",
       "ground_truth_answer": "504",
       "question": "An isosceles trapezoid has an inscribed circle tangent to each of its four sides. The radius of the circle is 3, and the area of the trapezoid is 72. Let the parallel sides of the trapezoid have lengths $r$ and $s$, with $r \\neq s$. Find $r^{2}+s^{2}$.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "e0bc413f",
       "ground_truth_answer": "821",
       "question": "The twelve letters $A,B,C,D,E,F,G,H,I,J,K$, and $L$ are randomly grouped into six pairs of letters. The two letters in each pair are placed next to each other in alphabetical order to form six two-letter words, and those six words are listed alphabetically. For example, a possible result is $AB,CJ,DG,EK,FL,HI$. The probability that the last word listed contains $G$ is $\\frac{m}{n}$, where $m$ and $n$ are relatively prime positive integers. Find $m+n$.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "4bf74c44",
       "ground_truth_answer": "77",
       "question": "Let $k$ be real numbers such that the system $|25+20i-z|=5$ and $|z-4-k|=|z-3i-k|$ has exactly one complex solution $z$. The sum of all possible values of $k$ can be written as $\\frac{m}{n}$, where $m$ and $n$ are relatively prime positive integers. Find $m+n$. Here $i=\\sqrt{-1}$.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "879a829f",
       "ground_truth_answer": "62",
       "question": "The parabola with equation $y=x^{2}-4$ is rotated $60^{\\circ}$ counterclockwise around the origin. The unique point in the fourth quadrant where the original parabola and its image intersect has $y$-coordinate $\\frac{a-\\sqrt{b}}{c}$, where $a$, $b$, and $c$ are positive integers, and $a$ and $c$ are relatively prime. Find $a+b+c$.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "2440f4df",
       "ground_truth_answer": "81",
       "question": "The 27 cells of a $3\\times9$ grid are filled in using the numbers 1 through 9 so that each row contains 9 different numbers, and each of the three $3\\times3$ blocks heavily outlined in the example below contains 9 different numbers, as in the first three rows of a Sudoku puzzle. \n | 4 | 2 | 8 | 9 | 6 | 3 | 1 | 7 | 5 | \n | 3 | 7 | 9 | 5 | 2 | 1 | 6 | 8 | 4 | \n | 5 | 6 | 1 | 8 | 4 | 7 | 9 | 2 | 3 | \n The number of different ways to fill such a grid can be written as $p^a\\cdot q^b\\cdot r^c\\cdot s^d$, where $p,q,r,$ and $s$ are distinct prime numbers and $a,b,c,$ and $d$ are positive integers. Find $p\\cdot a+q\\cdot b+r\\cdot c+s\\cdot d$.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "2cafb7aa",
       "ground_truth_answer": "259",
       "question": "A piecewise linear periodic function is defined by $f(x)=\\begin{cases}x&\\text{if }x\\in[-1,1)\\\\2-x&\\text{if }x\\in[1,3)\\end{cases}$ and $f(x+4)=f(x)$ for all real numbers $x$. The graph of $f(x)$ has the sawtooth pattern. The parabola $x=34y^2$ intersects the graph of $f(x)$ at finitely many points. The sum of the $y$-coordinates of these intersection points can be expressed in the form $\\frac{a+b\\sqrt{c}}{d}$, where $a,b,c,$ and $d$ are positive integers, $a,b,$ and $d$ have greatest common divisor equal to 1, and $c$ is not divisible by the square of any prime. Find $a+b+c+d$.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "2dcfb794",
       "ground_truth_answer": "510",
       "question": "The set of points in 3-dimensional coordinate space that lie in the plane $x+y+z=75$ whose coordinates satisfy the inequalities $x-yz<y-zx<z-xy$ forms three disjoint convex regions. Exactly one of those regions has finite area. The area of this finite region can be expressed in the form $a\\sqrt{b}$, where $a$ and $b$ are positive integers and $b$ is not divisible by the square of any prime. Find $a+b$.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "563e96c6",
       "ground_truth_answer": "204",
       "question": "Alex divides a disk into four quadrants with two perpendicular diameters intersecting at the center of the disk. He draws 25 more line segments through the disk, drawing each segment by selecting two points at random on the perimeter of the disk in different quadrants and connecting those two points. Find the expected number of regions into which these 27 line segments divide the disk.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "fb63d729",
       "ground_truth_answer": "60",
       "question": "Let $ABCDE$ be a convex pentagon with $AB=14, BC=7, CD=24, DE=13, EA=26,$ and $\\angle B=\\angle E=60^\\circ$. For each point $X$ in the plane, define $f(X)=AX+BX+CX+DX+EX$. The least possible value of $f(X)$ can be expressed as $m+n\\sqrt{p}$, where $m$ and $n$ are positive integers and $p$ is not divisible by the square of any prime. Find $m+n+p$.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "8e3ffd15",
       "ground_truth_answer": "735",
       "question": "Let $N$ denote the number of ordered triples of positive integers $(a,b,c)$ such that $a,b,c\\leq3^6$ and $a^3+b^3+c^3$ is a multiple of $3^7$. Find the remainder when $N$ is divided by $1000$.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "1c2be7a3",
       "ground_truth_answer": "468",
       "question": "Six points $ A, B, C, D, E, $ and $ F $ lie in a straight line in that order. Suppose that $ G $ is a point not on the line and that $ AC = 26 $, $ BD = 22 $, $ CE = 31 $, $ DF = 33 $, $ AF = 73 $, $ CG = 40 $, and $ DG = 30 $. Find the area of $ \\triangle BGE $.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "7a8d1491",
       "ground_truth_answer": "49",
       "question": "Find the sum of all positive integers $ n $ such that $ n + 2 $ divides the product $ 3(n + 3)(n^2 + 9) $.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "7d377f82",
       "ground_truth_answer": "82",
       "question": "Four unit squares form a $2 \\times 2$ grid. Each of the 12 unit line segments forming the sides of the squares is colored either red or blue in such a way that each unit square has 2 red sides and 2 blue sides. Find the number of such colorings.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "3f3f9f8a",
       "ground_truth_answer": "106",
       "question": "The product $ \\prod_{k=4}^{63} \\frac{\\log_k(5^{k^2-1})}{\\log_{k+1}(5^{k^2-4})} = \\frac{\\log_4(5^{15})}{\\log_5(5^{12})} \\cdot \\frac{\\log_5(5^{24})}{\\log_6(5^{21})} \\cdot \\frac{\\log_6(5^{35})}{\\log_7(5^{32})} \\cdots \\frac{\\log_{63}(5^{3968})}{\\log_{64}(5^{3965})} $ is equal to $ \\frac{m}{n} $, where $ m $ and $ n $ are relatively prime positive integers. Find $ m + n $.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "263ce40a",
       "ground_truth_answer": "336",
       "question": "Suppose $ \\triangle ABC $ has angles $ \\angle BAC = 84^\\circ $, $ \\angle ABC = 60^\\circ $, and $ \\angle ACB = 36^\\circ $. Let $ D, E, $ and $ F $ be the midpoints of sides $ \\overline{BC} $, $ \\overline{AC} $, and $ \\overline{AB} $, respectively. The circumcircle of $ \\triangle DEF $ intersects $ \\overline{BD} $, $ \\overline{AE} $, and $ \\overline{AF} $ at points $ G, H, $ and $ J $, respectively. The points $ G, D, E, H, J, $ and $ F $ divide the circumcircle of $ \\triangle DEF $ into six minor arcs, as shown. Find $ \\widehat{DE} + 2 \\cdot \\widehat{HJ} + 3 \\cdot \\widehat{FG} $, where the arcs are measured in degrees.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "929d8ad6",
       "ground_truth_answer": "293",
       "question": "Circle $\\omega_1$ with radius 6 centered at point $A$ is internally tangent at point $B$ to circle $\\omega_2$ with radius 15. Points $C$ and $D$ lie on $\\omega_2$ such that $\\overline{BC}$ is a diameter of $\\omega_2$ and $\\overline{BC} \\perp \\overline{AD}$. The rectangle $EFGH$ is inscribed in $\\omega_1$ such that $\\overline{EF} \\perp \\overline{BC}$, $C$ is closer to $\\overline{GH}$ than to $\\overline{EF}$, and $D$ is closer to $\\overline{FG}$ than to $\\overline{EH}$, as shown. Triangles $\\triangle DGF$ and $\\triangle CHG$ have equal areas. The area of rectangle $EFGH$ is $\\frac{m}{n}$, where $m$ and $n$ are relatively prime positive integers. Find $m + n$.",
-      "ground_truth_cot_responses": [
+      "cot_responses": [
         {
           "model": "o3-2025-04-16",
           "cot": "Set up a coordinate system with the centre \\(O\\) of the larger circle \\(\\omega_2\\) at \\((0,0)\\).\n • Radius of \\(\\omega_2\\): \\(15\\).  \n • Let the diameter \\(BC\\) lie on the \\(x\\)-axis with  \n  \\(B=(-15,0),\\; C=(15,0)\\).\n\nThe smaller circle \\(\\omega_1\\) (radius \\(6\\)) is internally tangent to \\(\\omega_2\\) at \\(B\\), so its centre is  \n\\(A=(-9,0)\\) (because \\(OA=15-6=9\\)).\n\nBecause \\(BC\\perp AD\\), the line \\(AD\\) is the vertical line \\(x=-9\\).\nIntersecting this with \\(\\omega_2: x^{2}+y^{2}=225\\) gives\n\\(D=(-9,\\pm12)\\).  \nChoose \\(D=(-9,12)\\); the other choice merely reflects the whole picture.\n\n------------------------------------------------------------\n1.  Describing the rectangle \\(EFGH\\)\n\nThe rectangle is inscribed in \\(\\omega_1\\) and has its sides parallel/perpendicular to \\(BC\\).  \nLet the half-width and half-height of the rectangle be \\(a\\) and \\(b\\) respectively.  \nBecause the rectangle is centred at \\(A(-9,0)\\),\n\n F \\((-9-a,\\; b)\\), G \\((-9+a,\\; b)\\), H \\((-9+a,\\;-b)\\), E \\((-9-a,\\;-b)\\).\n\nSince the rectangle’s vertices lie on \\(\\omega_1\\),\n\n  \\(a^{2}+b^{2}=6^{2}=36. \\tag{1}\\)\n\nThe given “closer” conditions are automatically fulfilled with this labelling.\n\n------------------------------------------------------------\n2.  Equal–area condition for the two triangles\n\nArea of \\(\\triangle DGF\\):\n\n Vectors \\(\\overrightarrow{DG}=(a,\\; b-12),\\;\\overrightarrow{DF}=(-a,\\; b-12)\\)\n\n Double area \\(=\\left|\\begin{vmatrix} a & b-12\\\\ -a & b-12\\end{vmatrix}\\right|\n=2a(12-b)\\);\n\n so \\(\\text{Area}(DGF)=a(12-b).\\)\n\nArea of \\(\\triangle CHG\\):\n\n Vectors \\(\\overrightarrow{CH}=(-24+a,\\;-b),\\;\\overrightarrow{CG}=(-24+a,\\; b)\\)\n\n Double area \\(=\\left|\\begin{vmatrix}-24+a & -b\\\\ -24+a & b\\end{vmatrix}\\right|\n=2b(24-a)\\);\n\n so \\(\\text{Area}(CHG)=b(24-a).\\)\n\nGiven these two areas are equal,\n\n  \\(a(12-b)=b(24-a).\\)\n\nSimplifying: \\(12a=24b\\;\\Longrightarrow\\; a=2b. \\tag{2}\\)\n\n------------------------------------------------------------\n3.  Solving for \\(a\\) and \\(b\\)\n\nInsert (2) into (1):\n\n\\((2b)^{2}+b^{2}=36 \\;\\Longrightarrow\\; 4b^{2}+b^{2}=36 \\;\\Longrightarrow\\;\n5b^{2}=36 \\;\\Longrightarrow\\; b=\\dfrac{6}{\\sqrt5},\\;\na=2b=\\dfrac{12}{\\sqrt5}.\\)\n\n------------------------------------------------------------\n4.  Area of rectangle \\(EFGH\\)\n\n\\(\\text{Area}= (2a)(2b)=4ab=4\\!\\left(\\dfrac{12}{\\sqrt5}\\right)\\!\\left(\\dfrac{6}{\\sqrt5}\\right)\n= \\dfrac{288}{5}.\\)\n\n------------------------------------------------------------\n5.  Final answer\n\n\\(\\displaystyle \\frac{m}{n}=\\frac{288}{5},\\quad m+n=288+5=293.\\)\n\nHence, the answer is 293.",
@@ -280,21 +280,21 @@
       "id": "70752f79",
       "ground_truth_answer": "237",
       "question": "Let $ A $ be the set of positive integer divisors of 2025. Let $ B $ be a randomly selected subset of $ A $. The probability that $ B $ is a nonempty set with the property that the least common multiple of its elements is 2025 is $ \\frac{m}{n} $, where $ m $ and $ n $ are relatively prime positive integers. Find $ m + n $.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "6ab40343",
       "ground_truth_answer": "610",
       "question": "From an unlimited supply of 1-cent coins, 10-cent coins, and 25-cent coins, Silas wants to find a collection of coins that has a total value of $ N $ cents, where $ N $ is a positive integer. He uses the so-called **greedy algorithm**, successively choosing the coin of greatest value that does not cause the value of his collection to exceed $ N $. For example, to get 42 cents, Silas will choose a 25-cent coin, then a 10-cent coin, then 7 1-cent coins. However, this collection of 9 coins uses more coins than necessary to get a total of 42 cents; indeed, choosing 4 10-cent coins and 2 1-cent coins achieves the same total value with only 6 coins.\n\nIn general, the greedy algorithm succeeds for a given $ N $ if no other collection of 1-cent, 10-cent, and 25-cent coins gives a total value of $ N $ cents using strictly fewer coins than the collection given by the greedy algorithm. Find the number of values of $ N $ between 1 and 1000 inclusive for which the greedy algorithm succeeds.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "8c0869b3",
       "ground_truth_answer": "149",
       "question": "There are $ n $ values of $ x $ in the interval $ 0 < x < 2\\pi $ where $ f(x) = \\sin(7\\pi \\cdot \\sin(5x)) = 0 $. For $ t $ of these $ n $ values of $ x $, the graph of $ y = f(x) $ is tangent to the $ x $-axis. Find $ n + t $.",
-      "ground_truth_cot_responses": [
+      "cot_responses": [
         {
           "model": "o3-2025-04-16",
           "cot": "Let  \n\n f(x)=sin(7π sin 5x),  0<x<2π.\n\n1.  Where is f(x)=0 ?\n\nf(x)=0 ⇔ 7π sin 5x = kπ, k∈ℤ  \n     ⇔ sin 5x = k/7,  k=−7,−6,…,7.\n\nPut y=5x.  \nThe interval 0<x<2π becomes 0<y<10π ( five complete periods of sin y ).\n\nFor each k let Nk be the number of y in (0,10π) with sin y = k/7.\n\n•  k=±7  ( sin y = ±1 )  \n sin y reaches ±1 once in every 2π–interval, so Nk=5.\n\n•  k=0  ( sin y = 0 )  \n sin y =0 at y = nπ.  \n With 0<y<10π we have n =1,2,…,9 ⇒ N0 =9.\n\n•  k=±1,±2,…,±6  ( |k|≤6, k≠0 )  \n For any fixed value strictly between −1 and 1, sin y = constant has two solutions in every 2π–interval, hence Nk =2·5 =10.\n\nTotal number of zeros  \n n = 2·5 (for k=±7) + 9 (for k=0) + 12·10 (for the other 12 k’s)  \n   =10 +9 +120 = 139.\n\n2.  When is the graph tangent to the x-axis ?\n\nTangent at a zero means f(x)=0 and f′(x)=0.\n\nf′(x)=35π cos(7π sin 5x)·cos 5x.\n\nAt a zero we have sin 5x = k/7, so cos(7π sin 5x)=cos(kπ)= (−1)^k.  \nHence\n\n f′(x)=0 ⇔ cos 5x=0.\n\nBut cos 5x=0 ⇒ 5x = π/2 + mπ, i.e.  \n x = π/10 + mπ/5  (m integer).\n\nFor these x we have sin 5x = sin(π/2 + mπ) = (−1)^m = ±1, which corresponds precisely to k = ±7.  \nThus every zero with k=±7 is a tangency, and no others are.\n\nThere are 5 such x for sin 5x = 1 and 5 for sin 5x = −1, altogether\n\n t = 10.\n\n3.  Answer\n\n n + t = 139 + 10 = 149.",
@@ -344,42 +344,42 @@
       "id": "edc6b366",
       "ground_truth_answer": "907",
       "question": "Sixteen chairs are arranged in a row. Eight people each select a chair in which to sit so that no person sits next to two other people. Let $ N $ be the number of subsets of 16 chairs that could be selected. Find the remainder when $ N $ is divided by 1000.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "21c27eb0",
       "ground_truth_answer": "113",
       "question": "Let $ S $ be the set of vertices of a regular 24-gon. Find the number of ways to draw 12 segments of equal lengths so that each vertex in $ S $ is an endpoint of exactly one of the 12 segments.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "7392bd4d",
       "ground_truth_answer": "19",
       "question": "Let $ A_1A_2 \\ldots A_{11} $ be an 11-sided non-convex simple polygon with the following properties:\n* The area of $ A_iA_1A_{i+1} $ is 1 for each $ 2 \\leq i \\leq 10 $,\n* $ \\cos(\\angle A_iA_1A_{i+1}) = \\frac{12}{13} $ for each $ 2 \\leq i \\leq 10 $,\n* The perimeter of $ A_1A_2 \\ldots A_{11} $ is 20.\nIf $ A_1A_2 + A_1A_{11} $ can be expressed as $ \\frac{m\\sqrt{n} - p}{q} $ for positive integers $ m, n, p, q $ with $ n $ squarefree and no prime divides all of $ m, p, q$, find $ m + n + p + q $.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "317c5e63",
       "ground_truth_answer": "248",
       "question": "Let the sequence of rationals $ x_1, x_2, \\ldots $ be defined such that $ x_1 = \\frac{25}{11} $ and\n$ x_{k+1} = \\frac{1}{3} \\left( x_k + \\frac{1}{x_k} - 1 \\right). $\n$ x_{2025} $ can be expressed as $ \\frac{m}{n} $ for relatively prime positive integers $ m $ and $ n $. Find the remainder when $ m + n $ is divided by 1000.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "9b0ee9d0",
       "ground_truth_answer": "104",
       "question": "Let $ \\triangle ABC $ be a right triangle with $ \\angle A = 90^\\circ $ and $ BC = 38 $. There exist points $ K $ and $ L $ inside the triangle such that $ AK = AL = BK = CL = KL = 14. $ The area of the quadrilateral $ BKLC $ can be expressed as $ n \\sqrt{3} $ for some positive integer $ n $. Find $ n $.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     },
     {
       "id": "14049ee8",
       "ground_truth_answer": "240",
       "question": "There are exactly three positive real numbers $ k $ such that the function\n$ f(x) = \\frac{(x - 18)(x - 72)(x - 98)(x - k)}{x} $\ndefined over the positive real numbers achieves its minimum value at exactly two positive real numbers $ x $. Find the sum of these three values of $ k $.",
-      "ground_truth_cot_responses": [],
+      "cot_responses": [],
       "sampled_answers": []
     }
   ]
