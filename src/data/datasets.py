@@ -1,7 +1,7 @@
 import hashlib
 import re
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from datasets import load_dataset
 from pydantic import BaseModel, Field
@@ -26,6 +26,18 @@ class ModelAnswer(SavableBaseModel):
     extracted_answer: str
     is_correct: bool
     prompt: Optional[str] = None
+
+
+class ProblemHints(SavableBaseModel):
+    problem_id: str
+    question: str
+    model: str
+    hints: List[str]
+    model_cot: str  # The original CoT that was correct
+
+
+class HintsDataset(SavableBaseModel):
+    hints: List[ProblemHints] = []
 
 class Datum(SavableBaseModel):
     id: str
