@@ -1,8 +1,10 @@
 import random  # Import random for jitter calculation
 import threading
 import time
+import gc
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, cast
+from typing import List, Optional, cast
+from enum import Enum
 
 import anthropic
 import openai
@@ -11,6 +13,30 @@ from google import genai
 from google.genai import types
 import dotenv
 from dataclasses import dataclass
+import torch
+from vllm import LLM, SamplingParams
+
+class ModelType(Enum):
+    GEMINI = "gemini"
+    LOCAL = "local"
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+
+
+@dataclass
+class ModelConfig:
+    model_name: str
+    model_type: ModelType
+    dtype: str = "bfloat16"
+    temperature: float = 1.0
+    max_tokens: Optional[int] = 8000
+    chat: bool = False
+    system_prompt: str = "You are a helpful assistant."
+    gen_batch_size: int = 128
+    # ^ This is used in server based generation. It is attached to the model config because different
+    # models have different generation speeds (due to CoT lenght) so this seems like the right place to put it
+    use_system_prompt: bool = False
+
 
 @dataclass
 class QueryResult:
@@ -211,6 +237,128 @@ def single_query_anthropic(prompt: str, model: str) -> QueryResult:
     return parse_anthropic_response(final_message, model)
 
 
+def query_model_local(prompt: str, model_config: ModelConfig) -> QueryResult:
+    """Query a local model using vLLM.
+    
+    Args:
+        prompt: The prompt to send to the model
+        model_config: ModelConfig with model configuration
+    
+    Returns:
+        QueryResult with the model's response
+    """
+    results = query_model_local_batch([prompt], model_config)
+    return results[0]
+
+
+def query_model_local_batch(prompts: List[str], model_config: ModelConfig) -> List[QueryResult]:
+    """Query a local model using vLLM with batching.
+    
+    Args:
+        prompts: List of prompts to send to the model
+        model_config: ModelConfig with model configuration
+    
+    Returns:
+        List of QueryResult with the model's responses
+    """
+    if DEBUG_QUERIES:
+        print(f"[LOCAL] model={model_config.model_name}")
+        print(f"[LOCAL] batch_size={len(prompts)}")
+    
+    start_time = time.time()
+    
+    # Set up vLLM kwargs
+    vllm_kwargs = {}
+    if "gemma-2" in model_config.model_name:
+        vllm_kwargs["enforce_eager"] = True
+    
+    # Adjust memory utilization for large models
+    gpu_memory_utilization = 0.9
+    if "DeepSeek-V3.1" in model_config.model_name:
+        # Lower memory utilization for DeepSeek-V3.1 to avoid OOM
+        gpu_memory_utilization = 0.7
+    
+    # Load model
+    vllm_model = LLM(
+        model=model_config.model_name,
+        dtype=model_config.dtype,
+        gpu_memory_utilization=gpu_memory_utilization,
+        trust_remote_code=True,
+        **vllm_kwargs,
+    )
+    
+    # Set up sampling parameters
+    if model_config.max_tokens is not None:
+        sampling_params = SamplingParams(
+            temperature=model_config.temperature,
+            max_tokens=model_config.max_tokens,
+        )
+    else:
+        sampling_params = SamplingParams(
+            temperature=model_config.temperature,
+        )
+    
+    # Generate responses
+    if model_config.chat:
+        if model_config.use_system_prompt:
+            conversations = [
+                [
+                    {"role": "system", "content": model_config.system_prompt},
+                    {"role": "user", "content": prompt},
+                ]
+                for prompt in prompts
+            ]
+        else:
+            conversations = [[{"role": "user", "content": prompt}] for prompt in prompts]
+        results = vllm_model.chat(conversations, sampling_params=sampling_params)
+    else:
+        results = vllm_model.generate(prompts, sampling_params=sampling_params)
+    
+    # Extract results
+    query_results = []
+    for result in results:
+        input_token_count = len(result.prompt_token_ids)
+        output_token_count = len(result.outputs[0].token_ids)
+        response_text = result.outputs[0].text
+        
+        query_results.append(QueryResult(
+            response_text=response_text,
+            input_token_count=input_token_count,
+            output_token_count=output_token_count,
+            is_error=False,
+            cost=0.0,  # Local models have no cost
+        ))
+    
+    elapsed_ms = (time.time() - start_time) * 1000.0
+    if DEBUG_QUERIES:
+        print(f"[LOCAL] latency_ms={elapsed_ms:.0f}, avg_per_item_ms={elapsed_ms/len(prompts):.0f}")
+    
+    # Properly clean up vLLM model and GPU memory
+    del vllm_model
+    gc.collect()
+    torch.cuda.empty_cache()
+    torch.cuda.synchronize()
+    
+    return query_results
+
+
+def query_model(prompt: str, model_config: ModelConfig) -> QueryResult:
+    """General query function that routes to the appropriate query method based on model type.
+    
+    Args:
+        prompt: The prompt to send to the model
+        model_config: ModelConfig with model configuration
+    
+    Returns:
+        QueryResult with the model's response
+    """
+    if model_config.model_type == ModelType.LOCAL:
+        return query_model_local(prompt, model_config)
+    else:
+        # For API models (GEMINI, OPENAI, ANTHROPIC), use the API query function
+        return query_model_api(prompt, model_config.model_name)
+
+
 def query_model_api(prompt: str, model: str) -> QueryResult:
     max_retries = 5
     base_delay = 5.0
@@ -247,56 +395,53 @@ def query_model_api(prompt: str, model: str) -> QueryResult:
     raise ValueError("You should never get here.")
 
 
-def query_model_batch_api(
-    prompts: List[str],
-    model: str,
-    num_workers: int = 16,
-) -> List[QueryResult]:
-    export()
-    # Initialize results list with placeholders
-    results: List[QueryResult | None] = [None] * len(prompts)
-    lock = threading.Lock()  # Lock for thread-safe updates (might not be strictly needed now but good practice)
+def query_model_batch(prompts: List[str], model_config: ModelConfig) -> List[QueryResult]:
+    """Batch query function that routes to the appropriate batch query method based on model type.
+    
+    Args:
+        prompts: List of prompts to send to the model
+        model_config: ModelConfig with model configuration
+    
+    Returns:
+        List of QueryResult with the model's responses
+    """
+    if model_config.model_type == ModelType.LOCAL:
+        return query_model_local_batch(prompts, model_config)
+    else:
+        # For API models, use concurrent requests
+        return query_model_api_batch(prompts, model_config.model_name)
 
-    # Use ThreadPoolExecutor for parallel processing
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        # Submit tasks, storing future and original index
-        futures = {executor.submit(query_model_api, prompt, model): index for index, prompt in enumerate(prompts)}
 
-        # Process results as they complete, using tqdm for progress
-        for future in tqdm.tqdm(as_completed(futures), total=len(prompts), desc="Processing samples"):
-            original_index = futures[future]
-            original_prompt = prompts[original_index]  # Get original prompt for error message if needed
-            try:
-                result = future.result()
-                if result:
-                    # Place result in the correct position
-                    with lock:
-                        results[original_index] = result
-                else:
-                    # Handle case where query_model returned None (max retries reached)
-                    error_result = QueryResult(
-                        response_text=f'Error: Max retries reached for prompt starting with "{original_prompt[:50]}..."',
-                        input_token_count=0,
-                        output_token_count=0,
-                        is_error=True,
-                    )
-                    with lock:
-                        results[original_index] = error_result
-
-            except Exception as exc:
-                # Print part of the prompt string to identify it
-                print(f'Prompt starting with "{original_prompt[:50]}..." generated an exception: {exc}')
-
-                # Create a dictionary to store the error result
-                error_result = QueryResult(
-                    response_text=f"Error: {exc}",
-                    input_token_count=0,  # Indicate no successful API call
-                    output_token_count=0,  # Indicate no successful API call
-                    is_error=True,
-                )
-                # Place error result in the correct position
-                results[original_index] = error_result
-
-    assert all(x is not None for x in results)
-
-    return cast(List[QueryResult], results)
+def query_model_api_batch(prompts: List[str], model: str) -> List[QueryResult]:
+    """Batch query API models using concurrent requests.
+    
+    Args:
+        prompts: List of prompts to send to the model
+        model: Model name
+    
+    Returns:
+        List of QueryResult with the model's responses
+    """
+    if DEBUG_QUERIES:
+        print(f"[API] model={model}, batch_size={len(prompts)}")
+    
+    results = []
+    with ThreadPoolExecutor(max_workers=min(len(prompts), 10)) as executor:
+        # Submit all queries
+        future_to_prompt = {
+            executor.submit(query_model_api, prompt, model): prompt 
+            for prompt in prompts
+        }
+        
+        # Collect results in order
+        prompt_to_result = {}
+        for future in as_completed(future_to_prompt):
+            prompt = future_to_prompt[future]
+            result = future.result()
+            prompt_to_result[prompt] = result
+        
+        # Return results in the same order as prompts
+        for prompt in prompts:
+            results.append(prompt_to_result[prompt])
+    
+    return results
