@@ -304,7 +304,14 @@ def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
 
 def plot_results_by_model_size(results: Dict, models: List[str], hints: List[float],
                                title: str = "Accuracy vs Model Size",
-                               figsize: Tuple[int, int] = (12, 7)):
+                               figsize: Tuple[int, int] = (12, 7),
+                               fit_sigmoid: bool = False,
+                               fit_scaling: bool = False,
+                               fit_models = None,
+                               fit_joint: bool = False,
+                               include_cross: bool = True,
+                               exclude_hint = None,
+                               transform_hint: bool = False):
     """Plot results with model size on x-axis and hints as different colors.
 
     Args:
@@ -313,20 +320,132 @@ def plot_results_by_model_size(results: Dict, models: List[str], hints: List[flo
         hints: List of hint fractions
         title: Plot title
         figsize: Figure size
+        fit_sigmoid: If True, fit sigmoid curves to the data
+        fit_scaling: If True, fit y = h*σ(m*log(x) + b), else y = σ(m*log(x) + b)
+        fit_models: Models to use for fitting. Can be:
+            - None: use all models (default)
+            - int: use first N models (sorted by size)
+            - List[str]: use specific model names
+        fit_joint: If True, fit joint model
+        include_cross: If True, fit σ(α*C + β*H + γ*C*H + δ), else σ(α*C + β*H + δ)
+            where C is log(model_size) and H is hint variable
+        exclude_hint: Hint fraction(s) to exclude from joint fit. Can be:
+            - None: include all hints (default)
+            - float: exclude single hint value (e.g., 0)
+            - List[float]: exclude multiple hint values (e.g., [0, 0.1])
+        transform_hint: If True, use H = 1/(1-hint) instead of H = hint
     """
+    from scipy.optimize import curve_fit
+
+    def hint_transform(hint_val):
+        """Transform hint fraction if transform_hint is True."""
+        if transform_hint:
+            return np.log(1 / (1 - hint_val))
+        else:
+            return hint_val
+
+    def sigmoid(x, m, b):
+        return 1 / (1 + np.exp(-(m * np.log(x) + b)))
+
+    def scaled_sigmoid(x, h, m, b):
+        return h / (1 + np.exp(-(m * np.log(x) + b)))
+
+    def joint_sigmoid_with_cross(CH, alpha, beta, gamma, delta):
+        """Joint sigmoid model: σ(α*C + β*H + γ*C*H + δ)
+        where C is log(model_size) and H is hint_fraction
+        CH is a 2xN array where CH[0] = C and CH[1] = H
+        """
+        C, H = CH
+        z = alpha * C + beta * H + gamma * C * H + delta
+        return 1 / (1 + np.exp(-z))
+
+    def joint_sigmoid_no_cross(CH, alpha, beta, delta):
+        """Joint sigmoid model: σ(α*C + β*H + δ)
+        where C is log(model_size) and H is hint_fraction
+        CH is a 2xN array where CH[0] = C and CH[1] = H
+        """
+        C, H = CH
+        z = alpha * C + beta * H + delta
+        return 1 / (1 + np.exp(-z))
+
     fig, ax = plt.subplots(figsize=figsize)
 
     model_sizes = [(model, extract_model_size(model)) for model in models]
     model_sizes.sort(key=lambda x: x[1])
 
+    # Determine which models to use for fitting
+    if fit_models is None:
+        fit_model_names = set(models)
+    elif isinstance(fit_models, int):
+        fit_model_names = set([model for model, _ in model_sizes[:fit_models]])
+    else:
+        fit_model_names = set(fit_models)
+
     cmap = plt.cm.viridis
     colors = [cmap(i / (len(hints) - 1)) if len(hints) > 1 else cmap(0.5)
               for i in range(len(hints))]
+
+    # Fit joint model if requested
+    joint_params = None
+    if fit_joint:
+        C_all = []
+        H_all = []
+        y_all = []
+
+        # Convert exclude_hint to a set for easy checking
+        if exclude_hint is None:
+            exclude_set = set()
+        elif isinstance(exclude_hint, (list, tuple)):
+            exclude_set = set(exclude_hint)
+        else:
+            exclude_set = {exclude_hint}
+
+        for hint in hints:
+            if hint in exclude_set:
+                continue
+            for model, size in model_sizes:
+                accuracy, stderr = results[model][hint]
+                if accuracy is not None and model in fit_model_names:
+                    C_all.append(np.log(size))
+                    H_all.append(hint_transform(hint))
+                    y_all.append(accuracy)
+
+        min_points = 4 if include_cross else 3
+        if len(C_all) >= min_points:
+            try:
+                CH = np.array([C_all, H_all])
+                y_arr = np.array(y_all)
+
+                if include_cross:
+                    joint_params, _ = curve_fit(joint_sigmoid_with_cross, CH, y_arr,
+                                               p0=[1, 1, 0, 0],
+                                               maxfev=10000)
+                    alpha, beta, gamma, delta = joint_params
+                    y_pred = joint_sigmoid_with_cross(CH, *joint_params)
+                    print(f"Joint fit: α={alpha:.3f}, β={beta:.3f}, γ={gamma:.3f}, δ={delta:.3f}")
+                else:
+                    joint_params, _ = curve_fit(joint_sigmoid_no_cross, CH, y_arr,
+                                               p0=[1, 1, 0],
+                                               maxfev=10000)
+                    alpha, beta, delta = joint_params
+                    y_pred = joint_sigmoid_no_cross(CH, *joint_params)
+                    print(f"Joint fit: α={alpha:.3f}, β={beta:.3f}, δ={delta:.3f}")
+
+                # Calculate average RMS error
+                rms = np.sqrt(np.mean((y_arr - y_pred) ** 2))
+                print(f"Average RMS error = {rms:.4f}")
+            except Exception as e:
+                print(f"Warning: Failed to fit joint model: {e}")
+                joint_params = None
+
+    hint_params = {}
 
     for hint_idx, hint in enumerate(hints):
         x_vals = []
         y_vals = []
         y_errs = []
+        x_vals_fit = []
+        y_vals_fit = []
 
         for model, size in model_sizes:
             accuracy, stderr = results[model][hint]
@@ -334,6 +453,10 @@ def plot_results_by_model_size(results: Dict, models: List[str], hints: List[flo
                 x_vals.append(size)
                 y_vals.append(accuracy)
                 y_errs.append(stderr if stderr is not None else 0)
+
+                if model in fit_model_names:
+                    x_vals_fit.append(size)
+                    y_vals_fit.append(accuracy)
 
         if not x_vals:
             continue
@@ -344,7 +467,132 @@ def plot_results_by_model_size(results: Dict, models: List[str], hints: List[flo
                    marker='o', markersize=8, capsize=4,
                    linewidth=2, alpha=0.8, label=f"{hint}")
 
-    ax.legend(loc='lower right', title='hint fraction', framealpha=0.9)
+        # Fit sigmoid and plot curve
+        min_points_needed = 3 if fit_scaling else 2
+        if fit_sigmoid and len(x_vals_fit) >= min_points_needed:
+            try:
+                x_arr = np.array(x_vals_fit)
+                y_arr = np.array(y_vals_fit)
+
+                if fit_scaling:
+                    params, _ = curve_fit(scaled_sigmoid, x_arr, y_arr,
+                                         p0=[np.max(y_arr), 1, 0],
+                                         bounds=([0, -np.inf, -np.inf], [1, np.inf, np.inf]),
+                                         maxfev=10000)
+                    h_fit, m_fit, b_fit = params
+                    hint_params[hint] = (h_fit, m_fit, b_fit)
+
+                    x_smooth = np.logspace(np.log10(min(x_vals)),
+                                          np.log10(max(x_vals)), 100)
+                    y_smooth = scaled_sigmoid(x_smooth, *params)
+                else:
+                    params, _ = curve_fit(sigmoid, x_arr, y_arr, p0=[1, 0],
+                                         maxfev=10000)
+                    m_fit, b_fit = params
+                    hint_params[hint] = (m_fit, b_fit)
+
+                    x_smooth = np.logspace(np.log10(min(x_vals)),
+                                          np.log10(max(x_vals)), 100)
+                    y_smooth = sigmoid(x_smooth, *params)
+
+                ax.plot(x_smooth, y_smooth, color=color,
+                       linestyle='-', linewidth=2, alpha=0.6)
+            except Exception as e:
+                print(f"Warning: Failed to fit sigmoid for hint={hint}: {e}")
+
+        # Plot predicted sigmoid from joint model
+        if fit_joint and joint_params is not None:
+            try:
+                x_smooth = np.logspace(np.log10(min(x_vals)),
+                                      np.log10(max(x_vals)), 100)
+                C_smooth = np.log(x_smooth)
+                H_smooth = np.full_like(C_smooth, hint_transform(hint))
+                CH_smooth = np.array([C_smooth, H_smooth])
+
+                if include_cross:
+                    y_predicted = joint_sigmoid_with_cross(CH_smooth, *joint_params)
+                else:
+                    y_predicted = joint_sigmoid_no_cross(CH_smooth, *joint_params)
+
+                ax.plot(x_smooth, y_predicted, color=color,
+                       linestyle='--', linewidth=2, alpha=0.6)
+            except Exception as e:
+                print(f"Warning: Failed to plot joint prediction for hint={hint}: {e}")
+
+    # Create legend
+    from matplotlib.lines import Line2D
+
+    if fit_sigmoid and hint_params:
+        hint_handles = []
+        hint_labels = []
+
+        for hint_idx, hint in enumerate(hints):
+            color = colors[hint_idx]
+
+            # Create base label with transformed value if applicable
+            if transform_hint:
+                base_label = f"{hint} (H'={hint_transform(hint):.2f})"
+            else:
+                base_label = f"{hint}"
+
+            if hint in hint_params:
+                if fit_scaling:
+                    h_fit, m_fit, b_fit = hint_params[hint]
+                    equation = f"{h_fit:.3f}·σ({m_fit:.2f}·log(x) {b_fit:+.2f})"
+                else:
+                    m_fit, b_fit = hint_params[hint]
+                    equation = f"σ({m_fit:.2f}·log(x) {b_fit:+.2f})"
+                label_text = f"{base_label}: {equation}"
+            else:
+                label_text = base_label
+
+            handle = Line2D([0], [0], color=color, linewidth=2, marker='o', markersize=8)
+            hint_handles.append(handle)
+            hint_labels.append(label_text)
+
+        # Add note about dashed lines if using joint fit
+        if fit_joint and joint_params is not None:
+            H_label = "H'" if transform_hint else "H"
+            if include_cross:
+                alpha, beta, gamma, delta = joint_params
+                joint_eq = f"σ({alpha:.2f}C {beta:+.2f}{H_label} {gamma:+.2f}C{H_label} {delta:+.2f})"
+            else:
+                alpha, beta, delta = joint_params
+                joint_eq = f"σ({alpha:.2f}C {beta:+.2f}{H_label} {delta:+.2f})"
+            if transform_hint:
+                joint_eq += " (H'=1/(1-H)-1)"
+            hint_handles.append(Line2D([0], [0], color='gray', linestyle='--', linewidth=2))
+            hint_labels.append(f'{joint_eq}')
+
+        ax.legend(hint_handles, hint_labels, title='hint fraction', framealpha=0.9, loc='upper left')
+    elif fit_joint and joint_params is not None:
+        # Show legend with joint fit equation even if fit_sigmoid is False
+        hint_handles = []
+        hint_labels = []
+
+        for hint_idx, hint in enumerate(hints):
+            color = colors[hint_idx]
+            handle = Line2D([0], [0], color=color, linewidth=2, marker='o', markersize=8)
+            hint_handles.append(handle)
+            if transform_hint:
+                hint_labels.append(f"{hint} (H'={hint_transform(hint):.2f})")
+            else:
+                hint_labels.append(f"{hint}")
+
+        H_label = "H'" if transform_hint else "H"
+        if include_cross:
+            alpha, beta, gamma, delta = joint_params
+            joint_eq = f"σ({alpha:.2f}C {beta:+.2f}{H_label} {gamma:+.2f}C{H_label} {delta:+.2f})"
+        else:
+            alpha, beta, delta = joint_params
+            joint_eq = f"σ({alpha:.2f}C {beta:+.2f}{H_label} {delta:+.2f})"
+        hint_handles.append(Line2D([0], [0], color='gray', linestyle='--', linewidth=2))
+        hint_labels.append(f'{joint_eq}')
+
+        ax.legend(hint_handles, hint_labels, title='hint fraction', framealpha=0.9, loc='upper left')
+    else:
+        ax.legend(loc='lower right', title='hint fraction', framealpha=0.9)
+
     ax.set_xlabel('model size (B)', fontsize=13, fontweight='bold')
     ax.set_ylabel('eval accuracy', fontsize=13, fontweight='bold')
     ax.set_title(title, fontsize=15, fontweight='bold', pad=20)

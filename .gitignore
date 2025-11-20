@@ -28,4 +28,5 @@ wandb/*
 
 # Christine stuff
 !christine_experiments/**/*.jsonl
+!christine_experiments/**/*.json
 christine_experiments/20251010_data/openthoughts_sonnet45.jsonl
