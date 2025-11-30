@@ -280,6 +280,8 @@ def check_job_status(jobs: List[submitit.Job]) -> dict:
 
     for job in jobs:
         try:
+            # Force refresh by invalidating cache
+            job._state = None
             state = job.state
             status_map.get(state, []).append(job)
         except Exception as e:

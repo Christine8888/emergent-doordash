@@ -88,7 +88,7 @@ class vLLMServer:
             s.listen(1)
             return s.getsockname()[1]
 
-    def start(self, health_timeout: int = 300):
+    def start(self, health_timeout: int = 1200):
         """Start the vLLM server and wait for health check.
 
         Args:
@@ -155,7 +155,7 @@ class vLLMServer:
 
         self._wait_for_health(timeout=health_timeout)
 
-    def _wait_for_health(self, timeout: int = 1500):
+    def _wait_for_health(self, timeout: int = 300):
         """Wait for vLLM server to become healthy."""
         health_url = f"http://localhost:{self.port}/health"
         start_time = time.time()
