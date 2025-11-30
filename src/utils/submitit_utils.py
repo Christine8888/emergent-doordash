@@ -110,6 +110,7 @@ def submit_jobs(
             slurm_mem=f"{job_config.mem_gb}GB",
             slurm_time=job_config.time_hours * 60,
             timeout_min=job_config.time_hours * 60,
+            slurm_setup=job_config.setup_commands,
         )
 
         for fewshot in fewshots:
@@ -442,6 +443,7 @@ def submit_baseline_jobs(
                 slurm_mem=f"{job_config.mem_gb}GB",
                 slurm_time=job_config.time_hours * 60,
                 timeout_min=job_config.time_hours * 60,
+                slurm_setup=job_config.setup_commands,
             )
 
             job = executor.submit(

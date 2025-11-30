@@ -19,7 +19,7 @@ class SubmitConfig:
     # Resources
     # Note: gpus_per_job will be auto-set from tensor_parallel_size if not specified
     gpus_per_job: Optional[int] = None
-    cpus_per_task: int = 16
+    cpus_per_task: int = 4
     mem_gb: int = 64
     time_hours: int = 20
 
@@ -34,6 +34,7 @@ class SubmitConfig:
 
     # Submitit config
     submitit_folder: str = "./submitit_logs"
+    setup_commands: list = field(default_factory=lambda: ["source /scr-ssd/cye/.venv/bin/activate"])
 
     def override(self, **kwargs) -> "SubmitConfig":
         """Create new config with overrides.

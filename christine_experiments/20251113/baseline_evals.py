@@ -19,10 +19,10 @@ MODELS = [
 ]
 
 CONFIG = SubmitConfig(
-    partition="sphinx,miso",
+    partition="sphinx",
     time_hours=10,
     mem_gb=64,
-    cpus_per_task=16,
+    cpus_per_task=4,
 )
 
 

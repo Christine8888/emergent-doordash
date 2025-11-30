@@ -73,10 +73,10 @@ MODELS = [
 HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
 CONFIG = SubmitConfig(
-    partition="sphinx,miso",
+    partition="sphinx",
     time_hours=20,
     mem_gb=64,
-    cpus_per_task=16,
+    cpus_per_task=4,
 )
 
 
