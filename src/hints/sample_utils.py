@@ -43,49 +43,44 @@ def create_base_parser(description: str) -> ArgumentParser:
     return parser
 
 
-def load_solved_ids(output_path: Path) -> dict[str, set[int]]:
-    """Load IDs and track which sample_idx values exist per question.
+def load_solved_counts(output_path: Path) -> dict[str, int]:
+    """Load count of existing samples per question.
 
     Returns:
-        Dictionary mapping question ID to set of existing sample_idx values
+        Dictionary mapping question ID to count of existing samples
     """
     if not output_path.exists():
         return {}
 
-    solved_indices = {}
+    solved_counts = {}
     with open(output_path) as f:
         for line in f:
             try:
                 data = json.loads(line)
                 if data.get("hint") and data["hint"].strip():
                     qid = data["id"]
-                    sample_idx = data.get("sample_idx", 0)
-
-                    if qid not in solved_indices:
-                        solved_indices[qid] = set()
-                    solved_indices[qid].add(sample_idx)
+                    solved_counts[qid] = solved_counts.get(qid, 0) + 1
             except:
                 pass
-    return solved_indices
+    return solved_counts
 
 
-def log_sample_statistics(solved_indices: dict[str, set[int]], n_total_problems: int):
+def log_sample_statistics(solved_counts: dict[str, int], n_total_problems: int):
     """Log statistics about sample counts per problem."""
     from collections import Counter
 
-    if not solved_indices:
+    if not solved_counts:
         logger.info("No existing samples found")
         return
 
-    sample_counts = [len(indices) for indices in solved_indices.values()]
-    count_distribution = Counter(sample_counts)
+    count_distribution = Counter(solved_counts.values())
 
-    logger.info(f"Sample statistics ({len(solved_indices)}/{n_total_problems} problems have samples):")
+    logger.info(f"Sample statistics ({len(solved_counts)}/{n_total_problems} problems have samples):")
     for count in sorted(count_distribution.keys()):
         n_problems = count_distribution[count]
         logger.info(f"  {count} sample(s): {n_problems} problems")
 
-    logger.info(f"  Total samples: {sum(sample_counts)}")
+    logger.info(f"  Total samples: {sum(solved_counts.values())}")
 
 
 async def sample_solution(
@@ -109,7 +104,7 @@ async def sample_solution(
     return response.completion
 
 
-async def sample_until_correct(
+async def sample_problem(
     sample_id: str,
     question: str,
     prompt: str,
@@ -118,17 +113,18 @@ async def sample_until_correct(
     temperature: float,
     max_tokens: int,
     max_connections: int,
-    max_retries: int,
+    max_attempts: int,
+    n_target: int,
+    start_idx: int,
     sem: asyncio.Semaphore,
     pbar: tqdm,
     eval_config,
     extra_fields: dict,
     response_to_hint: Callable[[str], any],
     extract_fn: Callable[[str], str] | None = None,
-    sample_idx: int = 0,
     rationalize: bool = False,
-) -> dict | None:
-    """Sample until correct answer or max_retries exceeded.
+) -> list[dict]:
+    """Sample a problem up to max_attempts times, collecting up to n_target correct samples.
 
     Args:
         sample_id: Sample identifier
@@ -139,45 +135,45 @@ async def sample_until_correct(
         temperature: Sampling temperature
         max_tokens: Max tokens to generate
         max_connections: Max concurrent connections
-        max_retries: Max attempts per problem
+        max_attempts: Max total attempts for this problem
+        n_target: Number of correct samples to collect
+        start_idx: Starting sample_idx (based on existing count)
         sem: Semaphore for concurrency control
         pbar: Progress bar
         eval_config: Eval config module with grade_answer and extract_answer
         extra_fields: Additional fields to include in output
         response_to_hint: Function to convert response to hint (e.g., identity for CoT)
         extract_fn: Optional function to extract answer (overrides eval_config.extract_answer)
-        sample_idx: Index for this sample (for multiple samples per question)
         rationalize: If True, prepend answer hint to prompt
 
     Returns:
-        Dictionary with Example fields plus extra_fields, or None if failed
+        List of dictionaries with Example fields plus extra_fields
     """
-    # Use provided extract_fn or fall back to eval_config.extract_answer
     extract = extract_fn if extract_fn is not None else eval_config.extract_answer
 
-    # Add rationalize hint to prompt if enabled
     if rationalize:
         rationalize_hint = f"HINT: The answer is {target}. Please still produce a fully natural chain of thought and solution that does not reveal the answer early, but that reaches this answer after actually properly solving the problem in full detail. Do not mention this hint anywhere in your response.\n\n"
         prompt += "\n\n" + rationalize_hint
 
+    results = []
+    current_idx = start_idx
+
     async with sem:
-        for attempt in range(max_retries):
+        for attempt in range(max_attempts):
+            if len(results) >= n_target:
+                break
+
             try:
                 response = await sample_solution(
                     prompt, model_id, temperature, max_tokens, max_connections
                 )
 
-                # Extract answer from response
                 extracted = extract(response)
-
-                # Grade the extracted answer
                 correct = await eval_config.grade_answer(extracted, target)
 
                 if correct:
-                    # Create Example with hint from response_to_hint function
                     hint = response_to_hint(response)
 
-                    # Only save if hint is non-empty
                     if not hint or not hint.strip():
                         logger.warning(f"  {sample_id}: Answer correct but hint extraction failed, retrying")
                         continue
@@ -192,24 +188,24 @@ async def sample_until_correct(
                         target=target,
                         response=response,
                         hint=hint,
-                        sample_idx=sample_idx,
+                        sample_idx=current_idx,
                         prompt=prompt,
                         metadata=metadata,
                     )
-                    # Add extra fields to dict
                     result = example.to_dict()
                     result.update(extra_fields)
 
+                    results.append(result)
+                    current_idx += 1
                     pbar.update(1)
-                    return result
+                    logger.info(f"  {sample_id}[{current_idx - 1}]: collected ({len(results)}/{n_target})")
                 else:
-                    logger.info(f"  {sample_id} [attempt {attempt + 1}/{max_retries}]: ANSWER: {extracted} | TARGET: {target}")
+                    logger.info(f"  {sample_id} [attempt {attempt + 1}/{max_attempts}]: ANSWER: {extracted} | TARGET: {target}")
 
             except Exception as e:
                 logger.error(f"  {sample_id}: {e}")
 
-        pbar.update(1)
-        return None
+    return results
 
 
 async def run_sampling_loop(tasks: list, output_path: Path):
@@ -217,12 +213,13 @@ async def run_sampling_loop(tasks: list, output_path: Path):
     file_lock = asyncio.Lock()
 
     for coro in asyncio.as_completed(tasks):
-        result = await coro
+        results = await coro
 
-        if result:
+        if results:
             async with file_lock:
                 with open(output_path, "a") as f:
-                    f.write(json.dumps(result) + "\n")
+                    for result in results:
+                        f.write(json.dumps(result) + "\n")
 
 
 async def collect_samples(
@@ -269,51 +266,41 @@ async def collect_samples(
     output_path = Path(args.output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Load existing sample indices per question
-    solved_indices = load_solved_ids(output_path)
-    log_sample_statistics(solved_indices, len(all_samples))
+    # Load existing sample counts per question
+    solved_counts = load_solved_counts(output_path)
+    log_sample_statistics(solved_counts, len(all_samples))
 
     # Use provided format_fn or fall back to eval_config.format_prompt
     format_prompt = format_fn if format_fn is not None else eval_config.format_prompt
 
-    # Create tasks for all samples that need more solutions
-    # Each question may need multiple samples (up to n_per_question)
+    # Create tasks for problems that need more samples
     tasks = []
     total_samples_needed = 0
 
     for sample in all_samples:
-        existing_indices = solved_indices.get(sample.id, set())
+        existing_count = solved_counts.get(sample.id, 0)
+        n_needed = args.n_per_question - existing_count
 
-        # Find missing sample indices (fill gaps and add new ones)
-        missing_indices = []
-        for idx in range(args.n_per_question):
-            if idx not in existing_indices:
-                missing_indices.append(idx)
+        if n_needed > 0:
+            total_samples_needed += n_needed
 
-        if missing_indices:
-            total_samples_needed += len(missing_indices)
+            prompt = format_prompt(sample)
+            if args.prompt_suffix:
+                prompt = prompt + "\n\n" + args.prompt_suffix
 
-            # Create tasks for each missing sample index
-            for sample_idx in missing_indices:
-                prompt = format_prompt(sample)
+            extra_fields = {}
+            if hasattr(eval_config, "extract_sample_fields"):
+                extra_fields = eval_config.extract_sample_fields(sample)
 
-                if args.prompt_suffix:
-                    prompt = prompt + "\n\n" + args.prompt_suffix
+            tasks.append((sample, prompt, extra_fields, existing_count, n_needed))
 
-                # Get extra fields from eval config
-                extra_fields = {}
-                if hasattr(eval_config, "extract_sample_fields"):
-                    extra_fields = eval_config.extract_sample_fields(sample)
-
-                tasks.append((sample, prompt, extra_fields, sample_idx))
-
-    logger.info(f"Processing {total_samples_needed} samples across {len(all_samples)} problems")
+    logger.info(f"Processing {total_samples_needed} samples across {len(tasks)} problems")
     logger.info(f"Target: {args.n_per_question} sample(s) per question")
     if args.rationalize:
         logger.info(f"Rationalize mode: ENABLED")
     logger.info(f"Model: {args.model}")
     logger.info(f"Max concurrent: {args.max_concurrent}, "
-                f"Max retries: {args.max_retries}")
+                f"Max attempts per problem: {args.max_retries}")
     if args.prompt_suffix:
         logger.info(f"Prompt suffix: {args.prompt_suffix}")
     logger.info(f"Output: {output_path}\n")
@@ -323,9 +310,9 @@ async def collect_samples(
     pbar = tqdm(total=total_samples_needed, desc="Solving")
 
     async_tasks = []
-    for sample, prompt, extra_fields, sample_idx in tasks:
+    for sample, prompt, extra_fields, start_idx, n_needed in tasks:
         async_tasks.append(
-            sample_until_correct(
+            sample_problem(
                 sample_id=sample.id,
                 question=sample.input,
                 prompt=prompt,
@@ -334,14 +321,15 @@ async def collect_samples(
                 temperature=args.temperature,
                 max_tokens=args.max_tokens,
                 max_connections=args.max_concurrent,
-                max_retries=args.max_retries,
+                max_attempts=args.max_retries,
+                n_target=n_needed,
+                start_idx=start_idx,
                 sem=sem,
                 pbar=pbar,
                 eval_config=eval_config,
                 extra_fields=extra_fields,
                 response_to_hint=response_to_hint,
                 extract_fn=extract_fn,
-                sample_idx=sample_idx,
                 rationalize=args.rationalize,
             )
         )
