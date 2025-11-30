@@ -129,7 +129,7 @@ def prefill(config: PrefillConfig) -> Solver:
                     f"Available samples should be filtered using config.get_available_ids()"
                 )
             samples = prefill_data[state.sample_id]
-            rng = random.Random(state.epoch)
+            rng = random.Random(f"{state.epoch}_{state.sample_id}")
             prefill_text = rng.choice(list(samples.values()))
             state.messages.append(ChatMessageAssistant(content=prefill_text))
 
@@ -166,7 +166,7 @@ def intext(config: PrefillConfig, prefix: str = "Here is part of a hint that may
                     f"Available samples should be filtered using config.get_available_ids()"
                 )
             samples = hint_data[state.sample_id]
-            rng = random.Random(state.epoch)
+            rng = random.Random(f"{state.epoch}_{state.sample_id}")
             hint_text = rng.choice(list(samples.values()))
             state.user_prompt.text = state.user_prompt.text + "\n\n" + prefix + hint_text
 

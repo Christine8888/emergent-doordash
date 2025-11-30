@@ -5,6 +5,9 @@ from environments.gpqa.gpqa import gpqa_diamond, DEFAULT_INSTRUCTIONS
 from evals.prefill import PrefillConfig
 from evals.solvers import instructions, intext, prefill, generate
 from utils.submitit_utils import launch_experiment, SubmitConfig
+from utils.setup import setup_logging
+
+logger = setup_logging()
 
 BASE_DIR = "/sphinx/u/cye/emergent-doordash/christine_experiments/data"
 
@@ -79,7 +82,7 @@ CONFIG = SubmitConfig(
 
 def run_experiment(exp_name: str, epochs: int, results_dir: str):
     """Run a single experiment with full retry logic."""
-    print(f"Starting {exp_name}...")
+    logger.info(f"Starting {exp_name}...")
     launch_experiment(
         experiment_class=EXPERIMENTS[exp_name],
         models=MODELS,
