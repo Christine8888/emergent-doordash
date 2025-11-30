@@ -57,7 +57,6 @@ def load_solved_ids(output_path: Path) -> dict[str, set[int]]:
         for line in f:
             try:
                 data = json.loads(line)
-                # Only track if hint field exists and is non-empty
                 if data.get("hint") and data["hint"].strip():
                     qid = data["id"]
                     sample_idx = data.get("sample_idx", 0)
@@ -68,6 +67,25 @@ def load_solved_ids(output_path: Path) -> dict[str, set[int]]:
             except:
                 pass
     return solved_indices
+
+
+def log_sample_statistics(solved_indices: dict[str, set[int]], n_total_problems: int):
+    """Log statistics about sample counts per problem."""
+    from collections import Counter
+
+    if not solved_indices:
+        logger.info("No existing samples found")
+        return
+
+    sample_counts = [len(indices) for indices in solved_indices.values()]
+    count_distribution = Counter(sample_counts)
+
+    logger.info(f"Sample statistics ({len(solved_indices)}/{n_total_problems} problems have samples):")
+    for count in sorted(count_distribution.keys()):
+        n_problems = count_distribution[count]
+        logger.info(f"  {count} sample(s): {n_problems} problems")
+
+    logger.info(f"  Total samples: {sum(sample_counts)}")
 
 
 async def sample_solution(
@@ -253,6 +271,7 @@ async def collect_samples(
 
     # Load existing sample indices per question
     solved_indices = load_solved_ids(output_path)
+    log_sample_statistics(solved_indices, len(all_samples))
 
     # Use provided format_fn or fall back to eval_config.format_prompt
     format_prompt = format_fn if format_fn is not None else eval_config.format_prompt
