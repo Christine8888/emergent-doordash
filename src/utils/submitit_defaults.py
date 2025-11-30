@@ -34,7 +34,10 @@ class SubmitConfig:
 
     # Submitit config
     submitit_folder: str = "./submitit_logs"
-    setup_commands: list = field(default_factory=lambda: ["source /scr-ssd/cye/.venv/bin/activate"])
+    setup_commands: list = field(default_factory=lambda: [
+        "source /scr-ssd/cye/.venv/bin/activate",
+        "export HF_HOME=/sphinx/u/cye/.cache/huggingface",
+    ])
 
     def override(self, **kwargs) -> "SubmitConfig":
         """Create new config with overrides.
