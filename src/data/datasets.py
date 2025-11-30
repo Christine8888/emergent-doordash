@@ -1,7 +1,7 @@
 import hashlib
 import re
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from datasets import load_dataset
 from pydantic import BaseModel, Field
@@ -27,11 +27,29 @@ class ModelAnswer(SavableBaseModel):
     is_correct: bool
     prompt: Optional[str] = None
 
+
+class ModelHints(SavableBaseModel):
+    model: str
+    hints: List[str]
+    model_cot: str  # The original CoT that was correct
+    prompt_template_hash: Optional[str] = None  # Hash of the prompt template used
+    prompt: str  # The exact prompt used to generate these hints
+
+
+class HintsDatum(SavableBaseModel):
+    id: str
+    question: str
+    hints: List[ModelHints] = []  # list of hints from different models
+
+
+class HintsDataset(SavableBaseModel):
+    data: List[HintsDatum] = []
+
 class Datum(SavableBaseModel):
     id: str
     ground_truth_answer: str
     question: str
-    ground_truth_cot_responses: List[ModelAnswer] = [] # list of responses from different models
+    cot_responses: List[ModelAnswer] = [] # list of responses from different models
     sampled_answers: List[ModelAnswer] = []
 
 
@@ -61,6 +79,15 @@ class Dataset(SavableBaseModel, ABC):
 class AIME2025(Dataset):
     def is_correct(self, model_answer: str, real_answer: str) -> bool:
         return model_answer.strip() == real_answer.strip()
+
+    def save_to_file(self, file_path: str):
+        """Save dataset to file, filtering to only include entries with non-empty cot_responses."""
+        # Filter to only include entries with non-empty cot_responses
+        filtered_data = [datum for datum in self.data if len(datum.cot_responses) > 0]
+        # Create a temporary instance with filtered data for saving
+        filtered_instance = self.__class__(data=filtered_data)
+        with open(file_path, "w") as f:
+            f.write(filtered_instance.model_dump_json(indent=2))
 
     @classmethod
     def load_from_huggingface(cls) -> "AIME2025":
