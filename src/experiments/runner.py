@@ -61,7 +61,9 @@ def run_eval(
         epochs=epochs,
         limit=limit,
         max_connections=max_connections,
-        display="rich",
+        display="plain",
+        fail_on_error=False,
+        retry_on_error=10,
         metadata=metadata or {},
     )
 

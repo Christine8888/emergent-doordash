@@ -15,6 +15,7 @@ class SubmitConfig:
     partition: str = "sphinx"
     account: str = "nlp"
     job_name_prefix: str = "exp"
+    exclude_nodes: str = "sphinx2"
 
     # Resources
     # Note: gpus_per_job will be auto-set from tensor_parallel_size if not specified
@@ -26,7 +27,7 @@ class SubmitConfig:
     # vLLM config
     max_model_len: int = 16384
     max_connections: int = 32
-    gpu_memory_utilization: float = 0.9
+    gpu_memory_utilization: float = 0.85
 
     # Experiment config
     timeout: int = 600  # Timeout per eval task

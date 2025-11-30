@@ -63,6 +63,7 @@ if __name__ == "__main__":
                 config=CONFIG,
                 epochs=args.epochs,
                 limit=args.limit,
+                poll_interval=30,
             )
             for eval_name in evals_to_run
         ]
