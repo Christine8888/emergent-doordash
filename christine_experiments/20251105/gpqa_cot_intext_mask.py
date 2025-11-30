@@ -20,7 +20,8 @@ if __name__ == "__main__":
     filename = f"{args.log_dir}/{eval_name}_{solver_name}_0shot_{args.hint_fraction}.json"
     check_output_exists(filename)
 
-    sample_ids = get_valid_problem_ids([DATA_PATH], require_hint=True)
+    valid_samples = get_valid_problem_ids([DATA_PATH])
+    sample_ids = set(valid_samples.keys())
     logger.info(f"Running on {len(sample_ids)} samples with {args.hint_fraction} hint fraction")
 
     prefill_config = PrefillConfig(path=DATA_PATH, fraction=args.hint_fraction, mode = "masked")

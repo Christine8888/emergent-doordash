@@ -8,6 +8,7 @@ Or:
 """
 
 import logging
+import random
 from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, GenerateConfig
 from inspect_ai.solver import Generate, Solver, solver
 from inspect_ai.solver import TaskState
@@ -118,19 +119,18 @@ def prefill(config: PrefillConfig) -> Solver:
     Raises:
         KeyError: If sample_id is not in prefill data (when fraction > 0.0)
     """
-    # Load prefill data (sample_id -> prefill_text)
     prefill_data = config.get_data()
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        # Only validate sample existence when actually using prefill
         if config.fraction > 0.0:
             if state.sample_id not in prefill_data:
                 raise KeyError(
                     f"Sample '{state.sample_id}' not found in prefill data. "
                     f"Available samples should be filtered using config.get_available_ids()"
                 )
-            # Add prefill as assistant message
-            prefill_text = prefill_data[state.sample_id]
+            samples = prefill_data[state.sample_id]
+            rng = random.Random(state.epoch)
+            prefill_text = rng.choice(list(samples.values()))
             state.messages.append(ChatMessageAssistant(content=prefill_text))
 
         return state
@@ -156,19 +156,18 @@ def intext(config: PrefillConfig, prefix: str = "Here is part of a hint that may
     Raises:
         KeyError: If sample_id is not in prefill data (when fraction > 0.0)
     """
-    # Load hint data (sample_id -> hint_text)
     hint_data = config.get_data()
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        # Only validate sample existence when actually using hints
         if config.fraction > 0.0:
             if state.sample_id not in hint_data:
                 raise KeyError(
                     f"Sample '{state.sample_id}' not found in hint data. "
                     f"Available samples should be filtered using config.get_available_ids()"
                 )
-            # Append hint to user prompt
-            hint_text = hint_data[state.sample_id]
+            samples = hint_data[state.sample_id]
+            rng = random.Random(state.epoch)
+            hint_text = rng.choice(list(samples.values()))
             state.user_prompt.text = state.user_prompt.text + "\n\n" + prefix + hint_text
 
         return state

@@ -19,9 +19,9 @@ from plotting import (
 
 # Choose folder structure:
 # Option 1: New structure (with solver subfolder)
-BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251105/results/gpqa"
-SOLVER = "solution_intext_mask" #"solution"  # Set to None for old structure
-FILENAME_TEMPLATE = "gpqa_" + SOLVER + "_0shot_{hint}.json"
+BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251015/results/gpqa"
+SOLVER = None #solution_intext_mask"  # Set to None for old structure
+FILENAME_TEMPLATE = "gpqa_diamond_0shot_{hint}.json"
 
 CONDITION = "0shot"
 GRADER_FIELD = "manual_bootstrap"
@@ -30,7 +30,7 @@ STDERR_FIELD = "stderr"
 
 # Models to plot
 MODELS = [
-    "Qwen2.5-0.5B-Instruct",
+   "Qwen2.5-0.5B-Instruct",
     "Qwen2.5-1.5B-Instruct",
     "Qwen2.5-3B-Instruct",
     "Qwen2.5-7B-Instruct",
@@ -38,8 +38,7 @@ MODELS = [
     "Qwen2.5-32B-Instruct",
 ]
 
-HINT_FRACTIONS = [0.0, 0.1, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]#, 1.0]
-
+HINT_FRACTIONS = [0.0, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]#, 1.0]
 # =========================================
 
 # %%
@@ -69,6 +68,14 @@ fig, ax = plot_results(
 plt.show()
 
 # %%
+# export data as CSV
+with open("gpqa_cot_prefill_data.csv", "w") as f:
+    f.write("model,hint_fraction,accuracy,stderr\n")
+    for model in results:
+        for hint_fraction in results[model]:
+            f.write(f"{model},{hint_fraction},{results[model][hint_fraction][0]},{results[model][hint_fraction][1]}\n")
+
+# %%
 # Plot 2: Rescaled plot with sigmoid fitting
 fig, ax = plot_results_rescaled(
     results=results,
@@ -85,13 +92,13 @@ fig, ax = plot_results_by_model_size(
     results=results,
     models=MODELS,
     hints=HINT_FRACTIONS,
-    title="GPQA, masking solutions",
+    title="ARC, pre-filling CoT",
     fit_sigmoid = False,
     fit_joint = True,
     fit_scaling = False,
     include_cross = True,
-    fit_models=["Qwen2.5-0.5B-Instruct", "Qwen2.5-1.5B-Instruct"],
-    exclude_hint=[0.0],
+    fit_models=[],
+    exclude_hint=[],
     transform_hint=True,
 )
 plt.show()

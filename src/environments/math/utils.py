@@ -376,6 +376,12 @@ async def normalize_final_answer(final_answer: str) -> str:
 
     final_answer = re.sub(r"ANSWER: ", "", final_answer)
     final_answer = re.sub(r"Answer: ", "", final_answer)
+
+    try:
+        final_answer = str(int(final_answer))
+    except ValueError:
+        pass
+
     return final_answer
 
 
