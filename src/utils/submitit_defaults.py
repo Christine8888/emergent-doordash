@@ -36,8 +36,7 @@ class SubmitConfig:
     # Submitit config
     submitit_folder: str = "./submitit_logs"
     setup_commands: list = field(default_factory=lambda: [
-        "source /scr-ssd/cye/.venv/bin/activate",
-        "export HF_HOME=/sphinx/u/cye/.cache/huggingface",
+        "source /sphinx/u/cye/emergent-doordash/scripts/setup_env.sh",
     ])
 
     def override(self, **kwargs) -> "SubmitConfig":
