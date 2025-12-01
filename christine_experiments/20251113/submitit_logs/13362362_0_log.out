@@ -1,0 +1,1469 @@
+submitit INFO (2025-11-30 00:29:44,197) - Starting with JobEnvironment(job_id=13362362, hostname=sphinx1, local_rank=0(1), node=0(1), global_rank=0(1))
+submitit INFO (2025-11-30 00:29:44,197) - Loading pickle: /sphinx/u/cye/emergent-doordash/christine_experiments/20251113/submitit_logs/13362362_submitted.pkl
+---------------------------------------------------------                       
+mmlu_0_shot (14,042 samples): vllm/Qwen2.5-3B-Instruct                          
+max_connections: 32, temperature: 0.0, fail_on_error: False, retry_on_error: 10,
+dataset: cais/mmlu                                                              
+---------------------------------------------------------                       
+                                                                                
+Steps:  32/14042   0% | Samples:   1/14042 | accuracy:  n/a | vllm:  0/32 | HTTP retries: 0
+Steps:  40/14042   0% | Samples:  10/14042 | accuracy: 0.00 | vllm:  1/32 | HTTP retries: 1
+Steps:  41/14042   0% | Samples:  27/14042 | accuracy: 0.23 | vllm: 14/32 | HTTP retries: 1
+Steps:  44/14042   0% | Samples:  34/14042 | accuracy: 0.30 | vllm: 19/32 | HTTP retries: 1
+Steps:  59/14042   0% | Samples:  45/14042 | accuracy: 0.37 | vllm:  1/32 | HTTP retries: 17
+Steps:  75/14042   0% | Samples:  46/14042 | accuracy: 0.38 | vllm:  2/32 | HTTP retries: 17
+Steps:  81/14042   0% | Samples:  50/14042 | accuracy: 0.37 | vllm:  0/32 | HTTP retries: 17
+Steps:  82/14042   0% | Samples:  81/14042 | accuracy: 0.36 | vllm: 28/32 | HTTP retries: 25
+Steps:  89/14042   0% | Samples:  84/14042 | accuracy: 0.35 | vllm: 24/32 | HTTP retries: 31
+Steps:  94/14042   0% | Samples:  91/14042 | accuracy: 0.36 | vllm: 28/32 | HTTP retries: 41
+Steps:  98/14042   0% | Samples:  96/14042 | accuracy: 0.36 | vllm: 27/32 | HTTP retries: 42
+Steps: 102/14042   0% | Samples:  98/14042 | accuracy: 0.36 | vllm: 25/32 | HTTP retries: 44
+Steps: 104/14042   0% | Samples:  99/14042 | accuracy: 0.37 | vllm: 18/32 | HTTP retries: 48
+Steps: 114/14042   0% | Samples: 101/14042 | accuracy: 0.37 | vllm: 18/32 | HTTP retries: 54
+Steps: 118/14042   0% | Samples: 115/14042 | accuracy: 0.39 | vllm: 20/32 | HTTP retries: 87
+Steps: 126/14042   0% | Samples: 116/14042 | accuracy: 0.38 | vllm: 18/32 | HTTP retries: 93
+Steps: 130/14042   0% | Samples: 124/14042 | accuracy: 0.39 | vllm: 25/32 | HTTP retries: 95
+Steps: 154/14042   1% | Samples: 131/14042 | accuracy: 0.39 | vllm:  8/32 | HTTP retries: 95
+Steps: 156/14042   1% | Samples: 140/14042 | accuracy: 0.38 | vllm: 15/32 | HTTP retries: 113
+Steps: 160/14042   1% | Samples: 149/14042 | accuracy: 0.39 | vllm: 15/32 | HTTP retries: 118
+Steps: 164/14042   1% | Samples: 152/14042 | accuracy: 0.39 | vllm: 15/32 | HTTP retries: 119
+Steps: 166/14042   1% | Samples: 155/14042 | accuracy: 0.39 | vllm: 18/32 | HTTP retries: 121
+Steps: 180/14042   1% | Samples: 167/14042 | accuracy: 0.38 | vllm: 18/32 | HTTP retries: 161
+Steps: 181/14042   1% | Samples: 171/14042 | accuracy: 0.38 | vllm: 19/32 | HTTP retries: 162
+Steps: 185/14042   1% | Samples: 182/14042 | accuracy: 0.37 | vllm: 28/32 | HTTP retries: 196
+Steps: 189/14042   1% | Samples: 186/14042 | accuracy: 0.38 | vllm: 28/32 | HTTP retries: 250
+Steps: 207/14042   1% | Samples: 190/14042 | accuracy: 0.38 | vllm: 14/32 | HTTP retries: 298
+Steps: 209/14042   1% | Samples: 199/14042 | accuracy: 0.37 | vllm: 19/32 | HTTP retries: 321
+Steps: 222/14042   1% | Samples: 210/14042 | accuracy: 0.37 | vllm: 19/32 | HTTP retries: 366
+Steps: 223/14042   1% | Samples: 223/14042 | accuracy: 0.38 | vllm: 31/32 | HTTP retries: 423
+Steps: 234/14042   1% | Samples: 224/14042 | accuracy: 0.39 | vllm: 21/32 | HTTP retries: 438
+Steps: 260/14042   1% | Samples: 235/14042 | accuracy: 0.39 | vllm:  6/32 | HTTP retries: 481
+Steps: 270/14042   1% | Samples: 252/14042 | accuracy: 0.39 | vllm: 11/32 | HTTP retries: 502
+Steps: 287/14042   2% | Samples: 271/14042 | accuracy: 0.40 | vllm: 15/32 | HTTP retries: 569
+Steps: 299/14042   2% | Samples: 288/14042 | accuracy: 0.40 | vllm: 20/32 | HTTP retries: 646
+Steps: 303/14042   2% | Samples: 300/14042 | accuracy: 0.41 | vllm: 28/32 | HTTP retries: 687
+Steps: 315/14042   2% | Samples: 304/14042 | accuracy: 0.41 | vllm: 20/32 | HTTP retries: 719
+Steps: 322/14042   2% | Samples: 316/14042 | accuracy: 0.40 | vllm: 25/32 | HTTP retries: 767
+Steps: 335/14042   2% | Samples: 323/14042 | accuracy: 0.41 | vllm: 19/32 | HTTP retries: 811
+Steps: 348/14042   2% | Samples: 336/14042 | accuracy: 0.41 | vllm: 18/32 | HTTP retries: 870
+Steps: 349/14042   2% | Samples: 338/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 870
+Steps: 362/14042   2% | Samples: 350/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 932
+Steps: 368/14042   2% | Samples: 363/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 992
+Steps: 382/14042   2% | Samples: 369/14042 | accuracy: 0.43 | vllm: 18/32 | HTTP retries: 1,016
+Steps: 396/14042   2% | Samples: 380/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 1,034
+Steps: 416/14042   2% | Samples: 397/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 1,101
+Steps: 425/14042   3% | Samples: 416/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 1,120
+Steps: 436/14042   3% | Samples: 417/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 1,125
+Steps: 441/14042   3% | Samples: 437/14042 | accuracy: 0.43 | vllm: 27/32 | HTTP retries: 1,183
+Steps: 450/14042   3% | Samples: 442/14042 | accuracy: 0.43 | vllm: 22/32 | HTTP retries: 1,212
+Steps: 451/14042   3% | Samples: 443/14042 | accuracy: 0.43 | vllm: 23/32 | HTTP retries: 1,224
+Steps: 458/14042   3% | Samples: 452/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 1,286
+Steps: 467/14042   3% | Samples: 459/14042 | accuracy: 0.43 | vllm: 23/32 | HTTP retries: 1,318
+Steps: 490/14042   3% | Samples: 468/14042 | accuracy: 0.44 | vllm:  9/32 | HTTP retries: 1,366
+Steps: 499/14042   3% | Samples: 485/14042 | accuracy: 0.44 | vllm: 15/32 | HTTP retries: 1,394
+Steps: 520/14042   3% | Samples: 500/14042 | accuracy: 0.44 | vllm: 11/32 | HTTP retries: 1,449
+Steps: 536/14042   3% | Samples: 521/14042 | accuracy: 0.44 | vllm: 16/32 | HTTP retries: 1,531
+Steps: 540/14042   3% | Samples: 537/14042 | accuracy: 0.44 | vllm: 28/32 | HTTP retries: 1,591
+Steps: 560/14042   3% | Samples: 541/14042 | accuracy: 0.44 | vllm: 12/32 | HTTP retries: 1,622
+Steps: 567/14042   4% | Samples: 554/14042 | accuracy: 0.44 | vllm: 16/32 | HTTP retries: 1,641
+Steps: 578/14042   4% | Samples: 568/14042 | accuracy: 0.44 | vllm: 21/32 | HTTP retries: 1,691
+Steps: 594/14042   4% | Samples: 579/14042 | accuracy: 0.44 | vllm: 16/32 | HTTP retries: 1,710
+Steps: 613/14042   4% | Samples: 595/14042 | accuracy: 0.44 | vllm: 13/32 | HTTP retries: 1,783
+Steps: 622/14042   4% | Samples: 613/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 1,813
+Steps: 628/14042   4% | Samples: 623/14042 | accuracy: 0.44 | vllm: 25/32 | HTTP retries: 1,859
+Steps: 629/14042   4% | Samples: 626/14042 | accuracy: 0.43 | vllm: 26/32 | HTTP retries: 1,859
+Steps: 637/14042   4% | Samples: 630/14042 | accuracy: 0.43 | vllm: 24/32 | HTTP retries: 1,902
+Steps: 649/14042   4% | Samples: 638/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 1,952
+Steps: 654/14042   4% | Samples: 650/14042 | accuracy: 0.43 | vllm: 27/32 | HTTP retries: 2,016
+Steps: 670/14042   4% | Samples: 655/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 2,049
+Steps: 673/14042   4% | Samples: 667/14042 | accuracy: 0.44 | vllm: 18/32 | HTTP retries: 2,072
+Steps: 678/14042   4% | Samples: 669/14042 | accuracy: 0.44 | vllm: 19/32 | HTTP retries: 2,075
+Steps: 679/14042   4% | Samples: 671/14042 | accuracy: 0.44 | vllm: 23/32 | HTTP retries: 2,080
+Steps: 702/14042   4% | Samples: 680/14042 | accuracy: 0.44 | vllm:  9/32 | HTTP retries: 2,116
+Steps: 705/14042   5% | Samples: 700/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 2,155
+Steps: 706/14042   5% | Samples: 701/14042 | accuracy: 0.44 | vllm: 20/32 | HTTP retries: 2,155
+Steps: 710/14042   5% | Samples: 703/14042 | accuracy: 0.43 | vllm: 24/32 | HTTP retries: 2,161
+Steps: 723/14042   5% | Samples: 711/14042 | accuracy: 0.43 | vllm: 18/32 | HTTP retries: 2,201
+Steps: 724/14042   5% | Samples: 712/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 2,203
+Steps: 729/14042   5% | Samples: 714/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 2,218
+Steps: 745/14042   5% | Samples: 730/14042 | accuracy: 0.44 | vllm: 16/32 | HTTP retries: 2,260
+Steps: 763/14042   5% | Samples: 746/14042 | accuracy: 0.44 | vllm: 14/32 | HTTP retries: 2,335
+Steps: 765/14042   5% | Samples: 763/14042 | accuracy: 0.45 | vllm: 20/32 | HTTP retries: 2,366
+Steps: 773/14042   5% | Samples: 764/14042 | accuracy: 0.45 | vllm: 22/32 | HTTP retries: 2,380
+Steps: 784/14042   5% | Samples: 774/14042 | accuracy: 0.44 | vllm: 21/32 | HTTP retries: 2,430
+Steps: 793/14042   5% | Samples: 785/14042 | accuracy: 0.44 | vllm: 23/32 | HTTP retries: 2,487
+Steps: 805/14042   5% | Samples: 794/14042 | accuracy: 0.44 | vllm: 20/32 | HTTP retries: 2,526
+Steps: 816/14042   5% | Samples: 806/14042 | accuracy: 0.44 | vllm: 21/32 | HTTP retries: 2,563
+Steps: 830/14042   5% | Samples: 817/14042 | accuracy: 0.44 | vllm: 18/32 | HTTP retries: 2,602
+Steps: 839/14042   5% | Samples: 831/14042 | accuracy: 0.44 | vllm: 23/32 | HTTP retries: 2,664
+Steps: 851/14042   6% | Samples: 840/14042 | accuracy: 0.44 | vllm: 20/32 | HTTP retries: 2,708
+Steps: 868/14042   6% | Samples: 852/14042 | accuracy: 0.44 | vllm: 15/32 | HTTP retries: 2,747
+Steps: 872/14042   6% | Samples: 869/14042 | accuracy: 0.43 | vllm: 28/32 | HTTP retries: 2,816
+Steps: 875/14042   6% | Samples: 873/14042 | accuracy: 0.43 | vllm: 29/32 | HTTP retries: 2,868
+Steps: 884/14042   6% | Samples: 876/14042 | accuracy: 0.43 | vllm: 23/32 | HTTP retries: 2,904
+Steps: 894/14042   6% | Samples: 885/14042 | accuracy: 0.43 | vllm: 22/32 | HTTP retries: 2,966
+Steps: 915/14042   6% | Samples: 895/14042 | accuracy: 0.43 | vllm: 10/32 | HTTP retries: 3,002
+Steps: 916/14042   6% | Samples: 898/14042 | accuracy: 0.44 | vllm: 11/32 | HTTP retries: 3,002
+Steps: 925/14042   6% | Samples: 912/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 3,019
+Steps: 944/14042   6% | Samples: 926/14042 | accuracy: 0.44 | vllm: 13/32 | HTTP retries: 3,058
+Steps: 952/14042   6% | Samples: 945/14042 | accuracy: 0.43 | vllm: 24/32 | HTTP retries: 3,099
+Steps: 966/14042   6% | Samples: 953/14042 | accuracy: 0.44 | vllm: 18/32 | HTTP retries: 3,137
+Steps: 973/14042   6% | Samples: 964/14042 | accuracy: 0.44 | vllm: 20/32 | HTTP retries: 3,152
+Steps: 979/14042   6% | Samples: 974/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 3,195
+Steps: 980/14042   6% | Samples: 976/14042 | accuracy: 0.43 | vllm: 27/32 | HTTP retries: 3,196
+Steps: 984/14042   7% | Samples: 981/14042 | accuracy: 0.43 | vllm: 28/32 | HTTP retries: 3,222
+Steps: 998/14042   7% | Samples: 985/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 3,249
+Steps: 999/14042   7% | Samples: 989/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 3,249
+Steps: 1016/14042   7% | Samples: 1000/14042 | accuracy: 0.43 | vllm: 15/32 | HTTP retries: 3,267
+Steps: 1018/14042   7% | Samples: 1017/14042 | accuracy: 0.43 | vllm: 30/32 | HTTP retries: 3,311
+Steps: 1042/14042   7% | Samples: 1019/14042 | accuracy: 0.43 | vllm:  7/32 | HTTP retries: 3,334
+Steps: 1043/14042   7% | Samples: 1020/14042 | accuracy: 0.43 | vllm:  8/32 | HTTP retries: 3,339
+Steps: 1051/14042   7% | Samples: 1034/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 3,347
+Steps: 1071/14042   7% | Samples: 1052/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 3,384
+Steps: 1072/14042   7% | Samples: 1056/14042 | accuracy: 0.43 | vllm: 10/32 | HTTP retries: 3,394
+Steps: 1075/14042   7% | Samples: 1058/14042 | accuracy: 0.43 | vllm: 11/32 | HTTP retries: 3,394
+Steps: 1076/14042   7% | Samples: 1061/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 3,395
+Steps: 1093/14042   7% | Samples: 1077/14042 | accuracy: 0.43 | vllm: 15/32 | HTTP retries: 3,434
+Steps: 1101/14042   7% | Samples: 1089/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 3,446
+Steps: 1124/14042   8% | Samples: 1102/14042 | accuracy: 0.43 | vllm:  8/32 | HTTP retries: 3,483
+Steps: 1129/14042   8% | Samples: 1103/14042 | accuracy: 0.43 | vllm:  5/32 | HTTP retries: 3,487
+Steps: 1130/14042   8% | Samples: 1105/14042 | accuracy: 0.43 | vllm:  6/32 | HTTP retries: 3,487
+Steps: 1132/14042   8% | Samples: 1114/14042 | accuracy: 0.43 | vllm: 11/32 | HTTP retries: 3,489
+Steps: 1147/14042   8% | Samples: 1133/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 3,533
+Steps: 1148/14042   8% | Samples: 1135/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 3,533
+Steps: 1153/14042   8% | Samples: 1149/14042 | accuracy: 0.43 | vllm: 27/32 | HTTP retries: 3,577
+Steps: 1162/14042   8% | Samples: 1154/14042 | accuracy: 0.43 | vllm: 23/32 | HTTP retries: 3,618
+Steps: 1167/14042   8% | Samples: 1163/14042 | accuracy: 0.43 | vllm: 27/32 | HTTP retries: 3,658
+Steps: 1184/14042   8% | Samples: 1168/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 3,690
+Steps: 1185/14042   8% | Samples: 1169/14042 | accuracy: 0.43 | vllm: 15/32 | HTTP retries: 3,690
+Steps: 1191/14042   8% | Samples: 1181/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 3,713
+Steps: 1210/14042   8% | Samples: 1192/14042 | accuracy: 0.43 | vllm: 13/32 | HTTP retries: 3,753
+Steps: 1217/14042   8% | Samples: 1203/14042 | accuracy: 0.43 | vllm: 11/32 | HTTP retries: 3,764
+Steps: 1221/14042   8% | Samples: 1206/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 3,764
+Steps: 1237/14042   8% | Samples: 1222/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 3,817
+Steps: 1240/14042   8% | Samples: 1238/14042 | accuracy: 0.42 | vllm: 29/32 | HTTP retries: 3,875
+Steps: 1263/14042   8% | Samples: 1241/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 3,902
+Steps: 1267/14042   9% | Samples: 1255/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 3,917
+Steps: 1288/14042   9% | Samples: 1268/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 3,965
+Steps: 1291/14042   9% | Samples: 1281/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 3,984
+Steps: 1300/14042   9% | Samples: 1283/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 3,984
+Steps: 1319/14042   9% | Samples: 1301/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 4,045
+Steps: 1320/14042   9% | Samples: 1319/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 4,093
+Steps: 1325/14042   9% | Samples: 1320/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 4,096
+Steps: 1342/14042   9% | Samples: 1326/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 4,143
+Steps: 1343/14042   9% | Samples: 1338/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 4,165
+Steps: 1347/14042   9% | Samples: 1339/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 4,165
+Steps: 1375/14042   9% | Samples: 1348/14042 | accuracy: 0.42 | vllm:  4/32 | HTTP retries: 4,212
+Steps: 1377/14042   9% | Samples: 1352/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 4,220
+Steps: 1400/14042   9% | Samples: 1378/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 4,260
+Steps: 1401/14042   9% | Samples: 1379/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 4,260
+Steps: 1414/14042  10% | Samples: 1396/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 4,280
+Steps: 1431/14042  10% | Samples: 1415/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 4,338
+Steps: 1432/14042  10% | Samples: 1417/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 4,339
+Steps: 1437/14042  10% | Samples: 1432/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 4,364
+Steps: 1451/14042  10% | Samples: 1433/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 4,370
+Steps: 1455/14042  10% | Samples: 1450/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 4,397
+Steps: 1468/14042  10% | Samples: 1452/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 4,403
+Steps: 1481/14042  10% | Samples: 1469/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 4,443
+Steps: 1507/14042  10% | Samples: 1482/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 4,502
+Steps: 1513/14042  10% | Samples: 1499/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 4,517
+Steps: 1534/14042  10% | Samples: 1514/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 4,562
+Steps: 1535/14042  10% | Samples: 1516/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 4,562
+Steps: 1542/14042  10% | Samples: 1524/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 4,573
+Steps: 1558/14042  11% | Samples: 1543/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 4,625
+Steps: 1559/14042  11% | Samples: 1545/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 4,636
+Steps: 1567/14042  11% | Samples: 1552/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 4,641
+Steps: 1589/14042  11% | Samples: 1568/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 4,685
+Steps: 1599/14042  11% | Samples: 1576/14042 | accuracy: 0.43 | vllm:  6/32 | HTTP retries: 4,704
+Steps: 1620/14042  11% | Samples: 1600/14042 | accuracy: 0.43 | vllm: 11/32 | HTTP retries: 4,763
+Steps: 1628/14042  11% | Samples: 1617/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 4,790
+Steps: 1632/14042  11% | Samples: 1619/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 4,791
+Steps: 1640/14042  11% | Samples: 1633/14042 | accuracy: 0.43 | vllm: 23/32 | HTTP retries: 4,852
+Steps: 1641/14042  11% | Samples: 1635/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 4,852
+Steps: 1651/14042  11% | Samples: 1642/14042 | accuracy: 0.43 | vllm: 22/32 | HTTP retries: 4,893
+Steps: 1670/14042  11% | Samples: 1652/14042 | accuracy: 0.43 | vllm: 13/32 | HTTP retries: 4,941
+Steps: 1671/14042  11% | Samples: 1670/14042 | accuracy: 0.43 | vllm: 21/32 | HTTP retries: 4,968
+Steps: 1686/14042  12% | Samples: 1671/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 4,968
+Steps: 1699/14042  12% | Samples: 1687/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 5,024
+Steps: 1712/14042  12% | Samples: 1700/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 5,080
+Steps: 1720/14042  12% | Samples: 1713/14042 | accuracy: 0.43 | vllm: 24/32 | HTTP retries: 5,147
+Steps: 1730/14042  12% | Samples: 1721/14042 | accuracy: 0.43 | vllm: 22/32 | HTTP retries: 5,192
+Steps: 1744/14042  12% | Samples: 1731/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 5,239
+Steps: 1745/14042  12% | Samples: 1732/14042 | accuracy: 0.43 | vllm: 18/32 | HTTP retries: 5,239
+Steps: 1760/14042  12% | Samples: 1746/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 5,304
+Steps: 1778/14042  12% | Samples: 1761/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 5,364
+Steps: 1779/14042  12% | Samples: 1779/14042 | accuracy: 0.43 | vllm: 31/32 | HTTP retries: 5,431
+Steps: 1792/14042  12% | Samples: 1780/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 5,438
+Steps: 1803/14042  12% | Samples: 1793/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 5,495
+Steps: 1804/14042  12% | Samples: 1794/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 5,495
+Steps: 1819/14042  12% | Samples: 1805/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 5,543
+Steps: 1833/14042  13% | Samples: 1820/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 5,603
+Steps: 1849/14042  13% | Samples: 1834/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 5,653
+Steps: 1863/14042  13% | Samples: 1850/14042 | accuracy: 0.43 | vllm: 18/32 | HTTP retries: 5,691
+Steps: 1875/14042  13% | Samples: 1864/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 5,746
+Steps: 1881/14042  13% | Samples: 1876/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 5,797
+Steps: 1882/14042  13% | Samples: 1879/14042 | accuracy: 0.43 | vllm: 26/32 | HTTP retries: 5,797
+Steps: 1896/14042  13% | Samples: 1883/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 5,821
+Steps: 1897/14042  13% | Samples: 1884/14042 | accuracy: 0.43 | vllm: 18/32 | HTTP retries: 5,821
+Steps: 1900/14042  13% | Samples: 1892/14042 | accuracy: 0.43 | vllm: 21/32 | HTTP retries: 5,840
+Steps: 1914/14042  13% | Samples: 1901/14042 | accuracy: 0.43 | vllm: 18/32 | HTTP retries: 5,883
+Steps: 1922/14042  13% | Samples: 1915/14042 | accuracy: 0.43 | vllm: 24/32 | HTTP retries: 5,914
+Steps: 1936/14042  13% | Samples: 1923/14042 | accuracy: 0.43 | vllm: 18/32 | HTTP retries: 5,948
+Steps: 1937/14042  13% | Samples: 1924/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 5,956
+Steps: 1943/14042  13% | Samples: 1925/14042 | accuracy: 0.43 | vllm: 11/32 | HTTP retries: 5,960
+Steps: 1944/14042  13% | Samples: 1928/14042 | accuracy: 0.43 | vllm: 13/32 | HTTP retries: 5,960
+Steps: 1964/14042  13% | Samples: 1945/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 5,998
+Steps: 1968/14042  14% | Samples: 1954/14042 | accuracy: 0.43 | vllm: 15/32 | HTTP retries: 6,014
+Steps: 1987/14042  14% | Samples: 1969/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 6,050
+Steps: 1988/14042  14% | Samples: 1970/14042 | accuracy: 0.43 | vllm: 13/32 | HTTP retries: 6,050
+Steps: 1989/14042  14% | Samples: 1982/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 6,067
+Steps: 1992/14042  14% | Samples: 1984/14042 | accuracy: 0.43 | vllm: 18/32 | HTTP retries: 6,067
+Steps: 1995/14042  14% | Samples: 1985/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 6,067
+Steps: 2016/14042  14% | Samples: 1996/14042 | accuracy: 0.43 | vllm: 11/32 | HTTP retries: 6,106
+Steps: 2018/14042  14% | Samples: 2005/14042 | accuracy: 0.43 | vllm:  6/32 | HTTP retries: 6,118
+Steps: 2028/14042  14% | Samples: 2006/14042 | accuracy: 0.43 | vllm:  7/32 | HTTP retries: 6,118
+Steps: 2051/14042  14% | Samples: 2029/14042 | accuracy: 0.43 | vllm:  9/32 | HTTP retries: 6,171
+Steps: 2057/14042  14% | Samples: 2046/14042 | accuracy: 0.43 | vllm: 18/32 | HTTP retries: 6,197
+Steps: 2082/14042  14% | Samples: 2058/14042 | accuracy: 0.43 | vllm:  6/32 | HTTP retries: 6,240
+Steps: 2083/14042  14% | Samples: 2060/14042 | accuracy: 0.43 | vllm:  7/32 | HTTP retries: 6,240
+Steps: 2090/14042  14% | Samples: 2061/14042 | accuracy: 0.43 | vllm:  2/32 | HTTP retries: 6,247
+Steps: 2105/14042  14% | Samples: 2091/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 6,295
+Steps: 2116/14042  15% | Samples: 2106/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 6,364
+Steps: 2117/14042  15% | Samples: 2107/14042 | accuracy: 0.43 | vllm: 21/32 | HTTP retries: 6,364
+Steps: 2132/14042  15% | Samples: 2118/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 6,407
+Steps: 2133/14042  15% | Samples: 2119/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 6,408
+Steps: 2134/14042  15% | Samples: 2134/14042 | accuracy: 0.43 | vllm: 31/32 | HTTP retries: 6,468
+Steps: 2141/14042  15% | Samples: 2135/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 6,498
+Steps: 2160/14042  15% | Samples: 2142/14042 | accuracy: 0.43 | vllm: 13/32 | HTTP retries: 6,527
+Steps: 2163/14042  15% | Samples: 2150/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 6,549
+Steps: 2181/14042  15% | Samples: 2164/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 6,595
+Steps: 2192/14042  15% | Samples: 2178/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 6,614
+Steps: 2193/14042  15% | Samples: 2180/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 6,614
+Steps: 2207/14042  15% | Samples: 2194/14042 | accuracy: 0.43 | vllm: 18/32 | HTTP retries: 6,676
+Steps: 2222/14042  15% | Samples: 2208/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 6,736
+Steps: 2223/14042  15% | Samples: 2209/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 6,736
+Steps: 2225/14042  15% | Samples: 2224/14042 | accuracy: 0.42 | vllm: 30/32 | HTTP retries: 6,806
+Steps: 2238/14042  15% | Samples: 2226/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 6,831
+Steps: 2239/14042  15% | Samples: 2239/14042 | accuracy: 0.42 | vllm: 31/32 | HTTP retries: 6,873
+Steps: 2263/14042  16% | Samples: 2240/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 6,888
+Steps: 2265/14042  16% | Samples: 2248/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 6,912
+Steps: 2274/14042  16% | Samples: 2254/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 6,915
+Steps: 2276/14042  16% | Samples: 2259/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 6,915
+Steps: 2295/14042  16% | Samples: 2277/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 6,975
+Steps: 2296/14042  16% | Samples: 2279/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 6,975
+Steps: 2300/14042  16% | Samples: 2294/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 7,012
+Steps: 2305/14042  16% | Samples: 2296/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 7,012
+Steps: 2327/14042  16% | Samples: 2306/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 7,060
+Steps: 2329/14042  16% | Samples: 2324/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 7,092
+Steps: 2333/14042  16% | Samples: 2326/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 7,093
+Steps: 2335/14042  16% | Samples: 2328/14042 | accuracy: 0.43 | vllm: 24/32 | HTTP retries: 7,106
+Steps: 2358/14042  16% | Samples: 2336/14042 | accuracy: 0.43 | vllm:  9/32 | HTTP retries: 7,139
+Steps: 2362/14042  16% | Samples: 2337/14042 | accuracy: 0.43 | vllm:  6/32 | HTTP retries: 7,149
+Steps: 2364/14042  16% | Samples: 2344/14042 | accuracy: 0.43 | vllm:  9/32 | HTTP retries: 7,151
+Steps: 2376/14042  16% | Samples: 2365/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 7,205
+Steps: 2388/14042  17% | Samples: 2377/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 7,269
+Steps: 2406/14042  17% | Samples: 2389/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 7,336
+Steps: 2407/14042  17% | Samples: 2406/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 7,363
+Steps: 2415/14042  17% | Samples: 2407/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 7,377
+Steps: 2431/14042  17% | Samples: 2416/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 7,420
+Steps: 2434/14042  17% | Samples: 2432/14042 | accuracy: 0.42 | vllm: 29/32 | HTTP retries: 7,472
+Steps: 2442/14042  17% | Samples: 2435/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 7,509
+Steps: 2458/14042  17% | Samples: 2443/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 7,551
+Steps: 2466/14042  17% | Samples: 2459/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 7,604
+Steps: 2485/14042  17% | Samples: 2467/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 7,640
+Steps: 2493/14042  17% | Samples: 2475/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 7,656
+Steps: 2506/14042  17% | Samples: 2494/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 7,707
+Steps: 2507/14042  17% | Samples: 2505/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 7,737
+Steps: 2527/14042  17% | Samples: 2508/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 7,769
+Steps: 2537/14042  18% | Samples: 2524/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 7,788
+Steps: 2543/14042  18% | Samples: 2528/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 7,792
+Steps: 2555/14042  18% | Samples: 2544/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 7,844
+Steps: 2567/14042  18% | Samples: 2556/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 7,898
+Steps: 2596/14042  18% | Samples: 2568/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 7,948
+Steps: 2603/14042  18% | Samples: 2585/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 7,969
+Steps: 2618/14042  18% | Samples: 2604/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 8,025
+Steps: 2627/14042  18% | Samples: 2614/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 8,045
+Steps: 2646/14042  18% | Samples: 2628/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 8,099
+Steps: 2656/14042  18% | Samples: 2647/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 8,171
+Steps: 2673/14042  19% | Samples: 2657/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 8,216
+Steps: 2683/14042  19% | Samples: 2674/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 8,263
+Steps: 2704/14042  19% | Samples: 2684/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 8,306
+Steps: 2708/14042  19% | Samples: 2701/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 8,335
+Steps: 2718/14042  19% | Samples: 2705/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 8,341
+Steps: 2734/14042  19% | Samples: 2719/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 8,408
+Steps: 2738/14042  19% | Samples: 2735/14042 | accuracy: 0.42 | vllm: 28/32 | HTTP retries: 8,471
+Steps: 2750/14042  19% | Samples: 2739/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 8,504
+Steps: 2757/14042  19% | Samples: 2751/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 8,539
+Steps: 2781/14042  19% | Samples: 2758/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 8,583
+Steps: 2785/14042  19% | Samples: 2768/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 8,598
+Steps: 2802/14042  19% | Samples: 2786/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 8,652
+Steps: 2808/14042  19% | Samples: 2803/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 8,703
+Steps: 2815/14042  20% | Samples: 2809/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 8,739
+Steps: 2821/14042  20% | Samples: 2816/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 8,779
+Steps: 2844/14042  20% | Samples: 2822/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 8,825
+Steps: 2850/14042  20% | Samples: 2833/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 8,849
+Steps: 2868/14042  20% | Samples: 2851/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 8,894
+Steps: 2869/14042  20% | Samples: 2857/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 8,894
+Steps: 2883/14042  20% | Samples: 2862/14042 | accuracy: 0.43 | vllm:  8/32 | HTTP retries: 8,894
+Steps: 2884/14042  20% | Samples: 2872/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 8,897
+Steps: 2901/14042  20% | Samples: 2885/14042 | accuracy: 0.43 | vllm: 10/32 | HTTP retries: 8,907
+Steps: 2908/14042  20% | Samples: 2894/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 8,911
+Steps: 2924/14042  20% | Samples: 2901/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 8,911
+Steps: 2925/14042  20% | Samples: 2918/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 8,920
+Steps: 2930/14042  20% | Samples: 2925/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 8,929
+Steps: 2940/14042  20% | Samples: 2931/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 8,932
+Steps: 2956/14042  21% | Samples: 2941/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 8,945
+Steps: 2962/14042  21% | Samples: 2950/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 8,957
+Steps: 2967/14042  21% | Samples: 2955/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 8,961
+Steps: 2973/14042  21% | Samples: 2958/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 8,961
+Steps: 2978/14042  21% | Samples: 2962/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 8,961
+Steps: 2997/14042  21% | Samples: 2979/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 8,972
+Steps: 2998/14042  21% | Samples: 2988/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 8,979
+Steps: 3014/14042  21% | Samples: 2997/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 8,983
+Steps: 3016/14042  21% | Samples: 3008/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 8,991
+Steps: 3018/14042  21% | Samples: 3011/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 8,995
+Steps: 3031/14042  21% | Samples: 3016/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 8,995
+Steps: 3036/14042  21% | Samples: 3024/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 8,995
+Steps: 3041/14042  21% | Samples: 3025/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 9,001
+Steps: 3054/14042  21% | Samples: 3031/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 9,001
+[11/30/25 06:39:34] WARNING  Sample error (id: 3029, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 3070/14042  21% | Samples: 3054/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 9,009
+Steps: 3072/14042  21% | Samples: 3059/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 9,009
+Steps: 3086/14042  21% | Samples: 3072/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 9,023
+Steps: 3090/14042  22% | Samples: 3079/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 9,024
+Steps: 3095/14042  22% | Samples: 3084/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 9,034
+Steps: 3109/14042  22% | Samples: 3089/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 9,035
+Steps: 3111/14042  22% | Samples: 3101/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 9,037
+Steps: 3115/14042  22% | Samples: 3105/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 9,043
+Steps: 3121/14042  22% | Samples: 3107/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 9,044
+Steps: 3123/14042  22% | Samples: 3112/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 9,052
+Steps: 3125/14042  22% | Samples: 3118/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 9,057
+Steps: 3135/14042  22% | Samples: 3126/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 9,071
+Steps: 3148/14042  22% | Samples: 3130/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 9,072
+Steps: 3149/14042  22% | Samples: 3136/14042 | accuracy: 0.42 | vllm:  1/32 | HTTP retries: 9,078
+Steps: 3166/14042  22% | Samples: 3138/14042 | accuracy: 0.42 | vllm:  2/32 | HTTP retries: 9,078
+Steps: 3183/14042  22% | Samples: 3167/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 9,092
+Steps: 3194/14042  22% | Samples: 3176/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 9,097
+Steps: 3195/14042  22% | Samples: 3184/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 9,106
+Steps: 3222/14042  22% | Samples: 3196/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 9,123
+Steps: 3237/14042  23% | Samples: 3206/14042 | accuracy: 0.42 | vllm:  0/32 | HTTP retries: 9,125
+Steps: 3248/14042  23% | Samples: 3239/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 9,157
+Steps: 3252/14042  23% | Samples: 3243/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 9,164
+Steps: 3253/14042  23% | Samples: 3247/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 9,176
+Steps: 3264/14042  23% | Samples: 3254/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 9,181
+Steps: 3266/14042  23% | Samples: 3263/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 9,192
+Steps: 3270/14042  23% | Samples: 3268/14042 | accuracy: 0.42 | vllm: 28/32 | HTTP retries: 9,198
+Steps: 3273/14042  23% | Samples: 3272/14042 | accuracy: 0.42 | vllm: 29/32 | HTTP retries: 9,206
+Steps: 3283/14042  23% | Samples: 3274/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 9,214
+Steps: 3290/14042  23% | Samples: 3284/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 9,220
+Steps: 3311/14042  23% | Samples: 3291/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 9,222
+Steps: 3324/14042  23% | Samples: 3300/14042 | accuracy: 0.42 | vllm:  4/32 | HTTP retries: 9,230
+Steps: 3330/14042  23% | Samples: 3305/14042 | accuracy: 0.42 | vllm:  4/32 | HTTP retries: 9,230
+Steps: 3331/14042  23% | Samples: 3323/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 9,236
+Steps: 3335/14042  23% | Samples: 3332/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 9,247
+Steps: 3342/14042  23% | Samples: 3336/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 9,259
+Steps: 3345/14042  23% | Samples: 3341/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 9,265
+Steps: 3365/14042  23% | Samples: 3346/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 9,265
+Steps: 3371/14042  24% | Samples: 3350/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 9,267
+Steps: 3372/14042  24% | Samples: 3355/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 9,269
+Steps: 3382/14042  24% | Samples: 3359/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 9,273
+Steps: 3390/14042  24% | Samples: 3383/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 9,296
+Steps: 3406/14042  24% | Samples: 3384/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 9,296
+Steps: 3420/14042  24% | Samples: 3392/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 9,302
+Steps: 3423/14042  24% | Samples: 3399/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 9,302
+Steps: 3428/14042  24% | Samples: 3428/14042 | accuracy: 0.42 | vllm: 29/32 | HTTP retries: 9,314
+Steps: 3435/14042  24% | Samples: 3429/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 9,324
+Steps: 3444/14042  24% | Samples: 3432/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 9,334
+Steps: 3449/14042  24% | Samples: 3437/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 9,334
+Steps: 3457/14042  24% | Samples: 3442/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 9,336
+Steps: 3467/14042  24% | Samples: 3448/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 9,337
+Steps: 3469/14042  24% | Samples: 3458/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 9,340
+Steps: 3474/14042  24% | Samples: 3463/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 9,353
+Steps: 3480/14042  24% | Samples: 3469/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 9,354
+Steps: 3483/14042  24% | Samples: 3475/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 9,354
+Steps: 3484/14042  24% | Samples: 3479/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 9,358
+Steps: 3492/14042  24% | Samples: 3485/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 9,372
+Steps: 3497/14042  24% | Samples: 3493/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 9,387
+Steps: 3502/14042  24% | Samples: 3499/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 9,393
+Steps: 3512/14042  25% | Samples: 3500/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 9,396
+Steps: 3521/14042  25% | Samples: 3504/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 9,396
+Steps: 3525/14042  25% | Samples: 3508/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 9,401
+Steps: 3532/14042  25% | Samples: 3516/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 9,405
+Steps: 3534/14042  25% | Samples: 3531/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 9,416
+Steps: 3541/14042  25% | Samples: 3537/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 9,428
+Steps: 3551/14042  25% | Samples: 3538/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 9,429
+[11/30/25 06:51:32] WARNING  Sample error (id: 3542, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+[11/30/25 06:51:36] WARNING  Sample error (id: 3544, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 3560/14042  25% | Samples: 3541/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 9,433
+Steps: 3570/14042  25% | Samples: 3545/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 9,434
+Steps: 3571/14042  25% | Samples: 3553/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 9,435
+Steps: 3575/14042  25% | Samples: 3561/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 9,435
+Steps: 3577/14042  25% | Samples: 3572/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 9,443
+Steps: 3599/14042  25% | Samples: 3578/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 9,461
+Steps: 3606/14042  25% | Samples: 3581/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 9,465
+Steps: 3611/14042  25% | Samples: 3589/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 9,465
+Steps: 3612/14042  25% | Samples: 3600/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 9,466
+Steps: 3629/14042  25% | Samples: 3613/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 9,488
+Steps: 3647/14042  25% | Samples: 3616/14042 | accuracy: 0.42 | vllm:  0/32 | HTTP retries: 9,489
+Steps: 3648/14042  25% | Samples: 3633/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 9,489
+Steps: 3649/14042  25% | Samples: 3642/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 9,493
+Steps: 3671/14042  26% | Samples: 3650/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 9,512
+Steps: 3687/14042  26% | Samples: 3657/14042 | accuracy: 0.42 | vllm:  1/32 | HTTP retries: 9,514
+[11/30/25 06:54:30] WARNING  Sample error (id: 3671, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 3703/14042  26% | Samples: 3688/14042 | accuracy: 0.42 | vllm:  2/32 | HTTP retries: 9,531
+Steps: 3717/14042  26% | Samples: 3689/14042 | accuracy: 0.42 | vllm:  2/32 | HTTP retries: 9,531
+Steps: 3721/14042  26% | Samples: 3690/14042 | accuracy: 0.42 | vllm:  0/32 | HTTP retries: 9,531
+Steps: 3724/14042  26% | Samples: 3709/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 9,531
+Steps: 3726/14042  26% | Samples: 3717/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 9,534
+Steps: 3749/14042  26% | Samples: 3727/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 9,555
+Steps: 3762/14042  26% | Samples: 3731/14042 | accuracy: 0.42 | vllm:  0/32 | HTTP retries: 9,555
+Steps: 3764/14042  26% | Samples: 3763/14042 | accuracy: 0.42 | vllm: 29/32 | HTTP retries: 9,571
+Steps: 3772/14042  26% | Samples: 3767/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 9,582
+[11/30/25 06:56:47] WARNING  Sample error (id: 3770, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 3787/14042  26% | Samples: 3772/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 9,584
+Steps: 3788/14042  26% | Samples: 3780/14042 | accuracy: 0.43 | vllm: 21/32 | HTTP retries: 9,589
+Steps: 3789/14042  26% | Samples: 3789/14042 | accuracy: 0.43 | vllm: 31/32 | HTTP retries: 9,599
+Steps: 3808/14042  27% | Samples: 3790/14042 | accuracy: 0.43 | vllm: 13/32 | HTTP retries: 9,614
+Steps: 3824/14042  27% | Samples: 3797/14042 | accuracy: 0.43 | vllm:  2/32 | HTTP retries: 9,615
+Steps: 3827/14042  27% | Samples: 3808/14042 | accuracy: 0.43 | vllm: 10/32 | HTTP retries: 9,616
+Steps: 3844/14042  27% | Samples: 3828/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 9,629
+Steps: 3848/14042  27% | Samples: 3837/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 9,641
+Steps: 3851/14042  27% | Samples: 3842/14042 | accuracy: 0.43 | vllm:  8/32 | HTTP retries: 9,643
+Steps: 3862/14042  27% | Samples: 3844/14042 | accuracy: 0.43 | vllm: 10/32 | HTTP retries: 9,644
+Steps: 3864/14042  27% | Samples: 3850/14042 | accuracy: 0.43 | vllm: 15/32 | HTTP retries: 9,645
+Steps: 3885/14042  27% | Samples: 3865/14042 | accuracy: 0.43 | vllm: 11/32 | HTTP retries: 9,656
+Steps: 3897/14042  27% | Samples: 3874/14042 | accuracy: 0.43 | vllm:  3/32 | HTTP retries: 9,665
+Steps: 3903/14042  27% | Samples: 3882/14042 | accuracy: 0.43 | vllm:  6/32 | HTTP retries: 9,665
+Steps: 3905/14042  27% | Samples: 3891/14042 | accuracy: 0.43 | vllm: 15/32 | HTTP retries: 9,666
+Steps: 3918/14042  27% | Samples: 3905/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 9,678
+Steps: 3920/14042  27% | Samples: 3914/14042 | accuracy: 0.43 | vllm: 22/32 | HTTP retries: 9,681
+Steps: 3924/14042  27% | Samples: 3918/14042 | accuracy: 0.43 | vllm: 22/32 | HTTP retries: 9,691
+Steps: 3928/14042  27% | Samples: 3921/14042 | accuracy: 0.43 | vllm: 21/32 | HTTP retries: 9,691
+Steps: 3930/14042  27% | Samples: 3924/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 9,691
+Steps: 3938/14042  28% | Samples: 3932/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 9,700
+Steps: 3942/14042  28% | Samples: 3938/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 9,707
+Steps: 3953/14042  28% | Samples: 3942/14042 | accuracy: 0.43 | vllm: 18/32 | HTTP retries: 9,708
+Steps: 3954/14042  28% | Samples: 3950/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 9,711
+Steps: 3968/14042  28% | Samples: 3955/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 9,721
+Steps: 3971/14042  28% | Samples: 3964/14042 | accuracy: 0.43 | vllm: 24/32 | HTTP retries: 9,729
+Steps: 3972/14042  28% | Samples: 3971/14042 | accuracy: 0.43 | vllm: 22/32 | HTTP retries: 9,738
+Steps: 3980/14042  28% | Samples: 3972/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 9,738
+Steps: 3983/14042  28% | Samples: 3981/14042 | accuracy: 0.43 | vllm: 29/32 | HTTP retries: 9,745
+Steps: 3993/14042  28% | Samples: 3985/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 9,752
+Steps: 3999/14042  28% | Samples: 3993/14042 | accuracy: 0.43 | vllm: 24/32 | HTTP retries: 9,768
+Steps: 4000/14042  28% | Samples: 3999/14042 | accuracy: 0.43 | vllm: 23/32 | HTTP retries: 9,768
+Steps: 4020/14042  28% | Samples: 4001/14042 | accuracy: 0.43 | vllm:  7/32 | HTTP retries: 9,768
+Steps: 4040/14042  28% | Samples: 4009/14042 | accuracy: 0.43 | vllm:  0/32 | HTTP retries: 9,775
+Steps: 4059/14042  28% | Samples: 4042/14042 | accuracy: 0.43 | vllm: 13/32 | HTTP retries: 9,803
+Steps: 4061/14042  28% | Samples: 4050/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 9,804
+Steps: 4076/14042  29% | Samples: 4060/14042 | accuracy: 0.43 | vllm: 13/32 | HTTP retries: 9,808
+Steps: 4077/14042  29% | Samples: 4071/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 9,818
+Steps: 4090/14042  29% | Samples: 4078/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 9,822
+Steps: 4094/14042  29% | Samples: 4085/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 9,825
+Steps: 4111/14042  29% | Samples: 4095/14042 | accuracy: 0.43 | vllm: 15/32 | HTTP retries: 9,835
+Steps: 4118/14042  29% | Samples: 4104/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 9,843
+Steps: 4121/14042  29% | Samples: 4108/14042 | accuracy: 0.43 | vllm: 10/32 | HTTP retries: 9,843
+Steps: 4128/14042  29% | Samples: 4111/14042 | accuracy: 0.43 | vllm:  9/32 | HTTP retries: 9,844
+Steps: 4131/14042  29% | Samples: 4116/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 9,844
+Steps: 4146/14042  29% | Samples: 4131/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 9,855
+Steps: 4147/14042  29% | Samples: 4141/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 9,866
+Steps: 4148/14042  29% | Samples: 4145/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 9,869
+Steps: 4163/14042  29% | Samples: 4148/14042 | accuracy: 0.43 | vllm: 11/32 | HTTP retries: 9,869
+Steps: 4179/14042  29% | Samples: 4157/14042 | accuracy: 0.43 | vllm:  7/32 | HTTP retries: 9,879
+Steps: 4182/14042  29% | Samples: 4164/14042 | accuracy: 0.43 | vllm: 11/32 | HTTP retries: 9,881
+Steps: 4196/14042  29% | Samples: 4184/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 9,904
+Steps: 4202/14042  29% | Samples: 4187/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 9,906
+Steps: 4208/14042  29% | Samples: 4192/14042 | accuracy: 0.43 | vllm: 15/32 | HTTP retries: 9,913
+Steps: 4221/14042  30% | Samples: 4196/14042 | accuracy: 0.43 | vllm:  6/32 | HTTP retries: 9,914
+Steps: 4223/14042  30% | Samples: 4218/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 9,929
+Steps: 4227/14042  30% | Samples: 4224/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 9,934
+Steps: 4236/14042  30% | Samples: 4231/14042 | accuracy: 0.43 | vllm: 21/32 | HTTP retries: 9,944
+Steps: 4243/14042  30% | Samples: 4235/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 9,946
+Steps: 4250/14042  30% | Samples: 4243/14042 | accuracy: 0.43 | vllm: 22/32 | HTTP retries: 9,949
+Steps: 4251/14042  30% | Samples: 4249/14042 | accuracy: 0.43 | vllm: 27/32 | HTTP retries: 9,956
+Steps: 4283/14042  30% | Samples: 4253/14042 | accuracy: 0.43 | vllm:  1/32 | HTTP retries: 9,966
+Steps: 4284/14042  30% | Samples: 4261/14042 | accuracy: 0.43 | vllm:  6/32 | HTTP retries: 9,966
+Steps: 4286/14042  30% | Samples: 4272/14042 | accuracy: 0.43 | vllm: 15/32 | HTTP retries: 9,966
+Steps: 4291/14042  30% | Samples: 4287/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 9,973
+Steps: 4316/14042  30% | Samples: 4294/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 9,993
+Steps: 4317/14042  30% | Samples: 4306/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 10,001
+Steps: 4325/14042  30% | Samples: 4311/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 10,008
+Steps: 4328/14042  30% | Samples: 4318/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 10,011
+Steps: 4334/14042  30% | Samples: 4327/14042 | accuracy: 0.43 | vllm: 24/32 | HTTP retries: 10,019
+Steps: 4357/14042  31% | Samples: 4335/14042 | accuracy: 0.43 | vllm:  8/32 | HTTP retries: 10,019
+Steps: 4372/14042  31% | Samples: 4344/14042 | accuracy: 0.43 | vllm:  1/32 | HTTP retries: 10,024
+Steps: 4374/14042  31% | Samples: 4355/14042 | accuracy: 0.43 | vllm: 10/32 | HTTP retries: 10,025
+Steps: 4378/14042  31% | Samples: 4375/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 10,042
+Steps: 4384/14042  31% | Samples: 4380/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 10,054
+Steps: 4385/14042  31% | Samples: 4381/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 10,054
+Steps: 4394/14042  31% | Samples: 4384/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 10,056
+[11/30/25 07:10:18] WARNING  Sample error (id: 4385, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+[11/30/25 07:10:22] WARNING  Sample error (id: 4381, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 4397/14042  31% | Samples: 4385/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 10,058
+Steps: 4399/14042  31% | Samples: 4389/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 10,067
+Steps: 4409/14042  31% | Samples: 4393/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 10,068
+Steps: 4418/14042  31% | Samples: 4398/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 10,068
+Steps: 4421/14042  31% | Samples: 4413/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 10,080
+Steps: 4431/14042  31% | Samples: 4417/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 10,081
+Steps: 4432/14042  31% | Samples: 4423/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 10,087
+Steps: 4449/14042  31% | Samples: 4433/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 10,111
+Steps: 4468/14042  31% | Samples: 4442/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 10,113
+Steps: 4470/14042  31% | Samples: 4450/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 10,114
+Steps: 4471/14042  31% | Samples: 4460/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 10,116
+Steps: 4480/14042  31% | Samples: 4472/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 10,132
+Steps: 4488/14042  31% | Samples: 4481/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 10,144
+Steps: 4508/14042  32% | Samples: 4489/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 10,148
+Steps: 4518/14042  32% | Samples: 4498/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 10,158
+Steps: 4526/14042  32% | Samples: 4503/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 10,158
+Steps: 4527/14042  32% | Samples: 4513/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 10,159
+Steps: 4530/14042  32% | Samples: 4519/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 10,169
+Steps: 4537/14042  32% | Samples: 4522/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 10,169
+Steps: 4543/14042  32% | Samples: 4530/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 10,170
+Steps: 4560/14042  32% | Samples: 4544/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 10,184
+Steps: 4566/14042  32% | Samples: 4553/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 10,190
+Steps: 4582/14042  32% | Samples: 4561/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 10,191
+Steps: 4583/14042  32% | Samples: 4572/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 10,195
+Steps: 4599/14042  32% | Samples: 4584/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 10,207
+Steps: 4601/14042  32% | Samples: 4598/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 10,224
+Steps: 4604/14042  32% | Samples: 4600/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 10,224
+Steps: 4610/14042  32% | Samples: 4602/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 10,227
+Steps: 4613/14042  32% | Samples: 4608/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 10,233
+Steps: 4630/14042  32% | Samples: 4614/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 10,249
+Steps: 4642/14042  33% | Samples: 4620/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 10,249
+Steps: 4654/14042  33% | Samples: 4623/14042 | accuracy: 0.42 | vllm:  0/32 | HTTP retries: 10,252
+Steps: 4683/14042  33% | Samples: 4655/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 10,274
+Steps: 4695/14042  33% | Samples: 4664/14042 | accuracy: 0.42 | vllm:  0/32 | HTTP retries: 10,276
+Steps: 4713/14042  33% | Samples: 4697/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 10,303
+Steps: 4714/14042  33% | Samples: 4705/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 10,309
+Steps: 4725/14042  33% | Samples: 4712/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 10,314
+Steps: 4727/14042  33% | Samples: 4720/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 10,319
+Steps: 4739/14042  33% | Samples: 4728/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 10,332
+Steps: 4751/14042  33% | Samples: 4732/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 10,335
+Steps: 4753/14042  33% | Samples: 4739/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 10,338
+Steps: 4763/14042  33% | Samples: 4741/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 10,339
+Steps: 4765/14042  33% | Samples: 4748/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 10,339
+Steps: 4766/14042  33% | Samples: 4756/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 10,343
+Steps: 4779/14042  34% | Samples: 4767/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 10,359
+Steps: 4785/14042  34% | Samples: 4774/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 10,362
+Steps: 4786/14042  34% | Samples: 4779/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 10,371
+Steps: 4792/14042  34% | Samples: 4782/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 10,374
+Steps: 4798/14042  34% | Samples: 4788/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 10,375
+Steps: 4804/14042  34% | Samples: 4799/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 10,394
+Steps: 4810/14042  34% | Samples: 4802/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 10,399
+Steps: 4813/14042  34% | Samples: 4807/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 10,399
+Steps: 4820/14042  34% | Samples: 4814/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 10,419
+Steps: 4825/14042  34% | Samples: 4818/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 10,430
+Steps: 4827/14042  34% | Samples: 4823/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 10,434
+Steps: 4841/14042  34% | Samples: 4828/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 10,447
+Steps: 4843/14042  34% | Samples: 4837/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 10,454
+Steps: 4857/14042  34% | Samples: 4847/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 10,463
+[11/30/25 07:21:26] WARNING  Sample error (id: 4817, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 4858/14042  34% | Samples: 4853/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 10,475
+Steps: 4886/14042  34% | Samples: 4859/14042 | accuracy: 0.42 | vllm:  4/32 | HTTP retries: 10,487
+Steps: 4899/14042  34% | Samples: 4868/14042 | accuracy: 0.42 | vllm:  0/32 | HTTP retries: 10,490
+Steps: 4924/14042  35% | Samples: 4900/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 10,512
+Steps: 4925/14042  35% | Samples: 4906/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 10,512
+Steps: 4938/14042  35% | Samples: 4909/14042 | accuracy: 0.42 | vllm:  0/32 | HTTP retries: 10,516
+Steps: 4940/14042  35% | Samples: 4919/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 10,516
+Steps: 4969/14042  35% | Samples: 4941/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 10,535
+Steps: 4980/14042  35% | Samples: 4950/14042 | accuracy: 0.42 | vllm:  1/32 | HTTP retries: 10,538
+Steps: 4981/14042  35% | Samples: 4957/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 10,538
+Steps: 5008/14042  35% | Samples: 4983/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 10,557
+Steps: 5009/14042  35% | Samples: 4990/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 10,559
+Steps: 5016/14042  35% | Samples: 4997/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 10,564
+Steps: 5038/14042  35% | Samples: 5017/14042 | accuracy: 0.43 | vllm: 10/32 | HTTP retries: 10,592
+Steps: 5049/14042  35% | Samples: 5019/14042 | accuracy: 0.43 | vllm:  1/32 | HTTP retries: 10,593
+Steps: 5050/14042  35% | Samples: 5036/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 10,593
+Steps: 5052/14042  35% | Samples: 5051/14042 | accuracy: 0.43 | vllm: 30/32 | HTTP retries: 10,607
+Steps: 5078/14042  36% | Samples: 5053/14042 | accuracy: 0.43 | vllm:  3/32 | HTTP retries: 10,620
+Steps: 5083/14042  36% | Samples: 5059/14042 | accuracy: 0.43 | vllm:  5/32 | HTTP retries: 10,620
+Steps: 5091/14042  36% | Samples: 5060/14042 | accuracy: 0.43 | vllm:  0/32 | HTTP retries: 10,620
+Steps: 5110/14042  36% | Samples: 5092/14042 | accuracy: 0.43 | vllm: 13/32 | HTTP retries: 10,649
+Steps: 5123/14042  36% | Samples: 5101/14042 | accuracy: 0.43 | vllm:  6/32 | HTTP retries: 10,652
+Steps: 5128/14042  36% | Samples: 5107/14042 | accuracy: 0.43 | vllm:  7/32 | HTTP retries: 10,653
+Steps: 5129/14042  36% | Samples: 5116/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 10,655
+Steps: 5145/14042  36% | Samples: 5130/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 10,671
+Steps: 5149/14042  36% | Samples: 5139/14042 | accuracy: 0.43 | vllm: 21/32 | HTTP retries: 10,678
+Steps: 5165/14042  36% | Samples: 5146/14042 | accuracy: 0.43 | vllm:  8/32 | HTTP retries: 10,680
+Steps: 5167/14042  36% | Samples: 5150/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 10,680
+Steps: 5168/14042  36% | Samples: 5159/14042 | accuracy: 0.43 | vllm: 22/32 | HTTP retries: 10,688
+Steps: 5179/14042  36% | Samples: 5166/14042 | accuracy: 0.43 | vllm: 11/32 | HTTP retries: 10,693
+Steps: 5184/14042  36% | Samples: 5169/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 10,693
+Steps: 5189/14042  36% | Samples: 5178/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 10,705
+Steps: 5193/14042  36% | Samples: 5181/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 10,705
+Steps: 5200/14042  37% | Samples: 5185/14042 | accuracy: 0.43 | vllm:  7/32 | HTTP retries: 10,705
+Steps: 5207/14042  37% | Samples: 5192/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 10,705
+Steps: 5218/14042  37% | Samples: 5205/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 10,716
+Steps: 5219/14042  37% | Samples: 5215/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 10,723
+Steps: 5239/14042  37% | Samples: 5221/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 10,737
+Steps: 5240/14042  37% | Samples: 5228/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 10,744
+Steps: 5241/14042  37% | Samples: 5232/14042 | accuracy: 0.43 | vllm:  7/32 | HTTP retries: 10,746
+Steps: 5254/14042  37% | Samples: 5235/14042 | accuracy: 0.43 | vllm:  5/32 | HTTP retries: 10,746
+Steps: 5259/14042  37% | Samples: 5242/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 10,746
+Steps: 5260/14042  37% | Samples: 5251/14042 | accuracy: 0.43 | vllm: 22/32 | HTTP retries: 10,754
+Steps: 5270/14042  37% | Samples: 5257/14042 | accuracy: 0.43 | vllm: 11/32 | HTTP retries: 10,761
+Steps: 5275/14042  37% | Samples: 5263/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 10,761
+Steps: 5289/14042  37% | Samples: 5276/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 10,777
+Steps: 5292/14042  37% | Samples: 5283/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 10,780
+Steps: 5293/14042  37% | Samples: 5288/14042 | accuracy: 0.43 | vllm: 24/32 | HTTP retries: 10,789
+Steps: 5298/14042  37% | Samples: 5293/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 10,795
+Steps: 5306/14042  37% | Samples: 5298/14042 | accuracy: 0.43 | vllm: 21/32 | HTTP retries: 10,796
+Steps: 5313/14042  37% | Samples: 5307/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 10,827
+Steps: 5319/14042  37% | Samples: 5314/14042 | accuracy: 0.43 | vllm: 25/32 | HTTP retries: 10,837
+Steps: 5334/14042  37% | Samples: 5316/14042 | accuracy: 0.43 | vllm: 10/32 | HTTP retries: 10,837
+Steps: 5338/14042  38% | Samples: 5325/14042 | accuracy: 0.43 | vllm: 15/32 | HTTP retries: 10,841
+Steps: 5339/14042  38% | Samples: 5334/14042 | accuracy: 0.43 | vllm: 24/32 | HTTP retries: 10,846
+Steps: 5354/14042  38% | Samples: 5340/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 10,875
+Steps: 5356/14042  38% | Samples: 5349/14042 | accuracy: 0.43 | vllm: 22/32 | HTTP retries: 10,876
+Steps: 5359/14042  38% | Samples: 5355/14042 | accuracy: 0.43 | vllm: 22/32 | HTTP retries: 10,882
+Steps: 5369/14042  38% | Samples: 5359/14042 | accuracy: 0.43 | vllm: 15/32 | HTTP retries: 10,882
+Steps: 5375/14042  38% | Samples: 5366/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 10,892
+Steps: 5389/14042  38% | Samples: 5374/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 10,895
+Steps: 5407/14042  38% | Samples: 5390/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 10,914
+Steps: 5409/14042  38% | Samples: 5399/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 10,925
+Steps: 5422/14042  38% | Samples: 5407/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 10,926
+Steps: 5427/14042  38% | Samples: 5410/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 10,927
+Steps: 5428/14042  38% | Samples: 5419/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 10,933
+Steps: 5436/14042  38% | Samples: 5425/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 10,938
+Steps: 5443/14042  38% | Samples: 5429/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 10,938
+Steps: 5444/14042  38% | Samples: 5436/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 10,946
+Steps: 5452/14042  38% | Samples: 5445/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 10,967
+Steps: 5454/14042  38% | Samples: 5453/14042 | accuracy: 0.42 | vllm: 28/32 | HTTP retries: 10,979
+Steps: 5469/14042  38% | Samples: 5455/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 11,003
+Steps: 5470/14042  38% | Samples: 5464/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 11,007
+Steps: 5477/14042  39% | Samples: 5471/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 11,025
+Steps: 5478/14042  39% | Samples: 5478/14042 | accuracy: 0.42 | vllm: 30/32 | HTTP retries: 11,037
+Steps: 5500/14042  39% | Samples: 5480/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 11,045
+Steps: 5504/14042  39% | Samples: 5487/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 11,046
+Steps: 5505/14042  39% | Samples: 5494/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 11,051
+Steps: 5514/14042  39% | Samples: 5501/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 11,060
+Steps: 5515/14042  39% | Samples: 5506/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 11,061
+Steps: 5530/14042  39% | Samples: 5516/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 11,096
+Steps: 5538/14042  39% | Samples: 5531/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 11,115
+Steps: 5549/14042  39% | Samples: 5536/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 11,122
+Steps: 5551/14042  39% | Samples: 5540/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 11,127
+Steps: 5561/14042  39% | Samples: 5546/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 11,132
+Steps: 5562/14042  39% | Samples: 5561/14042 | accuracy: 0.42 | vllm: 30/32 | HTTP retries: 11,146
+Steps: 5584/14042  39% | Samples: 5563/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 11,163
+Steps: 5599/14042  39% | Samples: 5572/14042 | accuracy: 0.42 | vllm:  2/32 | HTTP retries: 11,167
+Steps: 5600/14042  39% | Samples: 5573/14042 | accuracy: 0.42 | vllm:  1/32 | HTTP retries: 11,167
+Steps: 5602/14042  39% | Samples: 5577/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 11,167
+Steps: 5603/14042  39% | Samples: 5585/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 11,167
+Steps: 5624/14042  40% | Samples: 5604/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 11,196
+Steps: 5640/14042  40% | Samples: 5609/14042 | accuracy: 0.42 | vllm:  0/32 | HTTP retries: 11,197
+Steps: 5657/14042  40% | Samples: 5641/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 11,220
+Steps: 5677/14042  40% | Samples: 5646/14042 | accuracy: 0.42 | vllm:  0/32 | HTTP retries: 11,222
+Steps: 5693/14042  40% | Samples: 5678/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 11,256
+Steps: 5708/14042  40% | Samples: 5694/14042 | accuracy: 0.43 | vllm: 17/32 | HTTP retries: 11,266
+Steps: 5709/14042  40% | Samples: 5700/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 11,268
+Steps: 5718/14042  40% | Samples: 5710/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 11,285
+Steps: 5724/14042  40% | Samples: 5717/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 11,289
+Steps: 5738/14042  40% | Samples: 5725/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 11,300
+Steps: 5749/14042  40% | Samples: 5732/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 11,303
+Steps: 5765/14042  41% | Samples: 5734/14042 | accuracy: 0.42 | vllm:  0/32 | HTTP retries: 11,307
+Steps: 5778/14042  41% | Samples: 5766/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 11,325
+Steps: 5780/14042  41% | Samples: 5772/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 11,334
+Steps: 5781/14042  41% | Samples: 5779/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 11,344
+Steps: 5788/14042  41% | Samples: 5781/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 11,346
+Steps: 5791/14042  41% | Samples: 5782/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 11,346
+Steps: 5794/14042  41% | Samples: 5790/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 11,363
+Steps: 5812/14042  41% | Samples: 5795/14042 | accuracy: 0.43 | vllm:  6/32 | HTTP retries: 11,385
+Steps: 5835/14042  41% | Samples: 5804/14042 | accuracy: 0.43 | vllm:  0/32 | HTTP retries: 11,389
+Steps: 5857/14042  41% | Samples: 5836/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 11,414
+Steps: 5858/14042  41% | Samples: 5845/14042 | accuracy: 0.43 | vllm: 18/32 | HTTP retries: 11,421
+Steps: 5867/14042  41% | Samples: 5851/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 11,425
+Steps: 5891/14042  41% | Samples: 5868/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 11,453
+Steps: 5892/14042  41% | Samples: 5876/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 11,454
+Steps: 5904/14042  42% | Samples: 5878/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 11,458
+[11/30/25 07:48:16] WARNING  Sample error (id: 5896, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 5906/14042  42% | Samples: 5884/14042 | accuracy: 0.43 | vllm:  6/32 | HTTP retries: 11,458
+Steps: 5923/14042  42% | Samples: 5907/14042 | accuracy: 0.43 | vllm: 13/32 | HTTP retries: 11,492
+Steps: 5925/14042  42% | Samples: 5914/14042 | accuracy: 0.43 | vllm: 18/32 | HTTP retries: 11,492
+Steps: 5926/14042  42% | Samples: 5920/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 11,500
+Steps: 5930/14042  42% | Samples: 5923/14042 | accuracy: 0.43 | vllm: 15/32 | HTTP retries: 11,503
+Steps: 5937/14042  42% | Samples: 5929/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 11,503
+Steps: 5938/14042  42% | Samples: 5936/14042 | accuracy: 0.42 | vllm: 29/32 | HTTP retries: 11,516
+Steps: 5954/14042  42% | Samples: 5939/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 11,530
+Steps: 5963/14042  42% | Samples: 5944/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 11,530
+Steps: 5964/14042  42% | Samples: 5948/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 11,536
+Steps: 5975/14042  42% | Samples: 5956/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 11,537
+Steps: 5976/14042  42% | Samples: 5972/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 11,547
+Steps: 6006/14042  42% | Samples: 5977/14042 | accuracy: 0.43 | vllm:  2/32 | HTTP retries: 11,566
+Steps: 6016/14042  42% | Samples: 5986/14042 | accuracy: 0.43 | vllm:  1/32 | HTTP retries: 11,568
+Steps: 6017/14042  42% | Samples: 5993/14042 | accuracy: 0.43 | vllm:  6/32 | HTTP retries: 11,568
+Steps: 6033/14042  42% | Samples: 6018/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 11,600
+Steps: 6050/14042  43% | Samples: 6034/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 11,612
+Steps: 6051/14042  43% | Samples: 6042/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 11,615
+Steps: 6054/14042  43% | Samples: 6048/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 11,622
+Steps: 6065/14042  43% | Samples: 6051/14042 | accuracy: 0.43 | vllm: 13/32 | HTTP retries: 11,624
+Steps: 6067/14042  43% | Samples: 6055/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 11,624
+Steps: 6068/14042  43% | Samples: 6064/14042 | accuracy: 0.43 | vllm: 27/32 | HTTP retries: 11,637
+Steps: 6079/14042  43% | Samples: 6069/14042 | accuracy: 0.43 | vllm: 13/32 | HTTP retries: 11,642
+Steps: 6087/14042  43% | Samples: 6073/14042 | accuracy: 0.43 | vllm: 12/32 | HTTP retries: 11,642
+Steps: 6090/14042  43% | Samples: 6078/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 11,650
+Steps: 6099/14042  43% | Samples: 6082/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 11,651
+Steps: 6105/14042  43% | Samples: 6085/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 11,651
+Steps: 6106/14042  43% | Samples: 6090/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 11,652
+Steps: 6107/14042  43% | Samples: 6098/14042 | accuracy: 0.43 | vllm: 20/32 | HTTP retries: 11,657
+Steps: 6124/14042  43% | Samples: 6108/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 11,670
+Steps: 6145/14042  43% | Samples: 6125/14042 | accuracy: 0.43 | vllm: 10/32 | HTTP retries: 11,684
+Steps: 6146/14042  43% | Samples: 6134/14042 | accuracy: 0.43 | vllm: 19/32 | HTTP retries: 11,693
+Steps: 6163/14042  43% | Samples: 6141/14042 | accuracy: 0.43 | vllm:  7/32 | HTTP retries: 11,694
+Steps: 6168/14042  43% | Samples: 6163/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 11,711
+Steps: 6177/14042  43% | Samples: 6164/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 11,722
+Steps: 6185/14042  44% | Samples: 6178/14042 | accuracy: 0.43 | vllm: 21/32 | HTTP retries: 11,738
+Steps: 6193/14042  44% | Samples: 6182/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 11,740
+Steps: 6195/14042  44% | Samples: 6187/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 11,744
+Steps: 6206/14042  44% | Samples: 6193/14042 | accuracy: 0.43 | vllm:  9/32 | HTTP retries: 11,744
+Steps: 6216/14042  44% | Samples: 6196/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 11,744
+Steps: 6218/14042  44% | Samples: 6204/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 11,747
+Steps: 6227/14042  44% | Samples: 6212/14042 | accuracy: 0.43 | vllm: 14/32 | HTTP retries: 11,759
+Steps: 6228/14042  44% | Samples: 6226/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 11,762
+Steps: 6253/14042  44% | Samples: 6229/14042 | accuracy: 0.43 | vllm:  7/32 | HTTP retries: 11,784
+Steps: 6269/14042  44% | Samples: 6238/14042 | accuracy: 0.43 | vllm:  0/32 | HTTP retries: 11,785
+Steps: 6293/14042  44% | Samples: 6270/14042 | accuracy: 0.43 | vllm:  8/32 | HTTP retries: 11,808
+Steps: 6294/14042  44% | Samples: 6279/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 11,815
+Steps: 6307/14042  44% | Samples: 6286/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 11,816
+Steps: 6327/14042  45% | Samples: 6308/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 11,849
+Steps: 6331/14042  45% | Samples: 6315/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 11,849
+Steps: 6332/14042  45% | Samples: 6317/14042 | accuracy: 0.43 | vllm: 16/32 | HTTP retries: 11,855
+Steps: 6337/14042  45% | Samples: 6324/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 11,859
+Steps: 6339/14042  45% | Samples: 6330/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 11,859
+Steps: 6354/14042  45% | Samples: 6340/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 11,887
+Steps: 6361/14042  45% | Samples: 6345/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 11,887
+Steps: 6362/14042  45% | Samples: 6348/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 11,897
+Steps: 6376/14042  45% | Samples: 6355/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 11,899
+Steps: 6377/14042  45% | Samples: 6374/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 11,910
+Steps: 6385/14042  45% | Samples: 6378/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 11,931
+[11/30/25 08:01:19] WARNING  Sample error (id: 6389, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 6386/14042  45% | Samples: 6382/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 11,931
+Steps: 6389/14042  45% | Samples: 6387/14042 | accuracy: 0.42 | vllm: 29/32 | HTTP retries: 11,945
+Steps: 6407/14042  45% | Samples: 6390/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 11,951
+Steps: 6409/14042  45% | Samples: 6396/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 11,960
+Steps: 6423/14042  45% | Samples: 6404/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 11,962
+Steps: 6424/14042  45% | Samples: 6415/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 11,967
+Steps: 6441/14042  45% | Samples: 6425/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 11,984
+Steps: 6444/14042  45% | Samples: 6432/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 11,986
+Steps: 6447/14042  45% | Samples: 6434/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 11,989
+Steps: 6453/14042  45% | Samples: 6438/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 11,993
+Steps: 6458/14042  45% | Samples: 6444/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 11,993
+Steps: 6459/14042  45% | Samples: 6455/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 11,996
+Steps: 6483/14042  46% | Samples: 6460/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 12,016
+Steps: 6492/14042  46% | Samples: 6463/14042 | accuracy: 0.42 | vllm:  1/32 | HTTP retries: 12,016
+Steps: 6495/14042  46% | Samples: 6472/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 12,016
+Steps: 6496/14042  46% | Samples: 6478/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 12,016
+Steps: 6515/14042  46% | Samples: 6497/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 12,049
+Steps: 6525/14042  46% | Samples: 6511/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 12,056
+Steps: 6528/14042  46% | Samples: 6515/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 12,059
+Steps: 6529/14042  46% | Samples: 6525/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 12,070
+Steps: 6541/14042  46% | Samples: 6530/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 12,084
+Steps: 6545/14042  46% | Samples: 6536/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 12,094
+Steps: 6561/14042  46% | Samples: 6546/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 12,106
+Steps: 6562/14042  46% | Samples: 6555/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 12,119
+Steps: 6563/14042  46% | Samples: 6560/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 12,121
+Steps: 6572/14042  46% | Samples: 6563/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 12,121
+Steps: 6584/14042  46% | Samples: 6564/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 12,122
+Steps: 6600/14042  47% | Samples: 6571/14042 | accuracy: 0.42 | vllm:  1/32 | HTTP retries: 12,131
+Steps: 6601/14042  47% | Samples: 6581/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 12,131
+Steps: 6617/14042  47% | Samples: 6602/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 12,149
+Steps: 6619/14042  47% | Samples: 6609/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 12,160
+Steps: 6623/14042  47% | Samples: 6618/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 12,177
+Steps: 6626/14042  47% | Samples: 6624/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 12,177
+Steps: 6651/14042  47% | Samples: 6627/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 12,198
+Steps: 6659/14042  47% | Samples: 6629/14042 | accuracy: 0.42 | vllm:  1/32 | HTTP retries: 12,198
+Steps: 6660/14042  47% | Samples: 6642/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 12,198
+Steps: 6683/14042  47% | Samples: 6661/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 12,222
+Steps: 6696/14042  47% | Samples: 6669/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 12,228
+Steps: 6697/14042  47% | Samples: 6677/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 12,228
+Steps: 6698/14042  47% | Samples: 6689/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 12,235
+Steps: 6717/14042  47% | Samples: 6699/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 12,263
+Steps: 6718/14042  47% | Samples: 6707/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 12,264
+Steps: 6737/14042  47% | Samples: 6714/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 12,264
+Steps: 6738/14042  47% | Samples: 6722/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 12,265
+Steps: 6750/14042  48% | Samples: 6735/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 12,275
+Steps: 6751/14042  48% | Samples: 6738/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 12,275
+Steps: 6755/14042  48% | Samples: 6740/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 12,275
+Steps: 6759/14042  48% | Samples: 6748/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 12,285
+Steps: 6774/14042  48% | Samples: 6755/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 12,289
+Steps: 6775/14042  48% | Samples: 6758/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 12,289
+Steps: 6789/14042  48% | Samples: 6776/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 12,314
+Steps: 6790/14042  48% | Samples: 6782/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 12,321
+Steps: 6792/14042  48% | Samples: 6785/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 12,333
+Steps: 6803/14042  48% | Samples: 6793/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 12,337
+Steps: 6817/14042  48% | Samples: 6804/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 12,356
+Steps: 6819/14042  48% | Samples: 6810/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 12,361
+Steps: 6821/14042  48% | Samples: 6813/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 12,375
+Steps: 6828/14042  48% | Samples: 6822/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 12,379
+Steps: 6837/14042  48% | Samples: 6825/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 12,385
+Steps: 6838/14042  48% | Samples: 6831/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 12,399
+Steps: 6852/14042  48% | Samples: 6837/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 12,401
+Steps: 6857/14042  48% | Samples: 6840/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 12,401
+Steps: 6858/14042  48% | Samples: 6848/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 12,412
+Steps: 6872/14042  48% | Samples: 6855/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 12,416
+Steps: 6873/14042  48% | Samples: 6859/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 12,417
+Steps: 6875/14042  48% | Samples: 6866/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 12,421
+Steps: 6887/14042  49% | Samples: 6876/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 12,439
+Steps: 6889/14042  49% | Samples: 6888/14042 | accuracy: 0.42 | vllm: 30/32 | HTTP retries: 12,458
+Steps: 6909/14042  49% | Samples: 6890/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 12,466
+Steps: 6911/14042  49% | Samples: 6897/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 12,471
+Steps: 6919/14042  49% | Samples: 6905/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 12,476
+Steps: 6920/14042  49% | Samples: 6909/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 12,481
+Steps: 6935/14042  49% | Samples: 6921/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 12,510
+Steps: 6936/14042  49% | Samples: 6929/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 12,510
+Steps: 6947/14042  49% | Samples: 6937/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 12,526
+Steps: 6952/14042  49% | Samples: 6945/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 12,537
+Steps: 6965/14042  49% | Samples: 6953/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 12,553
+Steps: 6966/14042  49% | Samples: 6964/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 12,570
+Steps: 6977/14042  49% | Samples: 6967/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 12,581
+[11/30/25 08:18:21] WARNING  Sample error (id: 6963, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 6979/14042  49% | Samples: 6971/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 12,582
+Steps: 6982/14042  49% | Samples: 6975/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 12,590
+Steps: 6988/14042  49% | Samples: 6987/14042 | accuracy: 0.42 | vllm: 28/32 | HTTP retries: 12,609
+Steps: 7004/14042  49% | Samples: 6989/14042 | accuracy: 0.42 | vllm:  1/32 | HTTP retries: 12,613
+Steps: 7019/14042  49% | Samples: 6990/14042 | accuracy: 0.42 | vllm:  2/32 | HTTP retries: 12,613
+Steps: 7022/14042  50% | Samples: 6992/14042 | accuracy: 0.42 | vllm:  1/32 | HTTP retries: 12,614
+Steps: 7023/14042  50% | Samples: 7001/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 12,614
+Steps: 7044/14042  50% | Samples: 7024/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 12,648
+Steps: 7057/14042  50% | Samples: 7033/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 12,655
+Steps: 7080/14042  50% | Samples: 7058/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 12,686
+Steps: 7094/14042  50% | Samples: 7067/14042 | accuracy: 0.42 | vllm:  4/32 | HTTP retries: 12,693
+Steps: 7095/14042  50% | Samples: 7080/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 12,695
+Steps: 7114/14042  50% | Samples: 7096/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 12,725
+Steps: 7115/14042  50% | Samples: 7102/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 12,725
+Steps: 7116/14042  50% | Samples: 7106/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 12,728
+Steps: 7124/14042  50% | Samples: 7114/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 12,741
+Steps: 7147/14042  50% | Samples: 7125/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 12,760
+Steps: 7154/14042  50% | Samples: 7126/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 12,763
+[11/30/25 08:23:50] WARNING  Sample error (id: 7156, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 7156/14042  50% | Samples: 7131/14042 | accuracy: 0.42 | vllm:  4/32 | HTTP retries: 12,763
+Steps: 7157/14042  50% | Samples: 7145/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 12,767
+Steps: 7181/14042  51% | Samples: 7158/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 12,791
+Steps: 7182/14042  51% | Samples: 7166/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 12,798
+Steps: 7192/14042  51% | Samples: 7173/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 12,800
+Steps: 7194/14042  51% | Samples: 7179/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 12,801
+Steps: 7211/14042  51% | Samples: 7195/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 12,834
+Steps: 7220/14042  51% | Samples: 7196/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 12,834
+Steps: 7230/14042  51% | Samples: 7204/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 12,840
+Steps: 7231/14042  51% | Samples: 7215/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 12,841
+Steps: 7248/14042  51% | Samples: 7232/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 12,874
+Steps: 7249/14042  51% | Samples: 7238/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 12,875
+Steps: 7262/14042  51% | Samples: 7247/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 12,881
+Steps: 7264/14042  51% | Samples: 7250/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 12,886
+Steps: 7266/14042  51% | Samples: 7259/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 12,892
+Steps: 7267/14042  51% | Samples: 7263/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 12,895
+Steps: 7276/14042  51% | Samples: 7266/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 12,895
+Steps: 7283/14042  51% | Samples: 7268/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 12,896
+Steps: 7286/14042  51% | Samples: 7274/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 12,902
+Steps: 7297/14042  51% | Samples: 7282/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 12,909
+Steps: 7301/14042  51% | Samples: 7286/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 12,909
+Steps: 7302/14042  52% | Samples: 7296/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 12,923
+Steps: 7314/14042  52% | Samples: 7303/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 12,933
+Steps: 7332/14042  52% | Samples: 7315/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 12,974
+Steps: 7333/14042  52% | Samples: 7323/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 12,974
+Steps: 7334/14042  52% | Samples: 7326/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 12,987
+Steps: 7340/14042  52% | Samples: 7333/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 12,989
+Steps: 7348/14042  52% | Samples: 7335/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 12,990
+Steps: 7361/14042  52% | Samples: 7349/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 13,022
+Steps: 7366/14042  52% | Samples: 7358/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 13,034
+Steps: 7371/14042  52% | Samples: 7367/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 13,047
+Steps: 7378/14042  52% | Samples: 7372/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 13,064
+[11/30/25 08:31:54] WARNING  Sample error (id: 7399, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 7381/14042  52% | Samples: 7376/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 13,064
+Steps: 7398/14042  52% | Samples: 7378/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 13,064
+[11/30/25 08:32:09] WARNING  Sample error (id: 7400, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 7400/14042  52% | Samples: 7389/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 13,069
+Steps: 7401/14042  52% | Samples: 7391/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 13,082
+Steps: 7408/14042  52% | Samples: 7399/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 13,085
+Steps: 7409/14042  52% | Samples: 7406/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 13,095
+Steps: 7420/14042  52% | Samples: 7410/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 13,127
+Steps: 7447/14042  53% | Samples: 7421/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 13,149
+Steps: 7448/14042  53% | Samples: 7431/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 13,154
+Steps: 7456/14042  53% | Samples: 7438/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 13,158
+Steps: 7457/14042  53% | Samples: 7444/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 13,159
+Steps: 7478/14042  53% | Samples: 7458/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 13,192
+Steps: 7479/14042  53% | Samples: 7468/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 13,202
+Steps: 7487/14042  53% | Samples: 7476/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 13,207
+Steps: 7493/14042  53% | Samples: 7478/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 13,207
+Steps: 7494/14042  53% | Samples: 7486/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 13,217
+Steps: 7513/14042  53% | Samples: 7495/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 13,222
+Steps: 7516/14042  53% | Samples: 7499/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 13,223
+Steps: 7529/14042  53% | Samples: 7512/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 13,239
+Steps: 7540/14042  53% | Samples: 7530/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 13,266
+Steps: 7542/14042  53% | Samples: 7534/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 13,268
+[11/30/25 08:37:30] WARNING  Sample error (id: 7554, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 7550/14042  53% | Samples: 7537/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 13,270
+Steps: 7555/14042  53% | Samples: 7539/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 13,276
+Steps: 7558/14042  53% | Samples: 7545/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 13,279
+Steps: 7561/14042  53% | Samples: 7547/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 13,280
+Steps: 7567/14042  53% | Samples: 7552/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 13,283
+Steps: 7584/14042  54% | Samples: 7568/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 13,310
+Steps: 7598/14042  54% | Samples: 7569/14042 | accuracy: 0.42 | vllm:  2/32 | HTTP retries: 13,313
+Steps: 7599/14042  54% | Samples: 7575/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 13,313
+Steps: 7601/14042  54% | Samples: 7593/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 13,320
+Steps: 7625/14042  54% | Samples: 7602/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 13,346
+Steps: 7635/14042  54% | Samples: 7618/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 13,354
+Steps: 7654/14042  54% | Samples: 7636/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 13,385
+Steps: 7655/14042  54% | Samples: 7645/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 13,397
+Steps: 7668/14042  54% | Samples: 7652/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 13,398
+Steps: 7675/14042  54% | Samples: 7669/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 13,432
+Steps: 7678/14042  54% | Samples: 7673/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 13,432
+Steps: 7679/14042  54% | Samples: 7676/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 13,432
+Steps: 7698/14042  54% | Samples: 7678/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 13,433
+Steps: 7699/14042  54% | Samples: 7683/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 13,434
+Steps: 7706/14042  54% | Samples: 7695/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 13,445
+Steps: 7714/14042  54% | Samples: 7697/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 13,445
+Steps: 7715/14042  54% | Samples: 7704/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 13,453
+Steps: 7727/14042  55% | Samples: 7716/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 13,467
+Steps: 7734/14042  55% | Samples: 7728/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 13,499
+Steps: 7752/14042  55% | Samples: 7729/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 13,499
+Steps: 7765/14042  55% | Samples: 7737/14042 | accuracy: 0.42 | vllm:  2/32 | HTTP retries: 13,508
+[11/30/25 08:44:08] WARNING  Sample error (id: 7740, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 7766/14042  55% | Samples: 7740/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 13,508
+Steps: 7767/14042  55% | Samples: 7747/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 13,508
+Steps: 7791/14042  55% | Samples: 7768/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 13,540
+Steps: 7800/14042  55% | Samples: 7772/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 13,544
+Steps: 7803/14042  55% | Samples: 7779/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 13,544
+Steps: 7816/14042  55% | Samples: 7804/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 13,582
+Steps: 7827/14042  55% | Samples: 7817/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 13,604
+Steps: 7829/14042  55% | Samples: 7821/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 13,608
+Steps: 7832/14042  55% | Samples: 7826/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 13,610
+Steps: 7838/14042  55% | Samples: 7833/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 13,630
+Steps: 7840/14042  55% | Samples: 7839/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 13,647
+Steps: 7844/14042  55% | Samples: 7844/14042 | accuracy: 0.42 | vllm: 31/32 | HTTP retries: 13,649
+Steps: 7851/14042  55% | Samples: 7845/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 13,650
+Steps: 7861/14042  55% | Samples: 7846/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 13,652
+Steps: 7866/14042  56% | Samples: 7848/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 13,652
+Steps: 7872/14042  56% | Samples: 7851/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 13,654
+Steps: 7875/14042  56% | Samples: 7858/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 13,657
+Steps: 7877/14042  56% | Samples: 7863/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 13,662
+Steps: 7879/14042  56% | Samples: 7869/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 13,667
+Steps: 7881/14042  56% | Samples: 7875/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 13,671
+Steps: 7897/14042  56% | Samples: 7882/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 13,692
+Steps: 7908/14042  56% | Samples: 7883/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 13,692
+Steps: 7914/14042  56% | Samples: 7887/14042 | accuracy: 0.42 | vllm:  4/32 | HTTP retries: 13,696
+Steps: 7918/14042  56% | Samples: 7900/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 13,696
+Steps: 7933/14042  56% | Samples: 7919/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 13,729
+Steps: 7934/14042  56% | Samples: 7926/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 13,729
+Steps: 7935/14042  56% | Samples: 7928/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 13,736
+Steps: 7942/14042  56% | Samples: 7936/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 13,751
+Steps: 7949/14042  56% | Samples: 7943/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 13,763
+Steps: 7951/14042  56% | Samples: 7945/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 13,783
+Steps: 7953/14042  56% | Samples: 7949/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 13,784
+Steps: 7978/14042  56% | Samples: 7954/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 13,798
+Steps: 7986/14042  56% | Samples: 7961/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 13,805
+Steps: 7989/14042  56% | Samples: 7968/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 13,805
+Steps: 7990/14042  56% | Samples: 7973/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 13,806
+Steps: 8006/14042  57% | Samples: 7991/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 13,843
+Steps: 8015/14042  57% | Samples: 7992/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 13,846
+Steps: 8016/14042  57% | Samples: 7996/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 13,848
+Steps: 8026/14042  57% | Samples: 8007/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 13,855
+Steps: 8037/14042  57% | Samples: 8027/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 13,886
+Steps: 8051/14042  57% | Samples: 8028/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 13,886
+Steps: 8052/14042  57% | Samples: 8039/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 13,894
+Steps: 8060/14042  57% | Samples: 8043/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 13,894
+Steps: 8064/14042  57% | Samples: 8047/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 13,894
+Steps: 8065/14042  57% | Samples: 8053/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 13,899
+Steps: 8091/14042  57% | Samples: 8066/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 13,931
+Steps: 8092/14042  57% | Samples: 8075/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 13,936
+Steps: 8101/14042  57% | Samples: 8082/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 13,937
+Steps: 8102/14042  57% | Samples: 8089/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 13,937
+Steps: 8113/14042  57% | Samples: 8104/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 13,971
+Steps: 8121/14042  57% | Samples: 8107/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 13,971
+Steps: 8122/14042  57% | Samples: 8112/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 13,980
+Steps: 8132/14042  57% | Samples: 8118/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 13,982
+Steps: 8136/14042  57% | Samples: 8123/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 13,982
+Steps: 8147/14042  58% | Samples: 8137/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 14,010
+Steps: 8148/14042  58% | Samples: 8146/14042 | accuracy: 0.42 | vllm: 28/32 | HTTP retries: 14,023
+Steps: 8159/14042  58% | Samples: 8151/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 14,048
+Steps: 8163/14042  58% | Samples: 8155/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 14,048
+[11/30/25 08:57:26] WARNING  Sample error (id: 8182, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 8165/14042  58% | Samples: 8158/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 14,050
+Steps: 8168/14042  58% | Samples: 8165/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 14,052
+Steps: 8184/14042  58% | Samples: 8169/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 14,075
+Steps: 8194/14042  58% | Samples: 8170/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 14,076
+Steps: 8205/14042  58% | Samples: 8175/14042 | accuracy: 0.42 | vllm:  1/32 | HTTP retries: 14,080
+Steps: 8221/14042  58% | Samples: 8206/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 14,116
+Steps: 8239/14042  58% | Samples: 8222/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 14,131
+Steps: 8248/14042  58% | Samples: 8238/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 14,148
+Steps: 8253/14042  58% | Samples: 8240/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 14,148
+Steps: 8254/14042  58% | Samples: 8248/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 14,158
+Steps: 8266/14042  58% | Samples: 8255/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 14,180
+Steps: 8268/14042  58% | Samples: 8262/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 14,192
+Steps: 8273/14042  58% | Samples: 8269/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 14,214
+Steps: 8277/14042  58% | Samples: 8275/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 14,233
+Steps: 8291/14042  59% | Samples: 8281/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 14,236
+Steps: 8301/14042  59% | Samples: 8284/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 14,244
+Steps: 8303/14042  59% | Samples: 8289/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 14,246
+Steps: 8308/14042  59% | Samples: 8292/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 14,256
+Steps: 8321/14042  59% | Samples: 8309/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 14,290
+Steps: 8322/14042  59% | Samples: 8315/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 14,291
+Steps: 8323/14042  59% | Samples: 8318/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 14,291
+Steps: 8333/14042  59% | Samples: 8324/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 14,302
+Steps: 8337/14042  59% | Samples: 8331/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 14,315
+Steps: 8347/14042  59% | Samples: 8338/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 14,330
+Steps: 8349/14042  59% | Samples: 8344/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 14,334
+Steps: 8352/14042  59% | Samples: 8347/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 14,341
+Steps: 8372/14042  59% | Samples: 8353/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 14,368
+Steps: 8373/14042  59% | Samples: 8359/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 14,375
+Steps: 8376/14042  59% | Samples: 8367/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 14,381
+Steps: 8377/14042  59% | Samples: 8371/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 14,381
+Steps: 8396/14042  59% | Samples: 8378/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 14,413
+Steps: 8404/14042  59% | Samples: 8386/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 14,420
+Steps: 8408/14042  59% | Samples: 8389/14042 | accuracy: 0.42 | vllm:  4/32 | HTTP retries: 14,421
+Steps: 8414/14042  59% | Samples: 8394/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 14,421
+Steps: 8415/14042  59% | Samples: 8397/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 14,421
+Steps: 8429/14042  60% | Samples: 8416/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 14,444
+Steps: 8431/14042  60% | Samples: 8423/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 14,455
+Steps: 8432/14042  60% | Samples: 8425/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 14,457
+Steps: 8449/14042  60% | Samples: 8433/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 14,462
+Steps: 8452/14042  60% | Samples: 8449/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 14,487
+Steps: 8459/14042  60% | Samples: 8452/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 14,487
+Steps: 8460/14042  60% | Samples: 8458/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 14,490
+Steps: 8483/14042  60% | Samples: 8461/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 14,511
+Steps: 8484/14042  60% | Samples: 8468/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 14,512
+Steps: 8486/14042  60% | Samples: 8475/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 14,520
+Steps: 8494/14042  60% | Samples: 8481/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 14,520
+Steps: 8510/14042  60% | Samples: 8495/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 14,557
+Steps: 8511/14042  60% | Samples: 8504/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 14,558
+Steps: 8526/14042  60% | Samples: 8511/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 14,560
+Steps: 8533/14042  60% | Samples: 8512/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 14,563
+Steps: 8537/14042  60% | Samples: 8528/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 14,582
+Steps: 8540/14042  60% | Samples: 8531/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 14,582
+Steps: 8541/14042  60% | Samples: 8539/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 14,595
+Steps: 8556/14042  60% | Samples: 8542/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 14,615
+Steps: 8557/14042  60% | Samples: 8545/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 14,615
+Steps: 8573/14042  61% | Samples: 8551/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 14,615
+Steps: 8574/14042  61% | Samples: 8556/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 14,616
+Steps: 8587/14042  61% | Samples: 8575/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 14,640
+Steps: 8588/14042  61% | Samples: 8582/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 14,649
+Steps: 8607/14042  61% | Samples: 8589/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 14,659
+[11/30/25 09:12:06] WARNING  Sample error (id: 8620, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 8608/14042  61% | Samples: 8594/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 14,667
+Steps: 8624/14042  61% | Samples: 8605/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 14,674
+Steps: 8625/14042  61% | Samples: 8609/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 14,675
+Steps: 8633/14042  61% | Samples: 8626/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 14,703
+Steps: 8635/14042  61% | Samples: 8633/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 14,713
+Steps: 8651/14042  61% | Samples: 8636/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 14,735
+Steps: 8652/14042  61% | Samples: 8647/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 14,751
+Steps: 8659/14042  61% | Samples: 8653/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 14,763
+Steps: 8662/14042  61% | Samples: 8659/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 14,768
+Steps: 8673/14042  61% | Samples: 8663/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 14,795
+Steps: 8674/14042  61% | Samples: 8669/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 14,795
+Steps: 8675/14042  61% | Samples: 8675/14042 | accuracy: 0.42 | vllm: 30/32 | HTTP retries: 14,808
+Steps: 8689/14042  61% | Samples: 8677/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 14,819
+Steps: 8696/14042  61% | Samples: 8682/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 14,825
+Steps: 8698/14042  61% | Samples: 8684/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 14,830
+Steps: 8703/14042  61% | Samples: 8696/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 14,840
+Steps: 8724/14042  62% | Samples: 8704/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 14,868
+[11/30/25 09:16:24] WARNING  Sample error (id: 8743, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 8736/14042  62% | Samples: 8708/14042 | accuracy: 0.42 | vllm:  2/32 | HTTP retries: 14,872
+Steps: 8737/14042  62% | Samples: 8713/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 14,872
+Steps: 8754/14042  62% | Samples: 8738/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 14,904
+Steps: 8762/14042  62% | Samples: 8740/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 14,904
+Steps: 8775/14042  62% | Samples: 8755/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 14,913
+Steps: 8782/14042  62% | Samples: 8776/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 14,947
+Steps: 8784/14042  62% | Samples: 8784/14042 | accuracy: 0.42 | vllm: 30/32 | HTTP retries: 14,963
+Steps: 8796/14042  62% | Samples: 8785/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 14,965
+Steps: 8802/14042  62% | Samples: 8789/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 14,973
+Steps: 8805/14042  62% | Samples: 8794/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 14,974
+Steps: 8813/14042  62% | Samples: 8801/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 14,988
+Steps: 8822/14042  62% | Samples: 8807/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 14,989
+Steps: 8833/14042  62% | Samples: 8823/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 15,014
+Steps: 8843/14042  62% | Samples: 8836/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 15,057
+Steps: 8862/14042  63% | Samples: 8837/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 15,057
+Steps: 8871/14042  63% | Samples: 8843/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 15,062
+Steps: 8874/14042  63% | Samples: 8849/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 15,062
+Steps: 8900/14042  63% | Samples: 8875/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 15,096
+Steps: 8901/14042  63% | Samples: 8880/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 15,097
+Steps: 8912/14042  63% | Samples: 8881/14042 | accuracy: 0.42 | vllm:  0/32 | HTTP retries: 15,101
+Steps: 8937/14042  63% | Samples: 8913/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 15,131
+Steps: 8949/14042  63% | Samples: 8922/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 15,138
+[11/30/25 09:23:43] WARNING  Sample error (id: 8953, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 8965/14042  63% | Samples: 8950/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 15,175
+Steps: 8966/14042  63% | Samples: 8956/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 15,175
+[11/30/25 09:24:42] WARNING  Sample error (id: 8974, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 8971/14042  63% | Samples: 8967/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 15,207
+Steps: 8976/14042  63% | Samples: 8969/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 15,207
+Steps: 8987/14042  64% | Samples: 8977/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 15,243
+Steps: 8988/14042  64% | Samples: 8986/14042 | accuracy: 0.42 | vllm: 28/32 | HTTP retries: 15,243
+Steps: 8990/14042  64% | Samples: 8990/14042 | accuracy: 0.42 | vllm: 31/32 | HTTP retries: 15,253
+Steps: 9009/14042  64% | Samples: 8991/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 15,257
+Steps: 9012/14042  64% | Samples: 8996/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 15,258
+Steps: 9013/14042  64% | Samples: 8998/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 15,263
+Steps: 9025/14042  64% | Samples: 9005/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 15,266
+Steps: 9026/14042  64% | Samples: 9008/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 15,266
+Steps: 9030/14042  64% | Samples: 9027/14042 | accuracy: 0.42 | vllm: 28/32 | HTTP retries: 15,309
+Steps: 9042/14042  64% | Samples: 9031/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 15,313
+[11/30/25 09:27:28] WARNING  Sample error (id: 9062, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 9043/14042  64% | Samples: 9036/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 15,328
+Steps: 9064/14042  64% | Samples: 9044/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 15,334
+Steps: 9072/14042  64% | Samples: 9061/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 15,351
+Steps: 9086/14042  64% | Samples: 9073/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 15,377
+Steps: 9094/14042  64% | Samples: 9089/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 15,393
+Steps: 9095/14042  64% | Samples: 9095/14042 | accuracy: 0.42 | vllm: 31/32 | HTTP retries: 15,403
+Steps: 9110/14042  64% | Samples: 9096/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 15,422
+[11/30/25 09:29:33] WARNING  Sample error (id: 9059, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 9135/14042  65% | Samples: 9111/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 15,450
+Steps: 9136/14042  65% | Samples: 9123/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 15,459
+Steps: 9145/14042  65% | Samples: 9129/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 15,460
+Steps: 9162/14042  65% | Samples: 9146/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 15,490
+Steps: 9163/14042  65% | Samples: 9156/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 15,504
+Steps: 9166/14042  65% | Samples: 9163/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 15,505
+Steps: 9174/14042  65% | Samples: 9164/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 15,505
+Steps: 9181/14042  65% | Samples: 9169/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 15,512
+Steps: 9189/14042  65% | Samples: 9181/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 15,527
+Steps: 9196/14042  65% | Samples: 9185/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 15,533
+Steps: 9197/14042  65% | Samples: 9191/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 15,541
+Steps: 9209/14042  65% | Samples: 9198/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 15,557
+Steps: 9222/14042  65% | Samples: 9210/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 15,591
+Steps: 9230/14042  65% | Samples: 9215/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 15,591
+Steps: 9231/14042  65% | Samples: 9223/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 15,603
+Steps: 9240/14042  65% | Samples: 9226/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 15,603
+Steps: 9241/14042  65% | Samples: 9228/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 15,603
+Steps: 9242/14042  65% | Samples: 9230/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 15,603
+Steps: 9248/14042  65% | Samples: 9232/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 15,603
+Steps: 9264/14042  65% | Samples: 9249/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 15,637
+Steps: 9274/14042  66% | Samples: 9265/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 15,664
+Steps: 9286/14042  66% | Samples: 9275/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 15,702
+Steps: 9311/14042  66% | Samples: 9287/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 15,723
+Steps: 9325/14042  66% | Samples: 9296/14042 | accuracy: 0.42 | vllm:  2/32 | HTTP retries: 15,729
+Steps: 9326/14042  66% | Samples: 9307/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 15,729
+Steps: 9340/14042  66% | Samples: 9327/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 15,769
+Steps: 9352/14042  66% | Samples: 9341/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 15,782
+Steps: 9357/14042  66% | Samples: 9345/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 15,788
+Steps: 9358/14042  66% | Samples: 9350/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 15,794
+Steps: 9366/14042  66% | Samples: 9357/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 15,795
+Steps: 9372/14042  66% | Samples: 9358/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 15,795
+Steps: 9379/14042  66% | Samples: 9359/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 15,796
+Steps: 9380/14042  66% | Samples: 9365/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 15,800
+Steps: 9389/14042  66% | Samples: 9379/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 15,816
+Steps: 9390/14042  66% | Samples: 9385/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 15,821
+Steps: 9402/14042  66% | Samples: 9391/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 15,850
+Steps: 9403/14042  66% | Samples: 9400/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 15,850
+Steps: 9414/14042  67% | Samples: 9404/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 15,851
+Steps: 9421/14042  67% | Samples: 9405/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 15,856
+Steps: 9424/14042  67% | Samples: 9411/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 15,859
+Steps: 9435/14042  67% | Samples: 9413/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 15,864
+Steps: 9441/14042  67% | Samples: 9417/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 15,865
+Steps: 9442/14042  67% | Samples: 9426/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 15,866
+Steps: 9470/14042  67% | Samples: 9443/14042 | accuracy: 0.42 | vllm:  4/32 | HTTP retries: 15,895
+Steps: 9481/14042  67% | Samples: 9452/14042 | accuracy: 0.42 | vllm:  2/32 | HTTP retries: 15,900
+Steps: 9482/14042  67% | Samples: 9462/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 15,901
+Steps: 9499/14042  67% | Samples: 9483/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 15,940
+Steps: 9517/14042  67% | Samples: 9499/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 15,941
+Steps: 9522/14042  67% | Samples: 9504/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 15,941
+Steps: 9523/14042  67% | Samples: 9509/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 15,948
+Steps: 9531/14042  67% | Samples: 9518/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 15,956
+Steps: 9532/14042  67% | Samples: 9521/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 15,960
+Steps: 9545/14042  67% | Samples: 9533/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 15,994
+Steps: 9553/14042  68% | Samples: 9543/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 16,003
+Steps: 9558/14042  68% | Samples: 9546/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 16,008
+Steps: 9559/14042  68% | Samples: 9551/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 16,014
+Steps: 9567/14042  68% | Samples: 9560/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 16,037
+Steps: 9569/14042  68% | Samples: 9565/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 16,043
+Steps: 9573/14042  68% | Samples: 9569/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 16,044
+Steps: 9601/14042  68% | Samples: 9574/14042 | accuracy: 0.42 | vllm:  4/32 | HTTP retries: 16,061
+Steps: 9609/14042  68% | Samples: 9579/14042 | accuracy: 0.42 | vllm:  1/32 | HTTP retries: 16,064
+Steps: 9626/14042  68% | Samples: 9610/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 16,102
+Steps: 9632/14042  68% | Samples: 9612/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 16,102
+Steps: 9641/14042  68% | Samples: 9627/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 16,112
+Steps: 9642/14042  68% | Samples: 9632/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 16,115
+Steps: 9655/14042  68% | Samples: 9643/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 16,152
+Steps: 9666/14042  68% | Samples: 9656/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 16,172
+Steps: 9669/14042  68% | Samples: 9663/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 16,178
+Steps: 9670/14042  68% | Samples: 9665/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 16,179
+Steps: 9680/14042  68% | Samples: 9671/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 16,200
+Steps: 9697/14042  69% | Samples: 9681/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 16,230
+Steps: 9698/14042  69% | Samples: 9686/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 16,230
+Steps: 9704/14042  69% | Samples: 9696/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 16,245
+Steps: 9706/14042  69% | Samples: 9699/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 16,246
+Steps: 9711/14042  69% | Samples: 9706/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 16,251
+Steps: 9726/14042  69% | Samples: 9712/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 16,283
+Steps: 9728/14042  69% | Samples: 9718/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 16,283
+Steps: 9732/14042  69% | Samples: 9728/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 16,299
+Steps: 9741/14042  69% | Samples: 9729/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 16,300
+Steps: 9742/14042  69% | Samples: 9734/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 16,313
+Steps: 9745/14042  69% | Samples: 9743/14042 | accuracy: 0.42 | vllm: 29/32 | HTTP retries: 16,337
+[11/30/25 09:53:30] WARNING  Sample error (id: 9782, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 9769/14042  69% | Samples: 9746/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 16,343
+Steps: 9779/14042  69% | Samples: 9752/14042 | accuracy: 0.42 | vllm:  4/32 | HTTP retries: 16,350
+[11/30/25 09:53:55] WARNING  Sample error (id: 9800, epoch: 1):       run.py:650
+                             Connection error.). Sample will be                 
+                             retried.                                           
+Steps: 9782/14042  69% | Samples: 9760/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 16,350
+Steps: 9798/14042  69% | Samples: 9783/14042 | accuracy: 0.42 | vllm:  7/32 | HTTP retries: 16,383
+Steps: 9807/14042  69% | Samples: 9787/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 16,383
+Steps: 9808/14042  69% | Samples: 9789/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 16,390
+Steps: 9816/14042  69% | Samples: 9797/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 16,392
+Steps: 9837/14042  70% | Samples: 9817/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 16,429
+Steps: 9845/14042  70% | Samples: 9826/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 16,437
+Steps: 9846/14042  70% | Samples: 9837/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 16,444
+Steps: 9847/14042  70% | Samples: 9842/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 16,452
+Steps: 9875/14042  70% | Samples: 9848/14042 | accuracy: 0.42 | vllm:  4/32 | HTTP retries: 16,467
+Steps: 9876/14042  70% | Samples: 9852/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 16,467
+Steps: 9880/14042  70% | Samples: 9862/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 16,472
+Steps: 9885/14042  70% | Samples: 9865/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 16,472
+Steps: 9886/14042  70% | Samples: 9872/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 16,475
+Steps: 9912/14042  70% | Samples: 9887/14042 | accuracy: 0.42 | vllm:  6/32 | HTTP retries: 16,504
+Steps: 9925/14042  70% | Samples: 9896/14042 | accuracy: 0.42 | vllm:  2/32 | HTTP retries: 16,511
+Steps: 9944/14042  70% | Samples: 9926/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 16,555
+Steps: 9957/14042  70% | Samples: 9944/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 16,564
+Steps: 9958/14042  70% | Samples: 9948/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 16,572
+Steps: 9963/14042  70% | Samples: 9959/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 16,607
+Steps: 9974/14042  71% | Samples: 9964/14042 | accuracy: 0.42 | vllm: 21/32 | HTTP retries: 16,617
+Steps: 9988/14042  71% | Samples: 9975/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 16,636
+Steps: 9992/14042  71% | Samples: 9989/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 16,683
+Steps: 9994/14042  71% | Samples: 9992/14042 | accuracy: 0.42 | vllm: 28/32 | HTTP retries: 16,690
+Steps: 10001/14042  71% | Samples: 9995/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 16,695
+Steps: 10002/14042  71% | Samples: 9998/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 16,697
+Steps: 10023/14042  71% | Samples: 10003/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 16,702
+Steps: 10036/14042  71% | Samples: 10020/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 16,717
+Steps: 10056/14042  71% | Samples: 10037/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 16,751
+Steps: 10057/14042  71% | Samples: 10044/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 16,754
+Steps: 10063/14042  71% | Samples: 10053/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 16,766
+Steps: 10074/14042  71% | Samples: 10054/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 16,766
+Steps: 10075/14042  71% | Samples: 10060/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 16,770
+Steps: 10084/14042  71% | Samples: 10075/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 16,784
+Steps: 10089/14042  71% | Samples: 10076/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 16,789
+Steps: 10094/14042  71% | Samples: 10090/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 16,823
+Steps: 10117/14042  72% | Samples: 10095/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 16,827
+Steps: 10118/14042  72% | Samples: 10099/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 16,832
+Steps: 10127/14042  72% | Samples: 10106/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 16,832
+Steps: 10128/14042  72% | Samples: 10116/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 16,837
+Steps: 10137/14042  72% | Samples: 10129/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 16,877
+Steps: 10167/14042  72% | Samples: 10138/14042 | accuracy: 0.42 | vllm:  2/32 | HTTP retries: 16,889
+Steps: 10175/14042  72% | Samples: 10157/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 16,894
+Steps: 10195/14042  72% | Samples: 10176/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 16,931
+Steps: 10198/14042  72% | Samples: 10177/14042 | accuracy: 0.42 | vllm:  1/32 | HTTP retries: 16,932
+Steps: 10207/14042  72% | Samples: 10179/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 16,933
+Steps: 10208/14042  72% | Samples: 10194/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 16,934
+Steps: 10209/14042  72% | Samples: 10198/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 16,936
+Steps: 10229/14042  72% | Samples: 10210/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 16,970
+Steps: 10230/14042  72% | Samples: 10215/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 16,970
+Steps: 10238/14042  72% | Samples: 10225/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 16,982
+Steps: 10258/14042  73% | Samples: 10239/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 17,013
+Steps: 10270/14042  73% | Samples: 10240/14042 | accuracy: 0.42 | vllm:  1/32 | HTTP retries: 17,014
+Steps: 10271/14042  73% | Samples: 10244/14042 | accuracy: 0.42 | vllm:  2/32 | HTTP retries: 17,014
+Steps: 10286/14042  73% | Samples: 10272/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 17,057
+Steps: 10287/14042  73% | Samples: 10282/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 17,066
+Steps: 10294/14042  73% | Samples: 10288/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 17,074
+Steps: 10307/14042  73% | Samples: 10295/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 17,099
+Steps: 10308/14042  73% | Samples: 10297/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 17,100
+Steps: 10310/14042  73% | Samples: 10306/14042 | accuracy: 0.42 | vllm: 25/32 | HTTP retries: 17,117
+Steps: 10330/14042  73% | Samples: 10311/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 17,130
+Steps: 10331/14042  73% | Samples: 10318/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 17,134
+Steps: 10336/14042  73% | Samples: 10325/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 17,142
+Steps: 10337/14042  73% | Samples: 10329/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 17,147
+Steps: 10338/14042  73% | Samples: 10336/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 17,154
+Steps: 10353/14042  73% | Samples: 10339/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 17,176
+Steps: 10354/14042  73% | Samples: 10341/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 17,178
+Steps: 10356/14042  73% | Samples: 10350/14042 | accuracy: 0.42 | vllm: 23/32 | HTTP retries: 17,192
+Steps: 10373/14042  73% | Samples: 10357/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 17,206
+Steps: 10378/14042  73% | Samples: 10361/14042 | accuracy: 0.42 | vllm: 12/32 | HTTP retries: 17,207
+Steps: 10392/14042  74% | Samples: 10372/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 17,218
+Steps: 10399/14042  74% | Samples: 10393/14042 | accuracy: 0.42 | vllm: 24/32 | HTTP retries: 17,262
+Steps: 10400/14042  74% | Samples: 10397/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 17,275
+Steps: 10427/14042  74% | Samples: 10401/14042 | accuracy: 0.42 | vllm:  5/32 | HTTP retries: 17,281
+Steps: 10430/14042  74% | Samples: 10402/14042 | accuracy: 0.42 | vllm:  3/32 | HTTP retries: 17,282
+Steps: 10432/14042  74% | Samples: 10413/14042 | accuracy: 0.42 | vllm: 10/32 | HTTP retries: 17,282
+Steps: 10448/14042  74% | Samples: 10433/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 17,322
+Steps: 10449/14042  74% | Samples: 10442/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 17,337
+Steps: 10452/14042  74% | Samples: 10447/14042 | accuracy: 0.42 | vllm: 15/32 | HTTP retries: 17,339
+Steps: 10455/14042  74% | Samples: 10449/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 17,339
+Steps: 10462/14042  74% | Samples: 10450/14042 | accuracy: 0.42 | vllm: 19/32 | HTTP retries: 17,341
+Steps: 10467/14042  74% | Samples: 10463/14042 | accuracy: 0.42 | vllm: 27/32 | HTTP retries: 17,382
+Steps: 10485/14042  74% | Samples: 10468/14042 | accuracy: 0.42 | vllm: 13/32 | HTTP retries: 17,384
+Steps: 10486/14042  74% | Samples: 10472/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 17,394
+Steps: 10490/14042  74% | Samples: 10477/14042 | accuracy: 0.42 | vllm:  8/32 | HTTP retries: 17,396
+Steps: 10498/14042  74% | Samples: 10479/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 17,396
+Steps: 10499/14042  74% | Samples: 10484/14042 | accuracy: 0.42 | vllm: 14/32 | HTTP retries: 17,396
+Steps: 10522/14042  74% | Samples: 10500/14042 | accuracy: 0.42 | vllm:  9/32 | HTTP retries: 17,435
+Steps: 10523/14042  74% | Samples: 10509/14042 | accuracy: 0.42 | vllm: 17/32 | HTTP retries: 17,447
+Steps: 10531/14042  74% | Samples: 10517/14042 | accuracy: 0.42 | vllm: 16/32 | HTTP retries: 17,452
+Steps: 10532/14042  75% | Samples: 10525/14042 | accuracy: 0.42 | vllm: 22/32 | HTTP retries: 17,462
+Steps: 10544/14042  75% | Samples: 10533/14042 | accuracy: 0.42 | vllm: 20/32 | HTTP retries: 17,493
+Steps: 10545/14042  75% | Samples: 10542/14042 | accuracy: 0.42 | vllm: 26/32 | HTTP retries: 17,502
+Steps: 10566/14042  75% | Samples: 10546/14042 | accuracy: 0.42 | vllm: 11/32 | HTTP retries: 17,535
+Steps: 10574/14042  75% | Samples: 10563/14042 | accuracy: 0.42 | vllm: 18/32 | HTTP retries: 17,547
+submitit INFO (2025-11-30 10:28:06,005) - Job has timed out. Ran 598 minutes out of requested 600 minutes.
+submitit WARNING (2025-11-30 10:28:06,006) - Bypassing signal SIGCONT
+[11/30/25 10:28:06] WARNING  Bypassing signal SIGCONT     job_environment.py:196
+submitit WARNING (2025-11-30 10:28:06,047) - Caught signal SIGUSR2 on sphinx1: this job is timed-out.
+                    WARNING  Caught signal SIGUSR2 on     job_environment.py:202
+                             sphinx1: this job is                               
+                             timed-out.                                         
+submitit INFO (2025-11-30 10:28:06,070) - Job not requeued because: timed-out and not checkpointable.
+
+---------------------------------------------------------                       
+mmlu_0_shot (14,042 samples): vllm/Qwen2.5-3B-Instruct                          
+                                                                                
+╭───────────────────── Traceback (most recent call last) ──────────────────────╮
+│ /sphinx/u/cye/.venv/lib/python3.11/site-packages/inspect_ai/_eval/task/run.… │
+│ in task_run                                                                  │
+│                                                                              │
+│ /sphinx/u/cye/.venv/lib/python3.11/site-packages/inspect_ai/_util/_async.py… │
+│ in tg_collect                                                                │
+│                                                                              │
+│ /sphinx/u/cye/.venv/lib/python3.11/site-packages/inspect_ai/_util/_async.py… │
+│ in run_task                                                                  │
+│                                                                              │
+│ /sphinx/u/cye/.venv/lib/python3.11/site-packages/inspect_ai/_eval/task/run.… │
+│ in run_sample                                                                │
+│                                                                              │
+│ /sphinx/u/cye/.venv/lib/python3.11/site-packages/inspect_ai/_eval/task/run.… │
+│ in task_run_sample                                                           │
+│                                                                              │
+│ /sphinx/u/cye/.venv/lib/python3.11/site-packages/inspect_ai/_eval/task/run.… │
+│ in sample_complete                                                           │
+│                                                                              │
+│ /sphinx/u/cye/.venv/lib/python3.11/site-packages/inspect_ai/_eval/task/run.… │
+│ in compute                                                                   │
+│                                                                              │
+│ /sphinx/u/cye/.venv/lib/python3.11/site-packages/inspect_ai/_eval/task/resu… │
+│ in eval_results                                                              │
+│                                                                              │
+│ /sphinx/u/cye/.venv/lib/python3.11/site-packages/inspect_ai/_eval/task/resu… │
+│ in reduce_scores                                                             │
+│                                                                              │
+│ /sphinx/u/cye/.venv/lib/python3.11/site-packages/inspect_ai/scorer/_reducer… │
+│ in reduce                                                                    │
+│                                                                              │
+│ /sphinx/u/cye/.venv/lib/python3.11/site-packages/inspect_ai/scorer/_reducer… │
+│ in _compute_scalar_stat                                                      │
+│                                                                              │
+│ /sailhome/cye/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/p… │
+│ in mean                                                                      │
+│                                                                              │
+│    427 │                                                                     │
+│    428 │   If ``data`` is empty, StatisticsError will be raised.             │
+│    429 │   """                                                               │
+│ ❱  430 │   T, total, n = _sum(data)                                          │
+│    431 │   if n < 1:                                                         │
+│    432 │   │   raise StatisticsError('mean requires at least one data point' │
+│    433 │   return _convert(total / n, T)                                     │
+│                                                                              │
+│ /sailhome/cye/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/p… │
+│ in _sum                                                                      │
+│                                                                              │
+│    200 │   │   assert not _isfinite(total)                                   │
+│    201 │   else:                                                             │
+│    202 │   │   # Sum all the partial sums using builtin sum.                 │
+│ ❱  203 │   │   total = sum(Fraction(n, d) for d, n in partials.items())      │
+│    204 │   T = reduce(_coerce, types, int)  # or raise TypeError             │
+│    205 │   return (T, total, count)                                          │
+│    206                                                                       │
+│                                                                              │
+│ /sailhome/cye/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/p… │
+│ in reverse                                                                   │
+│                                                                              │
+│   369 │   │   def reverse(b, a):                                             │
+│   370 │   │   │   if isinstance(a, numbers.Rational):                        │
+│   371 │   │   │   │   # Includes ints.                                       │
+│ ❱ 372 │   │   │   │   return monomorphic_operator(a, b)                      │
+│   373 │   │   │   elif isinstance(a, numbers.Real):                          │
+│   374 │   │   │   │   return fallback_operator(float(a), float(b))           │
+│   375 │   │   │   elif isinstance(a, numbers.Complex):                       │
+│                                                                              │
+│ /sailhome/cye/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/p… │
+│ in _add                                                                      │
+│                                                                              │
+│   452 │   def _add(a, b):                                                    │
+│   453 │   │   """a + b"""                                                    │
+│   454 │   │   na, da = a.numerator, a.denominator                            │
+│ ❱ 455 │   │   nb, db = b.numerator, b.denominator                            │
+│   456 │   │   g = math.gcd(da, db)                                           │
+│   457 │   │   if g == 1:                                                     │
+│   458 │   │   │   return Fraction(na * db + da * nb, da * db, _normalize=Fal │
+│                                                                              │
+│ /sailhome/cye/.local/share/uv/python/cpython-3.11.13-linux-x86_64-gnu/lib/p… │
+│ in denominator                                                               │
+│                                                                              │
+│   258 │   def numerator(a):                                                  │
+│   259 │   │   return a._numerator                                            │
+│   260 │                                                                      │
+│ ❱ 261 │   @property                                                          │
+│   262 │   def denominator(a):                                                │
+│   263 │   │   return a._denominator                                          │
+│   264                                                                        │
+│                                                                              │
+│ /sphinx/u/cye/.venv/lib/python3.11/site-packages/submitit/core/job_environm… │
+│ in checkpoint_and_try_requeue                                                │
+│                                                                              │
+│   223 │   │   │   # this is caught by the try/except in "process_job"        │
+│   224 │   │   │   message = f"Job not requeued because: {no_requeue_reason}. │
+│   225 │   │   │   self._logger.info(message)                                 │
+│ ❱ 226 │   │   │   raise utils.UncompletedJobError(message)                   │
+│   227 │   │   # if everything went well, requeue!                            │
+│   228 │   │   self.env._requeue(countdown)                                   │
+│   229 │   │   self._exit()                                                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+UncompletedJobError: Job not requeued because: timed-out and not checkpointable.
+Task interrupted (10,574 of 14,042 total samples logged before interruption).   
+Resume task with:                                                               
+                                                                                
+inspect eval-retry                                                              
+baseline/mmlu_0_shot/Qwen2.5-3B-Instruct/2025-11-30T00-30-54-08-00_mmlu-0-shot_…
+Log:                                                                            
+baseline/mmlu_0_shot/Qwen2.5-3B-Instruct/2025-11-30T00-30-54-08-00_mmlu-0-shot_…
+---------------------------------------------------------                       
+                                                                                
+[11/30/25 10:28:24] WARNING  Error cleaning up sample buffer     database.py:720
+                             databases at                                       
+                             /sailhome/cye/.local/share/inspect_                
+                             ai/samplebuffer: [Errno 2] No such                 
+                             file or directory:                                 
+                             '/sailhome/cye/.local/share/inspect                
+                             _ai/samplebuffer/e4cccc621577ec9c51                
+                             5546b284764ff0459e263cc97caf86ebdf2                
+                             ff1c67d4434'                                       
+submitit ERROR (2025-11-30 10:28:26,042) - Submitted job triggered an exception
+[11/30/25 10:28:26] ERROR    Submitted job triggered an         submission.py:68
+                             exception                                          

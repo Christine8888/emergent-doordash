@@ -1,0 +1,118 @@
+/sphinx/u/cye/.venv/lib/python3.11/site-packages/submitit/core/plugins.py:24: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+Allocated 1 GPUs by SLURM
+n_gpus=1: data_parallel_size=1 (n_gpus // tensor_parallel_size=1)
+CUDA_VISIBLE_DEVICES: 0
+Starting vLLM server on port 47897
+Model: Qwen/Qwen2.5-7B-Instruct
+Served as: Qwen2.5-7B-Instruct
+TP: 1, DP: 1
+Command: vllm serve Qwen/Qwen2.5-7B-Instruct --port 47897 --served-model-name Qwen2.5-7B-Instruct --tensor-parallel-size 1 --data-parallel-size 1 --max-model-len 16384 --gpu-memory-utilization 0.85 --max-num-seqs 16 --enable-prefix-caching --enable-chunked-prefill --dtype auto
+Waiting for health check at http://localhost:47897/health
+[vLLM stdout] INFO 11-30 00:29:49 [__init__.py:216] Automatically detected platform cuda.
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:29:53 [api_server.py:1839] vLLM API server version 0.11.0
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:29:53 [utils.py:233] non-default args: {'model_tag': 'Qwen/Qwen2.5-7B-Instruct', 'port': 47897, 'model': 'Qwen/Qwen2.5-7B-Instruct', 'max_model_len': 16384, 'served_model_name': ['Qwen2.5-7B-Instruct'], 'gpu_memory_utilization': 0.85, 'enable_prefix_caching': True, 'max_num_seqs': 16, 'enable_chunked_prefill': True}
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:29:53 [model.py:547] Resolved architecture: Qwen2ForCausalLM
+[vLLM stderr] [1;36m(APIServer pid=336945)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:29:53 [model.py:1510] Using max model len 16384
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:29:53 [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=2048.
+[vLLM stdout] INFO 11-30 00:29:57 [__init__.py:216] Automatically detected platform cuda.
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:30:00 [core.py:644] Waiting for init message from front-end.
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:30:00 [core.py:77] Initializing a V1 LLM engine (v0.11.0) with config: model='Qwen/Qwen2.5-7B-Instruct', speculative_config=None, tokenizer='Qwen/Qwen2.5-7B-Instruct', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=16384, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser=''), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None), seed=0, served_model_name=Qwen2.5-7B-Instruct, enable_prefix_caching=True, chunked_prefill_enabled=True, pooler_config=None, compilation_config={"level":3,"debug_dump_path":"","cache_dir":"","backend":"","custom_ops":[],"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output","vllm.mamba_mixer2","vllm.mamba_mixer","vllm.short_conv","vllm.linear_attention","vllm.plamo2_mamba_mixer","vllm.gdn_attention","vllm.sparse_attn_indexer"],"use_inductor":true,"compile_sizes":[],"inductor_compile_config":{"enable_auto_functionalized_v2":false},"inductor_passes":{},"cudagraph_mode":[2,1],"use_cudagraph":true,"cudagraph_num_of_warmups":1,"cudagraph_capture_sizes":[32,24,16,8,4,2,1],"cudagraph_copy_inputs":false,"full_cuda_graph":false,"use_inductor_graph_partition":false,"pass_config":{},"max_capture_size":32,"local_cache_dir":null}
+[vLLM stdout] [Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[vLLM stdout] [Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[vLLM stdout] [Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[vLLM stdout] [Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[vLLM stdout] [Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[vLLM stdout] [Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:30:01 [parallel_state.py:1208] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m WARNING 11-30 00:30:03 [topk_topp_sampler.py:66] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:30:04 [gpu_model_runner.py:2602] Starting to load model Qwen/Qwen2.5-7B-Instruct...
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:30:05 [gpu_model_runner.py:2634] Loading model from scratch...
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:30:05 [cuda.py:366] Using Flash Attention backend on V1 engine.
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:30:05 [weight_utils.py:392] Using model weights format ['*.safetensors']
+[vLLM stderr] [1;36m(EngineCore_DP0 pid=337046)[0;0m
+[vLLM stderr] Loading safetensors checkpoint shards:   0% Completed | 0/4 [00:00<?, ?it/s]
+[vLLM stderr] [1;36m(EngineCore_DP0 pid=337046)[0;0m
+[vLLM stderr] Loading safetensors checkpoint shards:  25% Completed | 1/4 [00:06<00:20,  6.87s/it]
+[vLLM stderr] [1;36m(EngineCore_DP0 pid=337046)[0;0m
+[vLLM stderr] Loading safetensors checkpoint shards:  50% Completed | 2/4 [00:15<00:15,  7.64s/it]
+[vLLM stderr] [1;36m(EngineCore_DP0 pid=337046)[0;0m
+[vLLM stderr] Loading safetensors checkpoint shards:  75% Completed | 3/4 [00:23<00:08,  8.09s/it]
+[vLLM stderr] [1;36m(EngineCore_DP0 pid=337046)[0;0m
+[vLLM stderr] Loading safetensors checkpoint shards: 100% Completed | 4/4 [00:32<00:00,  8.26s/it]
+[vLLM stderr] [1;36m(EngineCore_DP0 pid=337046)[0;0m
+[vLLM stderr] Loading safetensors checkpoint shards: 100% Completed | 4/4 [00:32<00:00,  8.05s/it]
+[vLLM stderr] [1;36m(EngineCore_DP0 pid=337046)[0;0m
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:30:38 [default_loader.py:267] Loading weights took 32.27 seconds
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:30:38 [gpu_model_runner.py:2653] Model loading took 14.2488 GiB and 32.992675 seconds
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:30:42 [backends.py:548] Using cache directory: /sailhome/cye/.cache/vllm/torch_compile_cache/c95f1ac400/rank_0_0/backbone for vLLM's torch.compile
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:30:42 [backends.py:559] Dynamo bytecode transform time: 3.73 s
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:30:46 [backends.py:197] Cache the graph for dynamic shape for later use
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:31:02 [backends.py:218] Compiling a graph for dynamic shape takes 19.28 s
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:31:07 [monitor.py:34] torch.compile takes 23.02 s in total
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:31:08 [gpu_worker.py:298] Available KV cache memory: 52.67 GiB
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:31:08 [kv_cache_utils.py:1087] GPU KV cache size: 986,288 tokens
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:31:08 [kv_cache_utils.py:1091] Maximum concurrency for 16,384 tokens per request: 60.20x
+[vLLM stderr] [1;36m(EngineCore_DP0 pid=337046)[0;0m
+[vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]
+[vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  43%|████▎     | 3/7 [00:00<00:00, 23.64it/s]
+[vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  86%|████████▌ | 6/7 [00:00<00:00, 23.96it/s]
+[vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 7/7 [00:00<00:00, 23.29it/s]
+[vLLM stderr] [1;36m(EngineCore_DP0 pid=337046)[0;0m
+[vLLM stderr] Capturing CUDA graphs (decode, FULL):   0%|          | 0/5 [00:00<?, ?it/s]
+[vLLM stderr] Capturing CUDA graphs (decode, FULL):  60%|██████    | 3/5 [00:00<00:00, 28.78it/s]
+[vLLM stderr] Capturing CUDA graphs (decode, FULL): 100%|██████████| 5/5 [00:00<00:00, 29.90it/s]
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:31:09 [gpu_model_runner.py:3480] Graph capturing finished in 1 secs, took 0.36 GiB
+[vLLM stdout] [1;36m(EngineCore_DP0 pid=337046)[0;0m INFO 11-30 00:31:09 [core.py:210] init engine (profile, create kv cache, warmup model) took 31.39 seconds
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:10 [loggers.py:147] Engine 000: vllm cache_config_info with initialization after num_gpu_blocks is: 61643
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [api_server.py:1634] Supported_tasks: ['generate']
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m WARNING 11-30 00:31:11 [model.py:1389] Default sampling parameters have been overridden by the model's Hugging Face generation config recommended from the model creator. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [serving_responses.py:137] Using default chat sampling params from model: {'repetition_penalty': 1.05, 'temperature': 0.7, 'top_k': 20, 'top_p': 0.8}
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [serving_chat.py:139] Using default chat sampling params from model: {'repetition_penalty': 1.05, 'temperature': 0.7, 'top_k': 20, 'top_p': 0.8}
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [serving_completion.py:76] Using default completion sampling params from model: {'repetition_penalty': 1.05, 'temperature': 0.7, 'top_k': 20, 'top_p': 0.8}
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [api_server.py:1912] Starting vLLM API server 0 on http://0.0.0.0:47897
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:34] Available routes are:
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /openapi.json, Methods: GET, HEAD
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /docs, Methods: GET, HEAD
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /docs/oauth2-redirect, Methods: GET, HEAD
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /redoc, Methods: GET, HEAD
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /health, Methods: GET
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /load, Methods: GET
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /ping, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /ping, Methods: GET
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /tokenize, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /detokenize, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /v1/models, Methods: GET
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /version, Methods: GET
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /v1/responses, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /v1/responses/{response_id}, Methods: GET
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /v1/responses/{response_id}/cancel, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /v1/chat/completions, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /v1/completions, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /v1/embeddings, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /pooling, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /classify, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /score, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /v1/score, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /v1/audio/transcriptions, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /v1/audio/translations, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /rerank, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /v1/rerank, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /v2/rerank, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /scale_elastic_ep, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /is_scaling_elastic_ep, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /invocations, Methods: POST
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO 11-30 00:31:11 [launcher.py:42] Route: /metrics, Methods: GET
+[vLLM stderr] [1;36m(APIServer pid=336945)[0;0m INFO:     Started server process [336945]
+[vLLM stderr] [1;36m(APIServer pid=336945)[0;0m INFO:     Waiting for application startup.
+[vLLM stderr] [1;36m(APIServer pid=336945)[0;0m INFO:     Application startup complete.
+[vLLM stdout] [1;36m(APIServer pid=336945)[0;0m INFO:     127.0.0.1:44328 - "GET /health HTTP/1.1" 200 OK
+vLLM server ready on port 47897
+Running eval: Qwen2.5-7B-Instruct
+  Epochs: 1
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+[2025-11-30T06:35:10.359] error: *** STEP 13362363.0 ON sphinx4 CANCELLED AT 2025-11-30T06:35:10 DUE to SIGNAL Terminated ***
+[2025-11-30T06:35:10.359] error: *** JOB 13362363 ON sphinx4 CANCELLED AT 2025-11-30T06:35:10 DUE to SIGNAL Terminated ***
+submitit WARNING (2025-11-30 06:35:11,072) - Bypassing signal SIGTERM
+Bypassing signal SIGTERM
