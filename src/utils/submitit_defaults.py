@@ -13,7 +13,7 @@ class SubmitConfig:
 
     # Cluster config
     partition: str = "sphinx"
-    qos: str = "high"
+    qos: str
     account: str = "nlp"
     job_name_prefix: str = "exp"
     exclude_nodes: str = "sphinx2"
