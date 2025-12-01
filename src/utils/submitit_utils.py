@@ -72,7 +72,13 @@ def _configure_executor(executor: submitit.AutoExecutor, config: SubmitConfig, n
     executor.update_parameters(**params)
 
 
-def _wait_with_retries(jobs: list[submitit.Job], poll_interval: int, max_retries: int):
+def _wait_with_retries(
+    jobs: list[submitit.Job],
+    job_configs: dict[str, tuple[SubmitConfig, str]],  # job_id -> (config, name)
+    executor: submitit.AutoExecutor,
+    poll_interval: int,
+    max_retries: int,
+):
     """Wait for jobs, resubmitting failures up to max_retries."""
     retry_counts = {job.job_id: 0 for job in jobs}
     all_jobs = list(jobs)
@@ -83,7 +89,10 @@ def _wait_with_retries(jobs: list[submitit.Job], poll_interval: int, max_retries
 
         for job in status_map.get('FAILED', []) + status_map.get('TIMEOUT', []):
             if retry_counts.get(job.job_id, 0) < max_retries:
-                new_job = job.executor.submit(job.fn, *job.args, **job.kwargs)
+                config, name = job_configs[job.job_id]
+                _configure_executor(executor, config, name)
+                new_job = executor.submit(job.fn, *job.args, **job.kwargs)
+                job_configs[new_job.job_id] = (config, name)
                 retry_counts[new_job.job_id] = retry_counts.get(job.job_id, 0) + 1
                 all_jobs.append(new_job)
                 all_jobs.remove(job)
@@ -145,11 +154,13 @@ def launch_experiment(
     config = config or DEFAULT_CONFIG
     executor = submitit.AutoExecutor(folder=config.submitit_folder)
     jobs = []
+    job_configs = {}
 
     for model_path, tp in models:
         model_name = os.path.basename(model_path)
         job_config = config.with_gpus(tp)
-        _configure_executor(executor, job_config, f"{config.job_name_prefix}_{model_name}")
+        job_name = f"{config.job_name_prefix}_{model_name}"
+        _configure_executor(executor, job_config, job_name)
 
         for fewshot in fewshots:
             for hint_fraction in hint_fractions:
@@ -165,12 +176,13 @@ def launch_experiment(
                     epochs=epochs, results_dir=results_dir, config=job_config,
                 )
                 jobs.append(job)
+                job_configs[job.job_id] = (job_config, job_name)
                 logger.info(f"Submitted {job.job_id}: {model_name}, fewshot={fewshot}, hint={hint_fraction}")
 
     logger.info(f"Submitted {len(jobs)} jobs")
     if not jobs or not wait:
         return jobs
-    return _wait_with_retries(jobs, poll_interval, max_retries)
+    return _wait_with_retries(jobs, job_configs, executor, poll_interval, max_retries)
 
 
 def launch_baseline(
@@ -182,6 +194,7 @@ def launch_baseline(
     config = config or DEFAULT_CONFIG
     executor = submitit.AutoExecutor(folder=config.submitit_folder)
     jobs = []
+    job_configs = {}
 
     for eval_name in eval_names:
         for model_path, tp in models:
@@ -193,16 +206,18 @@ def launch_baseline(
                     continue
 
             job_config = config.with_gpus(tp)
-            _configure_executor(executor, job_config, f"baseline_{eval_name}_{model_name}")
+            job_name = f"baseline_{eval_name}_{model_name}"
+            _configure_executor(executor, job_config, job_name)
 
             job = executor.submit(
                 run_baseline_eval, eval_name=eval_name, model_path=model_path, tensor_parallel_size=tp,
                 results_dir=results_dir, config=job_config, epochs=epochs, limit=limit,
             )
             jobs.append(job)
+            job_configs[job.job_id] = (job_config, job_name)
             logger.info(f"Submitted {job.job_id}: {eval_name} / {model_name}")
 
     logger.info(f"Submitted {len(jobs)} jobs")
     if not jobs or not wait:
         return jobs
-    return _wait_with_retries(jobs, poll_interval, max_retries)
+    return _wait_with_retries(jobs, job_configs, executor, poll_interval, max_retries)
