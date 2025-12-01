@@ -54,11 +54,10 @@ def check_job_status(jobs: list[submitit.Job]) -> dict[str, list]:
 
 def _configure_executor(executor: submitit.AutoExecutor, config: SubmitConfig, name: str):
     """Configure executor with slurm parameters."""
-    executor.update_parameters(
+    params = dict(
         name=name,
         slurm_partition=config.partition,
         slurm_account=config.account,
-        slurm_qos=config.qos,
         slurm_gpus_per_node=config.gpus_per_job,
         slurm_cpus_per_task=config.cpus_per_task,
         slurm_mem=f"{config.mem_gb}GB",
@@ -68,6 +67,9 @@ def _configure_executor(executor: submitit.AutoExecutor, config: SubmitConfig, n
         slurm_srun_args=["--cpu-bind=none"],
         slurm_exclude=config.exclude_nodes,
     )
+    if config.qos:
+        params["slurm_qos"] = config.qos
+    executor.update_parameters(**params)
 
 
 def _wait_with_retries(jobs: list[submitit.Job], poll_interval: int, max_retries: int):
