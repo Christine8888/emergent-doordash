@@ -13,11 +13,11 @@ class SubmitConfig:
 
     # Cluster config
     partition: str = "sphinx"
+    qos: str = "high"
     account: str = "nlp"
     job_name_prefix: str = "exp"
     exclude_nodes: str = "sphinx2"
 
-    # Resources
     # Note: gpus_per_job will be auto-set from tensor_parallel_size if not specified
     gpus_per_job: Optional[int] = None
     cpus_per_task: int = 4
