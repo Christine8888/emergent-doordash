@@ -4,7 +4,8 @@ from experiments.base_experiment import Experiment
 from environments.gpqa.gpqa import gpqa_diamond, DEFAULT_INSTRUCTIONS
 from evals.prefill import PrefillConfig
 from evals.solvers import instructions, intext, prefill, generate
-from utils.submitit_utils import launch_experiment, SubmitConfig
+from utils.submitit_utils import launch_experiment
+from utils.submitit_defaults import SubmitConfig
 from utils.setup import setup_logging
 
 logger = setup_logging()
@@ -74,7 +75,8 @@ HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
 CONFIG = SubmitConfig(
     partition="sphinx",
-    time_hours=20,
+    qos="high",
+    time_hours=36,
     mem_gb=64,
     cpus_per_task=4,
 )

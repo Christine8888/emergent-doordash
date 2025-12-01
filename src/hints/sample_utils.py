@@ -104,7 +104,7 @@ async def sample_solution(
     return response.completion
 
 
-async def sample_problem(
+async def try_sample_once(
     sample_id: str,
     question: str,
     prompt: str,
@@ -113,113 +113,155 @@ async def sample_problem(
     temperature: float,
     max_tokens: int,
     max_connections: int,
-    max_attempts: int,
-    n_target: int,
-    start_idx: int,
-    sem: asyncio.Semaphore,
-    pbar: tqdm,
+    sample_idx: int,
     eval_config,
     extra_fields: dict,
     response_to_hint: Callable[[str], any],
     extract_fn: Callable[[str], str] | None = None,
     rationalize: bool = False,
-) -> list[dict]:
-    """Sample a problem up to max_attempts times, collecting up to n_target correct samples.
-
-    Args:
-        sample_id: Sample identifier
-        question: The question text
-        prompt: Full prompt to send to model (may be modified if rationalize=True)
-        target: Target answer
-        model_id: Model identifier
-        temperature: Sampling temperature
-        max_tokens: Max tokens to generate
-        max_connections: Max concurrent connections
-        max_attempts: Max total attempts for this problem
-        n_target: Number of correct samples to collect
-        start_idx: Starting sample_idx (based on existing count)
-        sem: Semaphore for concurrency control
-        pbar: Progress bar
-        eval_config: Eval config module with grade_answer and extract_answer
-        extra_fields: Additional fields to include in output
-        response_to_hint: Function to convert response to hint (e.g., identity for CoT)
-        extract_fn: Optional function to extract answer (overrides eval_config.extract_answer)
-        rationalize: If True, prepend answer hint to prompt
-
-    Returns:
-        List of dictionaries with Example fields plus extra_fields
-    """
+) -> dict | None:
+    """Try sampling once. Returns result dict if successful, None if failed."""
     extract = extract_fn if extract_fn is not None else eval_config.extract_answer
 
-    if rationalize:
-        rationalize_hint = f"HINT: The answer is {target}. Please still produce a fully natural chain of thought and solution that does not reveal the answer early, but that reaches this answer after actually properly solving the problem in full detail. Do not mention this hint anywhere in your response.\n\n"
-        prompt += "\n\n" + rationalize_hint
+    try:
+        response = await sample_solution(
+            prompt, model_id, temperature, max_tokens, max_connections
+        )
 
-    results = []
-    current_idx = start_idx
+        extracted = extract(response)
+        correct = await eval_config.grade_answer(extracted, target)
 
-    async with sem:
-        for attempt in range(max_attempts):
-            if len(results) >= n_target:
-                break
+        if correct:
+            hint = response_to_hint(response)
 
-            try:
-                response = await sample_solution(
-                    prompt, model_id, temperature, max_tokens, max_connections
-                )
+            if not hint or not hint.strip():
+                logger.warning(f"  {sample_id}: Answer correct but hint extraction failed")
+                return None
 
-                extracted = extract(response)
-                correct = await eval_config.grade_answer(extracted, target)
+            metadata = {"model": model_id}
+            if rationalize:
+                metadata["rationalize"] = True
 
-                if correct:
-                    hint = response_to_hint(response)
+            example = Example(
+                id=sample_id,
+                question=question,
+                target=target,
+                response=response,
+                hint=hint,
+                sample_idx=sample_idx,
+                prompt=prompt,
+                metadata=metadata,
+            )
+            result = example.to_dict()
+            result.update(extra_fields)
+            return result
+        else:
+            logger.info(f"  {sample_id}: ANSWER: {extracted} | TARGET: {target}")
+            return None
 
-                    if not hint or not hint.strip():
-                        logger.warning(f"  {sample_id}: Answer correct but hint extraction failed, retrying")
-                        continue
-
-                    metadata = {"model": model_id}
-                    if rationalize:
-                        metadata["rationalize"] = True
-
-                    example = Example(
-                        id=sample_id,
-                        question=question,
-                        target=target,
-                        response=response,
-                        hint=hint,
-                        sample_idx=current_idx,
-                        prompt=prompt,
-                        metadata=metadata,
-                    )
-                    result = example.to_dict()
-                    result.update(extra_fields)
-
-                    results.append(result)
-                    current_idx += 1
-                    pbar.update(1)
-                    logger.info(f"  {sample_id}[{current_idx - 1}]: collected ({len(results)}/{n_target})")
-                else:
-                    logger.info(f"  {sample_id} [attempt {attempt + 1}/{max_attempts}]: ANSWER: {extracted} | TARGET: {target}")
-
-            except Exception as e:
-                logger.error(f"  {sample_id}: {e}")
-
-    return results
+    except Exception as e:
+        logger.error(f"  {sample_id}: {e}")
+        return None
 
 
-async def run_sampling_loop(tasks: list, output_path: Path):
-    """Run all sampling tasks and write results as they complete."""
+async def run_sampling_loop(
+    initial_tasks: list[dict],
+    output_path: Path,
+    model_id: str,
+    temperature: float,
+    max_tokens: int,
+    max_connections: int,
+    max_retries: int,
+    eval_config,
+    response_to_hint: Callable[[str], any],
+    extract_fn: Callable[[str], str] | None,
+    rationalize: bool,
+    pbar: tqdm,
+):
+    """Run sampling with queue-based retries."""
     file_lock = asyncio.Lock()
 
-    for coro in asyncio.as_completed(tasks):
-        results = await coro
+    # Track state per problem: {sample_id: {"attempts": int, "collected": int, "next_idx": int, "n_target": int}}
+    problem_state = {}
+    for task in initial_tasks:
+        problem_state[task["sample_id"]] = {
+            "attempts": 0,
+            "collected": 0,
+            "next_idx": task["start_idx"],
+            "n_target": task["n_needed"],
+        }
 
-        if results:
-            async with file_lock:
-                with open(output_path, "a") as f:
-                    for result in results:
+    # Create initial coroutines
+    pending = set()
+    task_info = {}  # Map task to its info for retry
+
+    for task in initial_tasks:
+        state = problem_state[task["sample_id"]]
+        coro = try_sample_once(
+            sample_id=task["sample_id"],
+            question=task["question"],
+            prompt=task["prompt"],
+            target=task["target"],
+            model_id=model_id,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            max_connections=max_connections,
+            sample_idx=state["next_idx"],
+            eval_config=eval_config,
+            extra_fields=task["extra_fields"],
+            response_to_hint=response_to_hint,
+            extract_fn=extract_fn,
+            rationalize=rationalize,
+        )
+        t = asyncio.create_task(coro)
+        pending.add(t)
+        task_info[t] = task
+        state["attempts"] += 1
+
+    while pending:
+        done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+
+        for t in done:
+            task = task_info.pop(t)
+            result = t.result()
+            state = problem_state[task["sample_id"]]
+
+            if result:
+                # Success - write to file
+                async with file_lock:
+                    with open(output_path, "a") as f:
                         f.write(json.dumps(result) + "\n")
+                state["collected"] += 1
+                state["next_idx"] += 1
+                pbar.update(1)
+                logger.info(f"  {task['sample_id']}[{state['next_idx'] - 1}]: collected ({state['collected']}/{state['n_target']})")
+
+            # Check if we need more samples and haven't hit max retries
+            needs_more = state["collected"] < state["n_target"]
+            can_retry = state["attempts"] < max_retries
+
+            if needs_more and can_retry:
+                # Queue another attempt
+                coro = try_sample_once(
+                    sample_id=task["sample_id"],
+                    question=task["question"],
+                    prompt=task["prompt"],
+                    target=task["target"],
+                    model_id=model_id,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    max_connections=max_connections,
+                    sample_idx=state["next_idx"],
+                    eval_config=eval_config,
+                    extra_fields=task["extra_fields"],
+                    response_to_hint=response_to_hint,
+                    extract_fn=extract_fn,
+                    rationalize=rationalize,
+                )
+                new_t = asyncio.create_task(coro)
+                pending.add(new_t)
+                task_info[new_t] = task
+                state["attempts"] += 1
 
 
 async def collect_samples(
@@ -273,7 +315,7 @@ async def collect_samples(
     # Use provided format_fn or fall back to eval_config.format_prompt
     format_prompt = format_fn if format_fn is not None else eval_config.format_prompt
 
-    # Create tasks for problems that need more samples
+    # Create task dicts for problems that need more samples
     tasks = []
     total_samples_needed = 0
 
@@ -292,48 +334,42 @@ async def collect_samples(
             if hasattr(eval_config, "extract_sample_fields"):
                 extra_fields = eval_config.extract_sample_fields(sample)
 
-            tasks.append((sample, prompt, extra_fields, existing_count, n_needed))
+            tasks.append({
+                "sample_id": sample.id,
+                "question": sample.input,
+                "prompt": prompt,
+                "target": sample.target,
+                "extra_fields": extra_fields,
+                "start_idx": existing_count,
+                "n_needed": n_needed,
+            })
 
     logger.info(f"Processing {total_samples_needed} samples across {len(tasks)} problems")
     logger.info(f"Target: {args.n_per_question} sample(s) per question")
     if args.rationalize:
         logger.info(f"Rationalize mode: ENABLED")
     logger.info(f"Model: {args.model}")
-    logger.info(f"Max concurrent: {args.max_concurrent}, "
-                f"Max attempts per problem: {args.max_retries}")
+    logger.info(f"Max retries per problem: {args.max_retries}")
     if args.prompt_suffix:
         logger.info(f"Prompt suffix: {args.prompt_suffix}")
     logger.info(f"Output: {output_path}\n")
 
-    # Create async tasks
-    sem = asyncio.Semaphore(args.max_concurrent)
     pbar = tqdm(total=total_samples_needed, desc="Solving")
 
-    async_tasks = []
-    for sample, prompt, extra_fields, start_idx, n_needed in tasks:
-        async_tasks.append(
-            sample_problem(
-                sample_id=sample.id,
-                question=sample.input,
-                prompt=prompt,
-                target=sample.target,
-                model_id=args.model,
-                temperature=args.temperature,
-                max_tokens=args.max_tokens,
-                max_connections=args.max_concurrent,
-                max_attempts=args.max_retries,
-                n_target=n_needed,
-                start_idx=start_idx,
-                sem=sem,
-                pbar=pbar,
-                eval_config=eval_config,
-                extra_fields=extra_fields,
-                response_to_hint=response_to_hint,
-                extract_fn=extract_fn,
-                rationalize=args.rationalize,
-            )
-        )
+    await run_sampling_loop(
+        initial_tasks=tasks,
+        output_path=output_path,
+        model_id=args.model,
+        temperature=args.temperature,
+        max_tokens=args.max_tokens,
+        max_connections=args.max_concurrent,
+        max_retries=args.max_retries,
+        eval_config=eval_config,
+        response_to_hint=response_to_hint,
+        extract_fn=extract_fn,
+        rationalize=args.rationalize,
+        pbar=pbar,
+    )
 
-    await run_sampling_loop(async_tasks, output_path)
     pbar.close()
     logger.info("Done!")
