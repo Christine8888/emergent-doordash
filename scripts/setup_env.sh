@@ -2,6 +2,7 @@
 # Setup script for SLURM jobs - creates or activates venv
 
 export SCR=/scr-ssd/cye
+export HOME="$SCR"
 export VENV_DIR="$SCR/.venv"
 export UV_CACHE_DIR="$SCR/.cache/uv"
 export HF_HOME="/sphinx/u/cye/.cache/huggingface"
