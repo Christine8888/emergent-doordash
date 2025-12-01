@@ -11,16 +11,15 @@ logger = setup_logging()
 
 MODELS = [
     ("Qwen/Qwen2.5-0.5B-Instruct", 1),
-    #("Qwen/Qwen2.5-1.5B-Instruct", 1),
-    #("Qwen/Qwen2.5-3B-Instruct", 1),
-    #("Qwen/Qwen2.5-7B-Instruct", 1),
-    #("Qwen/Qwen2.5-14B-Instruct", 2),
-    #("Qwen/Qwen2.5-32B-Instruct", 4),
+    ("Qwen/Qwen2.5-1.5B-Instruct", 1),
+    ("Qwen/Qwen2.5-3B-Instruct", 1),
+    ("Qwen/Qwen2.5-7B-Instruct", 1),
+    ("Qwen/Qwen2.5-14B-Instruct", 2),
+    ("Qwen/Qwen2.5-32B-Instruct", 4),
 ]
 
 CONFIG = SubmitConfig(
     partition="sphinx",
-    qos="high",
     time_hours=36,
     mem_gb=64,
     cpus_per_task=4,
