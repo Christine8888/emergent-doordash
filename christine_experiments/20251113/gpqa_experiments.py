@@ -14,43 +14,32 @@ BASE_DIR = "/sphinx/u/cye/emergent-doordash/christine_experiments/data"
 
 
 def make_experiment(hint_type: str, solver_type: str, mode: str = "sequential"):
-    """Factory to create experiment classes.
-
-    Args:
-        hint_type: "cot" or "solution"
-        solver_type: "intext" or "prefill"
-        mode: "sequential" or "masked" (only applies to intext)
-    """
-    name_parts = [hint_type, solver_type] if solver_type == "prefill" else [hint_type, solver_type, mode]
-    name = "_".join(name_parts)
+    name = f"{hint_type}_{solver_type}_{mode}"
     data_path = f"{BASE_DIR}/{hint_type}/gpqa.jsonl"
 
     class _Experiment(Experiment):
-        pass
+        name = name
+        eval_name = "gpqa"
+        data_path = data_path
 
-    _Experiment.name = name
-    _Experiment.eval_name = "gpqa"
-    _Experiment.data_path = data_path
+        def build_task(self, hint_fraction: float, sample_ids: set[str]):
+            config = PrefillConfig(
+                path=data_path,
+                fraction=hint_fraction,
+                mode=mode,
+            )
+            if solver_type == "intext":
+                hint_solver = intext(config, prefix="Here is part of a hint that may be helpful to your solution:\n")
+            else:
+                hint_solver = prefill(config)
 
-    def build_task(self, hint_fraction: float, sample_ids: set[str]):
-        config = PrefillConfig(
-            path=self.data_path,
-            fraction=hint_fraction,
-            mode=mode,
-        )
-        if solver_type == "intext":
-            hint_solver = intext(config, prefix="Here is part of a hint that may be helpful to your solution:\n")
-        else:
-            hint_solver = prefill(config)
+            solver = [
+                instructions(DEFAULT_INSTRUCTIONS),
+                hint_solver,
+                generate(timeout=self.timeout),
+            ]
+            return gpqa_diamond(sample_ids=sample_ids, solver=solver)
 
-        solver = [
-            instructions(DEFAULT_INSTRUCTIONS),
-            hint_solver,
-            generate(timeout=self.timeout),
-        ]
-        return gpqa_diamond(sample_ids=sample_ids, solver=solver)
-
-    _Experiment.build_task = build_task
     return _Experiment
 
 EXPERIMENTS = {
@@ -58,8 +47,8 @@ EXPERIMENTS = {
     "cot_intext_masked": make_experiment("cot", "intext", "masked"),
     "solution_intext_sequential": make_experiment("solution", "intext", "sequential"),
     "solution_intext_masked": make_experiment("solution", "intext", "masked"),
-    "cot_prefill": make_experiment("cot", "prefill"),
-    "solution_prefill": make_experiment("solution", "prefill"),
+    "cot_prefill_sequential": make_experiment("cot", "prefill", "sequential"),
+    "solution_prefill_sequential": make_experiment("solution", "prefill", "sequential"),
 }
 
 MODELS = [

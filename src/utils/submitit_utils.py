@@ -13,25 +13,25 @@ from utils.vllm_server import vLLMServer
 
 logger = logging.getLogger(__name__)
 
-# sacct state -> internal state
-STATE_MAP = {
-    'COMPLETED': 'DONE', 'PENDING': 'PENDING', 'RUNNING': 'RUNNING',
-    'FAILED': 'FAILED', 'TIMEOUT': 'TIMEOUT', 'CANCELLED': 'CANCELLED',
-    'OUT_OF_MEMORY': 'FAILED', 'NODE_FAIL': 'FAILED',
-}
+DONE_STATES = {'COMPLETED'}
+FAILED_STATES = {'FAILED', 'OUT_OF_MEMORY', 'NODE_FAIL', 'BOOT_FAIL', 'DEADLINE', 'PREEMPTED'}
+TIMEOUT_STATES = {'TIMEOUT'}
+CANCELLED_STATES = {'CANCELLED', 'REVOKED'}
+RUNNING_STATES = {'RUNNING', 'COMPLETING', 'RESIZING', 'SUSPENDED'}
+PENDING_STATES = {'PENDING', 'CONFIGURING', 'REQUEUED'}
 
 
-def check_job_status(jobs: list[submitit.Job]) -> dict[str, list]:
-    """Check job status via sacct."""
-    status_map = {s: [] for s in ['PENDING', 'RUNNING', 'DONE', 'FAILED', 'TIMEOUT', 'CANCELLED']}
+def check_job_status(jobs: list[submitit.Job], job_meta: dict) -> dict[str, list]:
+    status_map = {s: [] for s in ['pending', 'running', 'done', 'failed', 'timeout', 'cancelled']}
     if not jobs:
         return status_map
 
     job_lookup = {str(j.job_id): j for j in jobs}
     result = subprocess.run(
-        ["sacct", "-j", ",".join(job_lookup.keys()), "-n", "-o", "JobID,State", "--parsable2"],
+        ["sacct", "-j", ",".join(job_lookup.keys()), "-n", "-o", "JobID,State,ExitCode,Elapsed,MaxRSS", "--parsable2"],
         capture_output=True, text=True, timeout=30
     )
+
     seen = set()
     for line in result.stdout.strip().split("\n"):
         if not line.strip():
@@ -39,16 +39,43 @@ def check_job_status(jobs: list[submitit.Job]) -> dict[str, list]:
         parts = line.split("|")
         if len(parts) < 2:
             continue
-        jid, state = parts[0].split(".")[0], parts[1].split()[0]
-        if jid in job_lookup and jid not in seen:
-            seen.add(jid)
-            status_map[STATE_MAP.get(state, 'FAILED')].append(job_lookup[jid])
+        raw_jid = parts[0]
+        if "." in raw_jid:
+            continue
+        if raw_jid not in job_lookup or raw_jid in seen:
+            continue
+        seen.add(raw_jid)
+
+        state = parts[1].split()[0]
+        if state in DONE_STATES:
+            mapped = 'done'
+        elif state in FAILED_STATES:
+            mapped = 'failed'
+        elif state in TIMEOUT_STATES:
+            mapped = 'timeout'
+        elif state in CANCELLED_STATES:
+            mapped = 'cancelled'
+        elif state in RUNNING_STATES:
+            mapped = 'running'
+        elif state in PENDING_STATES:
+            mapped = 'pending'
+        else:
+            logger.warning(f"unknown slurm state '{state}' for job {raw_jid}, treating as running")
+            mapped = 'running'
+
+        status_map[mapped].append(job_lookup[raw_jid])
+
+        if mapped in ('failed', 'timeout'):
+            exit_code = parts[2] if len(parts) > 2 else "?"
+            elapsed = parts[3] if len(parts) > 3 else "?"
+            name = job_meta.get(raw_jid, {}).get('name', raw_jid)
+            logger.info(f"  {name} ({raw_jid}): {state.lower()}, exit={exit_code}, elapsed={elapsed}")
 
     for jid, job in job_lookup.items():
         if jid not in seen:
-            status_map['PENDING'].append(job)
+            status_map['pending'].append(job)
 
-    logger.info("Job Status: " + ", ".join(f"{k}={len(v)}" for k, v in status_map.items() if v))
+    logger.info("job status: " + ", ".join(f"{k}={len(v)}" for k, v in status_map.items() if v))
     return status_map
 
 
@@ -74,35 +101,36 @@ def _configure_executor(executor: submitit.AutoExecutor, config: SubmitConfig, n
 
 def _wait_with_retries(
     jobs: list[submitit.Job],
-    job_configs: dict[str, tuple[SubmitConfig, str]],  # job_id -> (config, name)
+    job_meta: dict[str, dict],  # job_id -> {config, name, fn, kwargs}
     executor: submitit.AutoExecutor,
     poll_interval: int,
     max_retries: int,
 ):
     """Wait for jobs, resubmitting failures up to max_retries."""
-    retry_counts = {job.job_id: 0 for job in jobs}
+    retry_counts = {str(job.job_id): 0 for job in jobs}
     all_jobs = list(jobs)
 
     while True:
         time.sleep(poll_interval)
-        status_map = check_job_status(all_jobs)
+        status_map = check_job_status(all_jobs, job_meta)
 
-        for job in status_map.get('FAILED', []) + status_map.get('TIMEOUT', []):
-            if retry_counts.get(job.job_id, 0) < max_retries:
-                config, name = job_configs[job.job_id]
-                _configure_executor(executor, config, name)
-                new_job = executor.submit(job.fn, *job.args, **job.kwargs)
-                job_configs[new_job.job_id] = (config, name)
-                retry_counts[new_job.job_id] = retry_counts.get(job.job_id, 0) + 1
+        for job in status_map.get('failed', []) + status_map.get('timeout', []):
+            jid = str(job.job_id)
+            if retry_counts.get(jid, 0) < max_retries:
+                meta = job_meta[jid]
+                _configure_executor(executor, meta['config'], meta['name'])
+                new_job = executor.submit(meta['fn'], **meta['kwargs'])
+                job_meta[str(new_job.job_id)] = meta
+                retry_counts[str(new_job.job_id)] = retry_counts.get(jid, 0) + 1
                 all_jobs.append(new_job)
                 all_jobs.remove(job)
-                logger.info(f"Resubmitted {job.job_id} as {new_job.job_id}")
+                logger.info(f"resubmitted {jid} as {new_job.job_id}")
 
-        active = len(status_map.get('PENDING', [])) + len(status_map.get('RUNNING', []))
+        active = len(status_map.get('pending', [])) + len(status_map.get('running', []))
         if active == 0:
-            done = len(status_map.get('DONE', []))
-            failed = len(status_map.get('FAILED', [])) + len(status_map.get('TIMEOUT', []))
-            logger.info(f"Complete: {done} done, {failed} failed")
+            done = len(status_map.get('done', []))
+            failed = len(status_map.get('failed', [])) + len(status_map.get('timeout', []))
+            logger.info(f"complete: {done} done, {failed} failed")
             return all_jobs
 
 
@@ -154,7 +182,7 @@ def launch_experiment(
     config = config or DEFAULT_CONFIG
     executor = submitit.AutoExecutor(folder=config.submitit_folder)
     jobs = []
-    job_configs = {}
+    job_meta = {}
 
     for model_path, tp in models:
         model_name = os.path.basename(model_path)
@@ -170,19 +198,20 @@ def launch_experiment(
                     if os.path.exists(output):
                         continue
 
-                job = executor.submit(
-                    run_single_experiment, experiment_class=experiment_class, model_path=model_path,
+                kwargs = dict(
+                    experiment_class=experiment_class, model_path=model_path,
                     tensor_parallel_size=tp, hint_fraction=hint_fraction, fewshot=fewshot,
                     epochs=epochs, results_dir=results_dir, config=job_config,
                 )
+                job = executor.submit(run_single_experiment, **kwargs)
                 jobs.append(job)
-                job_configs[job.job_id] = (job_config, job_name)
-                logger.info(f"Submitted {job.job_id}: {model_name}, fewshot={fewshot}, hint={hint_fraction}")
+                job_meta[str(job.job_id)] = {'config': job_config, 'name': job_name, 'fn': run_single_experiment, 'kwargs': kwargs}
+                logger.info(f"submitted {job.job_id}: {model_name}, fewshot={fewshot}, hint={hint_fraction}")
 
-    logger.info(f"Submitted {len(jobs)} jobs")
+    logger.info(f"submitted {len(jobs)} jobs")
     if not jobs or not wait:
         return jobs
-    return _wait_with_retries(jobs, job_configs, executor, poll_interval, max_retries)
+    return _wait_with_retries(jobs, job_meta, executor, poll_interval, max_retries)
 
 
 def launch_baseline(
@@ -194,7 +223,7 @@ def launch_baseline(
     config = config or DEFAULT_CONFIG
     executor = submitit.AutoExecutor(folder=config.submitit_folder)
     jobs = []
-    job_configs = {}
+    job_meta = {}
 
     for eval_name in eval_names:
         for model_path, tp in models:
@@ -209,15 +238,16 @@ def launch_baseline(
             job_name = f"baseline_{eval_name}_{model_name}"
             _configure_executor(executor, job_config, job_name)
 
-            job = executor.submit(
-                run_baseline_eval, eval_name=eval_name, model_path=model_path, tensor_parallel_size=tp,
+            kwargs = dict(
+                eval_name=eval_name, model_path=model_path, tensor_parallel_size=tp,
                 results_dir=results_dir, config=job_config, epochs=epochs, limit=limit,
             )
+            job = executor.submit(run_baseline_eval, **kwargs)
             jobs.append(job)
-            job_configs[job.job_id] = (job_config, job_name)
-            logger.info(f"Submitted {job.job_id}: {eval_name} / {model_name}")
+            job_meta[str(job.job_id)] = {'config': job_config, 'name': job_name, 'fn': run_baseline_eval, 'kwargs': kwargs}
+            logger.info(f"submitted {job.job_id}: {eval_name} / {model_name}")
 
-    logger.info(f"Submitted {len(jobs)} jobs")
+    logger.info(f"submitted {len(jobs)} jobs")
     if not jobs or not wait:
         return jobs
-    return _wait_with_retries(jobs, job_configs, executor, poll_interval, max_retries)
+    return _wait_with_retries(jobs, job_meta, executor, poll_interval, max_retries)
