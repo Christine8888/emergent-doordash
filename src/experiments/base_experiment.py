@@ -162,7 +162,9 @@ class Experiment(ABC):
             epochs=epochs,
             limit=limit,
             max_connections=self.max_connections,
-            display="rich",
+            display="plain",
+            fail_on_error=False,
+            retry_on_error=10,
             metadata={
                 "timeout": self.timeout,
                 "hint_fraction": hint_fraction,

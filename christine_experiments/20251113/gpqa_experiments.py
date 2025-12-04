@@ -14,17 +14,17 @@ BASE_DIR = "/sphinx/u/cye/emergent-doordash/christine_experiments/data"
 
 
 def make_experiment(hint_type: str, solver_type: str, mode: str = "sequential"):
-    name = f"{hint_type}_{solver_type}_{mode}"
-    data_path = f"{BASE_DIR}/{hint_type}/gpqa.jsonl"
+    _name = f"{hint_type}_{solver_type}_{mode}"
+    _data_path = f"{BASE_DIR}/{hint_type}/gpqa.jsonl"
 
     class _Experiment(Experiment):
-        name = name
+        name = _name
         eval_name = "gpqa"
-        data_path = data_path
+        data_path = _data_path
 
         def build_task(self, hint_fraction: float, sample_ids: set[str]):
             config = PrefillConfig(
-                path=data_path,
+                path=_data_path,
                 fraction=hint_fraction,
                 mode=mode,
             )
@@ -56,15 +56,15 @@ MODELS = [
     ("Qwen/Qwen2.5-1.5B-Instruct", 1),
     ("Qwen/Qwen2.5-3B-Instruct", 1),
     ("Qwen/Qwen2.5-7B-Instruct", 1),
-    ("Qwen/Qwen2.5-14B-Instruct", 2),
-    ("Qwen/Qwen2.5-32B-Instruct", 4),
+    ("Qwen/Qwen2.5-14B-Instruct", 1),
+    ("Qwen/Qwen2.5-32B-Instruct", 2),
 ]
 
 HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+HINT_FRACTIONS += [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
 
 CONFIG = SubmitConfig(
     partition="sphinx",
-    qos="high",
     time_hours=36,
     mem_gb=64,
     cpus_per_task=4,
