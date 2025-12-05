@@ -116,26 +116,23 @@ def run_eval_with_vllm(
     """
     from utils.setup import setup_logging
     from utils.vllm_server import vLLMServer
+    from utils.submitit_utils import GPUMonitor
 
     setup_logging()
 
     model_name = os.path.basename(model_path)
 
-    # Check if output exists before starting server
     if Path(output_file).exists():
         logger.info(f"Output already exists: {output_file}")
         return {"filename": output_file, "status": "skipped"}
 
-    # Get number of GPUs from SLURM
     n_gpus = int(os.environ.get('SLURM_GPUS_ON_NODE', tensor_parallel_size))
     logger.info(f"Allocated {n_gpus} GPUs by SLURM")
 
-    # Build task
     task_kwargs = task_kwargs or {}
     task = task_fn(**task_kwargs)
 
-    # Start vLLM server and run eval
-    with vLLMServer(
+    with GPUMonitor(), vLLMServer(
         model_path=model_path,
         tensor_parallel_size=tensor_parallel_size,
         max_model_len=config.max_model_len,

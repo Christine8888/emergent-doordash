@@ -329,6 +329,9 @@ async def collect_samples(
             prompt = format_prompt(sample)
             if args.prompt_suffix:
                 prompt = prompt + "\n\n" + args.prompt_suffix
+            if args.rationalize:
+                rationalize_hint = f"HINT: The answer is {sample.target}. Please still produce a fully natural chain of thought and solution that does not reveal the answer early, but that reaches this answer after actually properly solving the problem in full detail. Do not mention this hint anywhere in your response."
+                prompt = prompt + "\n\n" + rationalize_hint
 
             extra_fields = {}
             if hasattr(eval_config, "extract_sample_fields"):

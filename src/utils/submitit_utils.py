@@ -4,6 +4,7 @@ import os
 import logging
 import subprocess
 import time
+import threading
 from pathlib import Path
 from typing import Callable
 import submitit
@@ -12,6 +13,40 @@ from utils.submitit_defaults import SubmitConfig, DEFAULT_CONFIG
 from utils.vllm_server import vLLMServer
 
 logger = logging.getLogger(__name__)
+
+
+class GPUMonitor:
+    def __init__(self, interval: float = 5.0):
+        self.interval = interval
+        self.samples = []
+        self._stop = threading.Event()
+        self._thread = None
+
+    def _sample(self):
+        while not self._stop.is_set():
+            try:
+                result = subprocess.run(
+                    ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+                    capture_output=True, text=True, timeout=5
+                )
+                for line in result.stdout.strip().split("\n"):
+                    if line.strip():
+                        self.samples.append(float(line.strip()))
+            except Exception:
+                pass
+            self._stop.wait(self.interval)
+
+    def __enter__(self):
+        self._thread = threading.Thread(target=self._sample, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *args):
+        self._stop.set()
+        self._thread.join(timeout=1)
+        if self.samples:
+            avg = sum(self.samples) / len(self.samples)
+            print(f"gpu utilization: avg={avg:.1f}%, samples={len(self.samples)}", flush=True)
 
 DONE_STATES = {'COMPLETED'}
 FAILED_STATES = {'FAILED', 'OUT_OF_MEMORY', 'NODE_FAIL', 'BOOT_FAIL', 'DEADLINE', 'PREEMPTED'}
@@ -145,7 +180,7 @@ def run_single_experiment(
     model_name = os.path.basename(model_path)
     n_gpus = int(os.environ.get('SLURM_GPUS_ON_NODE', tensor_parallel_size))
 
-    with vLLMServer(
+    with GPUMonitor(), vLLMServer(
         model_path=model_path, tensor_parallel_size=tensor_parallel_size,
         max_model_len=config.max_model_len, gpu_memory_utilization=config.gpu_memory_utilization, n_gpus=n_gpus,
     ) as server:

@@ -14,17 +14,17 @@ BASE_DIR = "/sphinx/u/cye/emergent-doordash/christine_experiments/data"
 
 
 def make_experiment(hint_type: str, solver_type: str, mode: str = "sequential"):
-    name = f"{hint_type}_{solver_type}_{mode}"
-    data_path = f"{BASE_DIR}/{hint_type}/gpqa.jsonl"
+    _name = f"{hint_type}_{solver_type}_{mode}"
+    _data_path = f"{BASE_DIR}/{hint_type}/gpqa.jsonl"
 
     class _Experiment(Experiment):
-        name = name
+        name = _name
         eval_name = "gpqa"
-        data_path = data_path
+        data_path = _data_path
 
         def build_task(self, hint_fraction: float, sample_ids: set[str]):
             config = PrefillConfig(
-                path=data_path,
+                path=_data_path,
                 fraction=hint_fraction,
                 mode=mode,
             )
