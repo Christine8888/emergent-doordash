@@ -20,7 +20,6 @@ MODELS = [
 
 CONFIG = SubmitConfig(
     partition="sphinx",
-    qos="high",
     time_hours=36,
     mem_gb=64,
     cpus_per_task=4,
