@@ -11,10 +11,19 @@ import subprocess
 import time
 import socket
 import logging
+import signal
+import threading
 from typing import Optional
 import requests
 
 logger = logging.getLogger(__name__)
+
+
+def _force_exit(signum=None, frame=None):
+    """Force immediate exit without cleanup (avoids async hangs)."""
+    code = 128 + signum if signum else 1
+    logger.info(f"Force exiting with code {code}")
+    os._exit(code)
 
 
 def get_served_name(model_path: str) -> str:
@@ -80,6 +89,7 @@ class vLLMServer:
             self.data_parallel_size = 1
 
         self.process: Optional[subprocess.Popen] = None
+        self._stop_monitor = threading.Event()
 
     def _find_free_port(self) -> int:
         """Find a free port."""
@@ -87,6 +97,14 @@ class vLLMServer:
             s.bind(("", 0))
             s.listen(1)
             return s.getsockname()[1]
+
+    def _monitor_process(self):
+        """Monitor server process, force exit if server dies."""
+        while not self._stop_monitor.is_set():
+            if self.process and self.process.poll() is not None:
+                logger.error(f"vLLM server died with exit code {self.process.returncode}")
+                _force_exit()
+            self._stop_monitor.wait(5)
 
     def start(self, health_timeout: int = 1200):
         """Start the vLLM server and wait for health check.
@@ -156,6 +174,13 @@ class vLLMServer:
 
         self._wait_for_health(timeout=health_timeout)
 
+        # Register signal handlers for clean forced exit
+        signal.signal(signal.SIGTERM, _force_exit)
+        signal.signal(signal.SIGINT, _force_exit)
+
+        # Start health monitor
+        threading.Thread(target=self._monitor_process, daemon=True).start()
+
     def _wait_for_health(self, timeout: int = 300):
         """Wait for vLLM server to become healthy."""
         health_url = f"http://localhost:{self.port}/health"
@@ -182,6 +207,8 @@ class vLLMServer:
 
     def shutdown(self):
         """Shutdown the vLLM server."""
+        self._stop_monitor.set()
+
         if self.process is None:
             return
 
