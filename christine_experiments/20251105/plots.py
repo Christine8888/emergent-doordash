@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os
 import sys
 # append parent directory to sys.path
-sys.path.append("/Users/christineye/emergent-doordash/christine_experiments/20251105")
+sys.path.append("/Users/christineye/emergent-doordash/christine_experiments/20251204")
 from plotting import (
     load_all_results,
     plot_results,
