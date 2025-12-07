@@ -6,7 +6,7 @@ from experiments.registry import get_all_evals, get_external_evals, get_internal
 from utils.submitit_utils import launch_baseline
 from utils.submitit_defaults import SubmitConfig
 from utils.setup import setup_logging
-
+import os
 logger = setup_logging()
 
 MODELS = [
@@ -14,8 +14,8 @@ MODELS = [
     ("Qwen/Qwen2.5-1.5B-Instruct", 1),
     ("Qwen/Qwen2.5-3B-Instruct", 1),
     ("Qwen/Qwen2.5-7B-Instruct", 1),
-    ("Qwen/Qwen2.5-14B-Instruct", 2),
-    ("Qwen/Qwen2.5-32B-Instruct", 4),
+    ("Qwen/Qwen2.5-14B-Instruct", 1),
+    ("Qwen/Qwen2.5-32B-Instruct", 2),
 ]
 
 CONFIG = SubmitConfig(
@@ -23,6 +23,7 @@ CONFIG = SubmitConfig(
     time_hours=36,
     mem_gb=64,
     cpus_per_task=4,
+    exclude_nodes="sphinx1,sphinx2"
 )
 
 

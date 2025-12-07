@@ -1,0 +1,10 @@
+{
+  "model": "vllm/Qwen2.5-0.5B-Instruct",
+  "total_samples": 198,
+  "completed_samples": 198,
+  "gpqa_scorer": {
+    "accuracy": 0.24242424242424243,
+    "stderr": 0.03053289223393202,
+    "scorer": "gpqa_scorer"
+  }
+}
