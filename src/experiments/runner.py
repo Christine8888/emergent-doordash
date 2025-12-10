@@ -12,10 +12,12 @@ from utils.inspect_utils import extract_scores_from_log, compute_bootstrap_over_
 logger = logging.getLogger(__name__)
 
 
-def setup_vllm_env(port: int):
+def setup_vllm_env(port: int, model_name: str = None):
     """Set vLLM environment variables."""
     os.environ["VLLM_BASE_URL"] = f"http://localhost:{port}/v1"
     os.environ["VLLM_API_KEY"] = "local"
+    if model_name:
+        os.environ["INSPECT_EVAL_MODEL"] = f"vllm/{model_name}"
 
 
 def run_eval(
@@ -136,7 +138,7 @@ def run_eval_with_vllm(
         gpu_memory_utilization=config.gpu_memory_utilization,
         n_gpus=n_gpus,
     ) as server:
-        setup_vllm_env(server.port)
+        setup_vllm_env(server.port, model_name)
 
         # Create task after env is set (some evals like niah call get_model() at creation)
         task_kwargs = task_kwargs or {}
