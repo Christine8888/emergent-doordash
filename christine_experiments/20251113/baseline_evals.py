@@ -35,6 +35,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run baseline evaluations")
     parser.add_argument("--eval", type=str, default="all",
                         help="Eval(s) to run: 'all', 'external', 'internal', single name, or comma-separated list (e.g. gpqa,arc,aime)")
+    parser.add_argument("--exclude", type=str, default=None,
+                        help="Eval(s) to exclude: comma-separated list (e.g. hle,math)")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--results_dir", type=str, default="./baseline_results")
     parser.add_argument("--limit", type=int, default=None)
@@ -51,6 +53,10 @@ if __name__ == "__main__":
         invalid = [e for e in evals_to_run if e not in all_evals]
         if invalid:
             raise ValueError(f"Unknown eval(s): {invalid}. Available: {list(all_evals.keys())}")
+
+    if args.exclude:
+        exclude_set = {e.strip() for e in args.exclude.split(",")}
+        evals_to_run = [e for e in evals_to_run if e not in exclude_set]
 
     logger.info(f"Running evals: {evals_to_run}")
 

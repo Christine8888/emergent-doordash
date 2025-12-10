@@ -4,13 +4,131 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Callable
 import seaborn as sns
+from scipy.optimize import curve_fit
 
 # Set style
 sns.set_style("whitegrid")
 plt.rcParams['figure.figsize'] = (10, 6)
 plt.rcParams['font.size'] = 11
+
+
+# =============================================================================
+# FITTING FUNCTIONS (separate from plotting)
+# =============================================================================
+
+def sigmoid(x: np.ndarray) -> np.ndarray:
+    """Standard sigmoid function: 1 / (1 + exp(-x))"""
+    return 1 / (1 + np.exp(-x))
+
+
+def fit_sigmoid(x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
+    """Fit a sigmoid: y = σ(m*x + b)
+    
+    Args:
+        x: Transformed hint values (e.g., log(h/(1-h)))
+        y: Error rates or accuracy values
+        
+    Returns:
+        Tuple of (m, b) parameters
+    """
+    def model(x, m, b):
+        return sigmoid(m * x + b)
+    
+    params, _ = curve_fit(model, x, y, p0=[1, 0], maxfev=10000)
+    return tuple(params)
+
+
+def fit_scaled_sigmoid(x: np.ndarray, y: np.ndarray, 
+                       h_max: float = np.inf) -> Tuple[float, float, float]:
+    """Fit a scaled sigmoid: y = h * σ(m*x + b)
+    
+    Args:
+        x: Transformed hint values
+        y: Error rates or accuracy values
+        h_max: Maximum value for h parameter
+        
+    Returns:
+        Tuple of (h, m, b) parameters
+    """
+    def model(x, h, m, b):
+        return h * sigmoid(m * x + b)
+    
+    params, _ = curve_fit(model, x, y, p0=[np.max(y), 1, 0],
+                         bounds=([0, -np.inf, -np.inf], [h_max, np.inf, np.inf]),
+                         maxfev=10000)
+    return tuple(params)
+
+
+def fit_asymptote_sigmoid(x: np.ndarray, y: np.ndarray,
+                          lower: float, upper: float) -> Tuple[float, float]:
+    """Fit sigmoid with fixed lower and upper asymptotes: y = L + (U-L)*σ(m*x + b)
+    
+    Args:
+        x: Transformed hint values
+        y: Error rates or accuracy values
+        lower: Lower asymptote L
+        upper: Upper asymptote U
+        
+    Returns:
+        Tuple of (m, b) parameters
+    """
+    def model(x, m, b):
+        return lower + (upper - lower) * sigmoid(m * x + b)
+    
+    params, _ = curve_fit(model, x, y, p0=[1, 0], maxfev=10000)
+    return tuple(params)
+
+
+def fit_scaled_asymptote_sigmoid(x: np.ndarray, y: np.ndarray,
+                                 lower: float, h_max: float) -> Tuple[float, float, float]:
+    """Fit scaled sigmoid with fixed lower asymptote: y = L + h*σ(m*x + b)
+    
+    Args:
+        x: Transformed hint values
+        y: Error rates or accuracy values  
+        lower: Lower asymptote L
+        h_max: Maximum value for h parameter
+        
+    Returns:
+        Tuple of (h, m, b) parameters
+    """
+    def model(x, h, m, b):
+        return lower + h * sigmoid(m * x + b)
+    
+    params, _ = curve_fit(model, x, y,
+                         p0=[min(np.max(y) - lower, h_max), 1, 0],
+                         bounds=([0, -np.inf, -np.inf], [h_max, np.inf, np.inf]),
+                         maxfev=10000)
+    return tuple(params)
+
+
+def evaluate_sigmoid(x: np.ndarray, m: float, b: float) -> np.ndarray:
+    """Evaluate σ(m*x + b)"""
+    return sigmoid(m * x + b)
+
+
+def evaluate_scaled_sigmoid(x: np.ndarray, h: float, m: float, b: float) -> np.ndarray:
+    """Evaluate h*σ(m*x + b)"""
+    return h * sigmoid(m * x + b)
+
+
+def evaluate_asymptote_sigmoid(x: np.ndarray, m: float, b: float,
+                               lower: float, upper: float) -> np.ndarray:
+    """Evaluate L + (U-L)*σ(m*x + b)"""
+    return lower + (upper - lower) * sigmoid(m * x + b)
+
+
+def evaluate_scaled_asymptote_sigmoid(x: np.ndarray, h: float, m: float, b: float,
+                                      lower: float) -> np.ndarray:
+    """Evaluate L + h*σ(m*x + b)"""
+    return lower + h * sigmoid(m * x + b)
+
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
 
 
 def clean_model_name(model: str) -> str:
@@ -189,12 +307,14 @@ def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
                          fit_scaling: bool = False,
                          force_lower_asymptote: Optional[float] = None,
                          force_upper_asymptote: Optional[float] = None,
-                         upper_bound: float = 1.0):
+                         upper_bound: float = 1.0,
+                         hint_transform: Optional[Callable[[float], float]] = None,
+                         x_label: Optional[str] = None):
     """Plot results with rescaled axes and sigmoid fitting.
 
-    X-axis: 1/(1-hint) on log scale
+    X-axis: hint_transform(hint) (default: identity)
     Y-axis: 1-accuracy (error rate)
-    Fits sigmoid function: σ(m*log(x) + b) or h*σ(m*log(x) + b)
+    Fits sigmoid function: σ(m*x + b) or h*σ(m*x + b) where x = hint_transform(hint)
 
     Args:
         results: Results dictionary from load_all_results
@@ -202,10 +322,10 @@ def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
         hints: List of hint fractions
         title: Plot title
         figsize: Figure size
-        fit_scaling: If True, fit y = h*σ(m*log(x) + b), else y = σ(m*log(x) + b)
+        fit_scaling: If True, fit y = h*σ(m*x + b), else y = σ(m*x + b)
         force_lower_asymptote: If set to a hint value (e.g., 1.0), use the error rate
             at that hint as the lower asymptote for each model's sigmoid fit.
-            The fitting becomes: y = L + (U-L)*σ(m*log(x) + b) or y = L + h*σ(m*log(x) + b)
+            The fitting becomes: y = L + (U-L)*σ(m*x + b) or y = L + h*σ(m*x + b)
             where L is the error rate at the specified hint and U is the upper bound.
         force_upper_asymptote: If set to a hint value (e.g., 0.0), use the error rate
             at that hint as the upper asymptote for each model. Overrides upper_bound.
@@ -213,26 +333,20 @@ def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
             When force_lower_asymptote is set:
             - fit_scaling=True: h is constrained to [0, upper_bound - L]
             - fit_scaling=False: coefficient is fixed to (upper_bound - L)
+        hint_transform: Function to transform hint values for x-axis.
+            Default is identity (lambda h: h).
+            Common choices:
+            - lambda h: np.log(1/(1-h)) for log inverse
+            - lambda h: np.log(h/(1-h)) for log odds (logit)
+        x_label: Label for x-axis. If None, defaults to "transformed hint".
     """
-    from scipy.optimize import curve_fit
-
-    def sigmoid(x, m, b):
-        return 1 / (1 + np.exp(-(m * np.log(x) + b)))
-
-    def scaled_sigmoid(x, h, m, b):
-        return h / (1 + np.exp(-(m * np.log(x) + b)))
-
-    def make_asymptote_sigmoid(L, U):
-        """Create sigmoid with forced lower asymptote L and upper bound U: y = L + (U-L)*σ(m*log(x) + b)"""
-        def asymptote_sigmoid(x, m, b):
-            return L + (U - L) / (1 + np.exp(-(m * np.log(x) + b)))
-        return asymptote_sigmoid
-
-    def make_scaled_asymptote_sigmoid(L):
-        """Create scaled sigmoid with forced lower asymptote L: y = L + h*σ(m*log(x) + b)"""
-        def scaled_asymptote_sigmoid(x, h, m, b):
-            return L + h / (1 + np.exp(-(m * np.log(x) + b)))
-        return scaled_asymptote_sigmoid
+    # Default to identity transform
+    if hint_transform is None:
+        hint_transform = lambda h: h
+    
+    # Default x-axis label
+    if x_label is None:
+        x_label = "transformed hint"
 
     fig, ax = plt.subplots(figsize=figsize)
     colors = sns.color_palette("husl", len(models))
@@ -265,14 +379,21 @@ def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
         y_errs = []
 
         for hint in hints:
-            # Skip the asymptote hint from plotting (it would be at x=infinity)
+            # Skip asymptote hints from plotting (they go to infinity)
             if force_lower_asymptote is not None and hint == force_lower_asymptote:
+                continue
+            if force_upper_asymptote is not None and hint == force_upper_asymptote:
                 continue
             accuracy, stderr = results[model][hint]
             if accuracy is not None:
-                x_vals.append(1 / (1 - hint))
-                y_vals.append(1 - accuracy)
-                y_errs.append(stderr if stderr is not None else 0)
+                try:
+                    x_val = hint_transform(hint)
+                    if np.isfinite(x_val):
+                        x_vals.append(x_val)
+                        y_vals.append(1 - accuracy)
+                        y_errs.append(stderr if stderr is not None else 0)
+                except (ValueError, ZeroDivisionError):
+                    pass
 
         if not x_vals:
             continue
@@ -297,54 +418,37 @@ def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
                     # Use asymptote-constrained sigmoid
                     if fit_scaling:
                         # Fit h in range [0, U-L] so total range is [L, U]
-                        asymp_func = make_scaled_asymptote_sigmoid(L)
                         h_max = U - L
-                        params, _ = curve_fit(asymp_func, x_arr, y_arr,
-                                             p0=[min(np.max(y_arr) - L, h_max), 1, 0],
-                                             bounds=([0, -np.inf, -np.inf], [h_max, np.inf, np.inf]),
-                                             maxfev=10000)
-                        h_fit, m_fit, b_fit = params
-                        model_params[model] = ('asymptote', L, h_fit, m_fit, b_fit)
+                        h_fit, m_fit, b_fit = fit_scaled_asymptote_sigmoid(x_arr, y_arr, L, h_max)
+                        model_params[model] = ('scaled_asymptote', L, h_fit, m_fit, b_fit)
 
-                        x_smooth = np.logspace(np.log10(min(x_vals)),
-                                              np.log10(max(x_vals)), 100)
-                        y_smooth = asymp_func(x_smooth, *params)
+                        x_smooth = np.linspace(min(x_vals), max(x_vals), 100)
+                        y_smooth = evaluate_scaled_asymptote_sigmoid(x_smooth, h_fit, m_fit, b_fit, L)
                     else:
                         # Fixed coefficient of (U-L) - no h parameter to fit
-                        asymp_func = make_asymptote_sigmoid(L, U)
-                        params, _ = curve_fit(asymp_func, x_arr, y_arr, p0=[1, 0],
-                                             maxfev=10000)
-                        m_fit, b_fit = params
+                        m_fit, b_fit = fit_asymptote_sigmoid(x_arr, y_arr, L, U)
                         model_params[model] = ('asymptote', L, U, m_fit, b_fit)
 
-                        x_smooth = np.logspace(np.log10(min(x_vals)),
-                                              np.log10(max(x_vals)), 100)
-                        y_smooth = asymp_func(x_smooth, *params)
+                        x_smooth = np.linspace(min(x_vals), max(x_vals), 100)
+                        y_smooth = evaluate_asymptote_sigmoid(x_smooth, m_fit, b_fit, L, U)
                 else:
                     # Use standard sigmoid
                     if fit_scaling:
-                        params, _ = curve_fit(scaled_sigmoid, x_arr, y_arr,
-                                             p0=[np.max(y_arr), 1, 0],
-                                             maxfev=10000)
-                        h_fit, m_fit, b_fit = params
-                        model_params[model] = (h_fit, m_fit, b_fit)
+                        h_fit, m_fit, b_fit = fit_scaled_sigmoid(x_arr, y_arr)
+                        model_params[model] = ('scaled', h_fit, m_fit, b_fit)
 
-                        x_smooth = np.logspace(np.log10(min(x_vals)),
-                                              np.log10(max(x_vals)), 100)
-                        y_smooth = scaled_sigmoid(x_smooth, *params)
+                        x_smooth = np.linspace(min(x_vals), max(x_vals), 100)
+                        y_smooth = evaluate_scaled_sigmoid(x_smooth, h_fit, m_fit, b_fit)
                     else:
-                        params, _ = curve_fit(sigmoid, x_arr, y_arr, p0=[1, 0],
-                                             maxfev=10000)
-                        m_fit, b_fit = params
-                        model_params[model] = (m_fit, b_fit)
+                        m_fit, b_fit = fit_sigmoid(x_arr, y_arr)
+                        model_params[model] = ('standard', m_fit, b_fit)
 
-                        x_smooth = np.logspace(np.log10(min(x_vals)),
-                                              np.log10(max(x_vals)), 100)
-                        y_smooth = sigmoid(x_smooth, *params)
+                        x_smooth = np.linspace(min(x_vals), max(x_vals), 100)
+                        y_smooth = evaluate_sigmoid(x_smooth, m_fit, b_fit)
 
                 ax.plot(x_smooth, y_smooth, color=color,
                        linestyle='--', linewidth=2, alpha=0.6)
-            except:
+            except Exception:
                 pass
 
     # Create legend with equations
@@ -358,20 +462,19 @@ def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
 
         if model in model_params:
             params = model_params[model]
-            if params[0] == 'asymptote':
-                # Asymptote-constrained sigmoid
-                if fit_scaling:
-                    _, L, h_fit, m_fit, b_fit = params
-                    equation = f"{L:.3f} + {h_fit:.3f}·σ({m_fit:.2f}·log(x) {b_fit:+.2f})"
-                else:
-                    _, L, U, m_fit, b_fit = params
-                    equation = f"{L:.3f} + {U-L:.3f}·σ({m_fit:.2f}·log(x) {b_fit:+.2f})"
-            elif fit_scaling:
-                h_fit, m_fit, b_fit = params
-                equation = f"{h_fit:.3f}·σ({m_fit:.2f}·log(x) {b_fit:+.2f})"
-            else:
-                m_fit, b_fit = params
-                equation = f"σ({m_fit:.2f}·log(x) {b_fit:+.2f})"
+            fit_type = params[0]
+            if fit_type == 'asymptote':
+                _, L, U, m_fit, b_fit = params
+                equation = f"{L:.3f} + {U-L:.3f}·σ({m_fit:.2f}·x {b_fit:+.2f})"
+            elif fit_type == 'scaled_asymptote':
+                _, L, h_fit, m_fit, b_fit = params
+                equation = f"{L:.3f} + {h_fit:.3f}·σ({m_fit:.2f}·x {b_fit:+.2f})"
+            elif fit_type == 'scaled':
+                _, h_fit, m_fit, b_fit = params
+                equation = f"{h_fit:.3f}·σ({m_fit:.2f}·x {b_fit:+.2f})"
+            else:  # 'standard'
+                _, m_fit, b_fit = params
+                equation = f"σ({m_fit:.2f}·x {b_fit:+.2f})"
             label_text = f"{clean_name}: {equation}"
         else:
             label_text = clean_name
@@ -381,11 +484,10 @@ def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
         model_labels.append(label_text)
 
     ax.legend(model_handles, model_labels, title='Models', framealpha=0.9, loc='best')
-    ax.set_xlabel('1 / (1 - hint)', fontsize=13, fontweight='bold')
+    ax.set_xlabel(x_label, fontsize=13, fontweight='bold')
     ax.set_ylabel('eval error rate', fontsize=13, fontweight='bold')
     ax.set_title(title, fontsize=15, fontweight='bold', pad=20)
     ax.grid(True, alpha=0.3)
-    ax.set_xscale('log')
 
     plt.tight_layout()
     return fig, ax

@@ -1,5 +1,6 @@
 # %%
 import matplotlib.pyplot as plt
+import numpy as np
 import os
 import sys
 # append parent directory to sys.path
@@ -22,8 +23,9 @@ from plotting import (
 
 # Choose folder structure:
 # Option 1: New structure (with solver subfolder)
-BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251113/baseline/ifeval"
-SOLVER = "cot_prefill_sequential"  # Set to None for old structure
+BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251113/results/gpqa"
+SOLVER = "cot_intext_masked"  
+LABEL = "using in-text CoT (masked)"
 FILENAME_TEMPLATE = "gpqa_" + SOLVER + "_0shot_{hint}.json"
 
 CONDITION = "0shot"
@@ -60,6 +62,34 @@ results = load_all_results(
 )
 print("Done!")
 
+
+# # %%
+# # export data as CSV
+# with open("gpqa_cot_prefill_data.csv", "w") as f:
+#     f.write("model,hint_fraction,accuracy,stderr\n")
+#     for model in results:
+#         for hint_fraction in results[model]:
+#             f.write(f"{model},{hint_fraction},{results[model][hint_fraction][0]},{results[model][hint_fraction][1]}\n")
+
+# %%
+# Plot 2: Rescaled plot with sigmoid fitting
+# Using log(H/(1-H)) transform (logit transform)
+# - H=0 -> -infinity (pinned as upper asymptote for error rate)
+# - H=1 -> +infinity (pinned as lower asymptote for error rate)
+# - H=0.5 -> 0
+fig, ax = plot_results_rescaled(
+    results=results,
+    models=MODELS,
+    hints=HINT_FRACTIONS,
+    title="GPQA, " + LABEL,
+    fit_scaling=False,
+    force_lower_asymptote=1.0,  # H=1.0 -> +inf, use as lower asymptote
+    force_upper_asymptote=0.0,  # H=0.0 -> -inf, use as upper asymptote (per-model)
+    hint_transform=lambda h: np.log(h / (1 - h)),  # logit transform
+    x_label="log(H / (1 - H))"
+)
+plt.show()
+
 # %%
 # Plot 1: Accuracy vs Hint Fraction
 fig, ax = plot_results(
@@ -69,30 +99,6 @@ fig, ax = plot_results(
     title="GPQA, using solution-based hints"
 )
 plt.show()
-
-# %%
-# export data as CSV
-with open("gpqa_cot_prefill_data.csv", "w") as f:
-    f.write("model,hint_fraction,accuracy,stderr\n")
-    for model in results:
-        for hint_fraction in results[model]:
-            f.write(f"{model},{hint_fraction},{results[model][hint_fraction][0]},{results[model][hint_fraction][1]}\n")
-
-# %%
-# Plot 2: Rescaled plot with sigmoid fitting
-# Optional: force_lower_asymptote=1.0 uses error rates at hint=1.0 as lower asymptote
-# Optional: force_upper_asymptote=0.0 uses error rates at hint=0.0 as upper asymptote (per-model)
-fig, ax = plot_results_rescaled(
-    results=results,
-    models=["Qwen2.5-0.5B-Instruct", "Qwen2.5-1.5B-Instruct", "Qwen2.5-3B-Instruct", "Qwen2.5-7B-Instruct", "Qwen2.5-14B-Instruct", "Qwen2.5-32B-Instruct"],
-    hints=HINT_FRACTIONS,
-    title="GPQA, pre-filling CoT",
-    fit_scaling=False,
-    force_lower_asymptote=1.0,  # Set to 1.0 to use hint=1.0 error rates as lower asymptote
-    upper_bound=0.8  # Fallback if force_upper_asymptote not set (default 1.0)
-)
-plt.show()
-
 # %%
 # Plot 3: Accuracy vs Model Size
 fig, ax = plot_results_by_model_size(
@@ -109,46 +115,6 @@ fig, ax = plot_results_by_model_size(
     transform_hint=True,
 )
 plt.show()
-
-# %%
-# ============= ADDITIONAL EXAMPLES =============
-
-# Example: GPQA with Gemma models
-# BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251015/results/gpqa"
-# SOLVER = None
-# FILENAME_TEMPLATE = "gpqa_diamond_0shot_{hint}.json"
-# CONDITION = "0shot"
-# GRADER_FIELD = "manual_bootstrap"
-#
-# MODELS = [
-#     "gemma-3-0.27b-it",
-#     "gemma-3-1b-it",
-#     "gemma-3-4b-it",
-#     "gemma-3-12b-it",
-#     "gemma-3-27b-it",
-# ]
-#
-# HINT_FRACTIONS = [0.0, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5,
-#                   0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
-#
-# results = load_all_results(
-#     base_folder=BASE_FOLDER,
-#     models=MODELS,
-#     hints=HINT_FRACTIONS,
-#     filename_template=FILENAME_TEMPLATE,
-#     condition=CONDITION,
-#     solver=SOLVER,
-#     grader_field=GRADER_FIELD
-# )
-#
-# fig, ax = plot_results_rescaled(
-#     results=results,
-#     models=MODELS,
-#     hints=HINT_FRACTIONS,
-#     title="GPQA Diamond (Gemma): Error Rate vs Inverse Hint",
-#     fit_scaling=False
-# )
-# plt.show()
 
 # %%
 # Example: Pass@k plotting for a single model

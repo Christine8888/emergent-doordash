@@ -1,12 +1,10 @@
 # %%
 import matplotlib.pyplot as plt
-import os
 import sys
 # append parent directory to sys.path
-sys.path.append("/Users/christineye/emergent-doordash/christine_experiments/20251204")
+sys.path.append("/Users/christineye/emergent-doordash/christine_experiments/20251105")
 from plotting import (
     load_all_results,
-    plot_results,
     plot_results_rescaled,
     plot_results_by_model_size,
     load_pass_at_k_by_hint,
@@ -19,9 +17,9 @@ from plotting import (
 
 # Choose folder structure:
 # Option 1: New structure (with solver subfolder)
-BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251015/results/gpqa"
-SOLVER = None #solution_intext_mask"  # Set to None for old structure
-FILENAME_TEMPLATE = "gpqa_diamond_0shot_{hint}.json"
+BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251105/results/gpqa"
+SOLVER = "solution_intext_mask"  # Set to None for old structure
+FILENAME_TEMPLATE = "gpqa_" + SOLVER + "_0shot_{hint}.json"
 
 CONDITION = "0shot"
 GRADER_FIELD = "manual_bootstrap"
@@ -38,7 +36,7 @@ MODELS = [
     "Qwen2.5-32B-Instruct",
 ]
 
-HINT_FRACTIONS = [0.0, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]#, 1.0]
+HINT_FRACTIONS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 # =========================================
 
 # %%
@@ -58,12 +56,17 @@ results = load_all_results(
 print("Done!")
 
 # %%
-# Plot 1: Accuracy vs Hint Fraction
-fig, ax = plot_results(
+# Plot 1: Accuracy vs Hint Fraction (with identity transform and exponential fit)
+fig, ax = plot_results_rescaled(
     results=results,
     models=MODELS,
     hints=HINT_FRACTIONS,
-    title="GPQA, using solution-based hints"
+    title="GPQA, using prefill-based hints",
+    hint_transform=lambda h: h,  # identity transform
+    xlabel='fraction of reasoning chain as hint',
+    xscale='linear',
+    fit_scaling=True,
+    fit_type='exponential'  # options: 'sigmoid', 'exponential'
 )
 plt.show()
 
@@ -76,13 +79,13 @@ with open("gpqa_cot_prefill_data.csv", "w") as f:
             f.write(f"{model},{hint_fraction},{results[model][hint_fraction][0]},{results[model][hint_fraction][1]}\n")
 
 # %%
-# Plot 2: Rescaled plot with sigmoid fitting
+# Plot 2: Rescaled plot with 1/(1-H) transform and sigmoid fitting
 fig, ax = plot_results_rescaled(
     results=results,
     models=MODELS,
     hints=HINT_FRACTIONS,
-    title="GPQA, providing edited solutions in-text, using masking strategy",
-    fit_scaling=False
+    title="GPQA, providing edited solutions in-text, using masking strategy"
+    # default hint_transform is 1/(1-h)
 )
 plt.show()
 

@@ -464,7 +464,7 @@ results_ifeval = load_baseline_results(
 fig, ax = plot_baselines(
     results=results_ifeval,
     models=MODELS,
-    title="IFEval: Accuracy vs Model Size",
+    title="IFEval",
     fit_sigmoid=True,
     fit_scaling=True,
     pin_lower_bound=None
@@ -485,10 +485,32 @@ results_math = load_baseline_results(
 fig, ax = plot_baselines(
     results=results_math,
     models=MODELS,
-    title="MATH: Accuracy vs Model Size",
+    title="MATH",
     fit_sigmoid=True,
     fit_scaling=True,
     pin_lower_bound=None
+)
+plt.show()
+
+# %%
+# %%
+
+results_mmlu_0_shot = load_baseline_results(
+    base_folder=BASE_FOLDER,
+    eval_name="gpqa",
+    models=MODELS,
+    grader_field="gpqa_scorer",
+    accuracy_field="accuracy",
+    stderr_field="stderr"
+)
+
+fig, ax = plot_baselines(
+    results=results_mmlu_0_shot,
+    models=MODELS,
+    title="GPQA",
+    fit_sigmoid=True,
+    fit_scaling=True,
+    pin_lower_bound=0.25
 )
 plt.show()
 

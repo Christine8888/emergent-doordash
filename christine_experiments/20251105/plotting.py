@@ -186,12 +186,16 @@ def plot_results(results: Dict, models: List[str], hints: List[float],
 def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
                          title: str = "Error Rate vs Inverse Hint",
                          figsize: Tuple[int, int] = (12, 7),
-                         fit_scaling: bool = False):
-    """Plot results with rescaled axes and sigmoid fitting.
+                         fit_scaling: bool = False,
+                         fit_type: str = 'sigmoid',
+                         hint_transform: Optional[callable] = None,
+                         xlabel: Optional[str] = None,
+                         xscale: str = 'log'):
+    """Plot results with rescaled axes and curve fitting.
 
-    X-axis: 1/(1-hint) on log scale
+    X-axis: hint_transform(hint) on log scale (default: 1/(1-hint))
     Y-axis: 1-accuracy (error rate)
-    Fits sigmoid function: σ(m*log(x) + b) or h*σ(m*log(x) + b)
+    Fits sigmoid or exponential function.
 
     Args:
         results: Results dictionary from load_all_results
@@ -199,15 +203,33 @@ def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
         hints: List of hint fractions
         title: Plot title
         figsize: Figure size
-        fit_scaling: If True, fit y = h*σ(m*log(x) + b), else y = σ(m*log(x) + b)
+        fit_scaling: If True, fit with scaling parameter h (e.g., y = h*σ(...))
+        fit_type: Type of curve to fit. Options:
+                  - 'sigmoid': σ(m*log(x) + b) or h*σ(m*log(x) + b)
+                  - 'exponential': h*(1 - a^x) - exponential decay
+        hint_transform: Optional function to transform hint values for x-axis.
+                       Default is lambda h: 1 / (1 - h)
+        xlabel: Optional x-axis label. Default is '1 / (1 - hint)'
+        xscale: Scale for x-axis ('log' or 'linear'). Default is 'log'
     """
     from scipy.optimize import curve_fit
+
+    # Default hint transform: 1 / (1 - hint)
+    def default_hint_transform(h):
+        return 1 / (1 - h)
+    
+    if hint_transform is None:
+        hint_transform = default_hint_transform
 
     def sigmoid(x, m, b):
         return 1 / (1 + np.exp(-(m * np.log(x) + b)))
 
     def scaled_sigmoid(x, h, m, b):
         return h / (1 + np.exp(-(m * np.log(x) + b)))
+
+    def exponential(x, h, a, k):
+        """Exponential: h * a^(k*x)"""
+        return h * np.power(a, k * x)
 
     fig, ax = plt.subplots(figsize=figsize)
     colors = sns.color_palette("husl", len(models))
@@ -224,7 +246,7 @@ def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
         for hint in hints:
             accuracy, stderr = results[model][hint]
             if accuracy is not None:
-                x_vals.append(1 / (1 - hint))
+                x_vals.append(hint_transform(hint))
                 y_vals.append(1 - accuracy)
                 y_errs.append(stderr if stderr is not None else 0)
 
@@ -236,30 +258,39 @@ def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
                    marker='o', markersize=8, capsize=4,
                    linewidth=2, alpha=0.8, label=clean_name)
 
-        # Fit sigmoid and plot curve
+        # Fit curve and plot
         if len(x_vals) >= 2:
             try:
                 x_arr = np.array(x_vals)
                 y_arr = np.array(y_vals)
 
-                if fit_scaling:
+                # Generate smooth x values based on scale
+                if xscale == 'log':
+                    x_smooth = np.logspace(np.log10(min(x_vals)),
+                                          np.log10(max(x_vals)), 100)
+                else:
+                    x_smooth = np.linspace(min(x_vals), max(x_vals), 100)
+
+                if fit_type == 'exponential':
+                    # Exponential: h * a^(k*x)
+                    params, _ = curve_fit(exponential, x_arr, y_arr,
+                                         p0=[np.max(y_arr), 0.5, 1.0],
+                                         maxfev=10000)
+                    h_fit, a_fit, k_fit = params
+                    model_params[model] = ('exponential', h_fit, a_fit, k_fit)
+                    y_smooth = exponential(x_smooth, *params)
+                elif fit_scaling:
                     params, _ = curve_fit(scaled_sigmoid, x_arr, y_arr,
                                          p0=[np.max(y_arr), 1, 0],
                                          maxfev=10000)
                     h_fit, m_fit, b_fit = params
-                    model_params[model] = (h_fit, m_fit, b_fit)
-
-                    x_smooth = np.logspace(np.log10(min(x_vals)),
-                                          np.log10(max(x_vals)), 100)
+                    model_params[model] = ('scaled_sigmoid', h_fit, m_fit, b_fit)
                     y_smooth = scaled_sigmoid(x_smooth, *params)
                 else:
                     params, _ = curve_fit(sigmoid, x_arr, y_arr, p0=[1, 0],
                                          maxfev=10000)
                     m_fit, b_fit = params
-                    model_params[model] = (m_fit, b_fit)
-
-                    x_smooth = np.logspace(np.log10(min(x_vals)),
-                                          np.log10(max(x_vals)), 100)
+                    model_params[model] = ('sigmoid', m_fit, b_fit)
                     y_smooth = sigmoid(x_smooth, *params)
 
                 ax.plot(x_smooth, y_smooth, color=color,
@@ -277,11 +308,16 @@ def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
         clean_name = clean_model_name(model)
 
         if model in model_params:
-            if fit_scaling:
-                h_fit, m_fit, b_fit = model_params[model]
+            params = model_params[model]
+            fit_kind = params[0]
+            if fit_kind == 'exponential':
+                h_fit, a_fit, k_fit = params[1], params[2], params[3]
+                equation = f"{h_fit:.3f}·{a_fit:.3f}^({k_fit:.2f}x)"
+            elif fit_kind == 'scaled_sigmoid':
+                h_fit, m_fit, b_fit = params[1], params[2], params[3]
                 equation = f"{h_fit:.3f}·σ({m_fit:.2f}·log(x) {b_fit:+.2f})"
-            else:
-                m_fit, b_fit = model_params[model]
+            else:  # sigmoid
+                m_fit, b_fit = params[1], params[2]
                 equation = f"σ({m_fit:.2f}·log(x) {b_fit:+.2f})"
             label_text = f"{clean_name}: {equation}"
         else:
@@ -292,11 +328,11 @@ def plot_results_rescaled(results: Dict, models: List[str], hints: List[float],
         model_labels.append(label_text)
 
     ax.legend(model_handles, model_labels, title='Models', framealpha=0.9, loc='best')
-    ax.set_xlabel('1 / (1 - hint)', fontsize=13, fontweight='bold')
+    ax.set_xlabel(xlabel if xlabel is not None else '1 / (1 - hint)', fontsize=13, fontweight='bold')
     ax.set_ylabel('eval error rate', fontsize=13, fontweight='bold')
     ax.set_title(title, fontsize=15, fontweight='bold', pad=20)
     ax.grid(True, alpha=0.3)
-    ax.set_xscale('log')
+    ax.set_xscale(xscale)
 
     plt.tight_layout()
     return fig, ax

@@ -1,5 +1,6 @@
 """Registry of all available evals."""
 
+from functools import partial
 from typing import Callable
 
 
@@ -7,10 +8,26 @@ def get_external_evals() -> dict[str, Callable]:
     """Get external evals from inspect_evals package."""
     from inspect_evals.mmlu import mmlu_0_shot, mmlu_5_shot
     from inspect_evals.ifeval import ifeval
+    from inspect_evals.mbpp import mbpp
+    from inspect_evals.commonsense_qa import commonsense_qa
+    from inspect_evals.arc import arc_easy, arc_challenge
+    from inspect_evals.hellaswag import hellaswag
+    from inspect_evals.piqa import piqa
+    from inspect_evals.bbeh import bbeh
+    from inspect_evals.niah import niah
+
     return {
         "mmlu_0_shot": mmlu_0_shot,
         "mmlu_5_shot": mmlu_5_shot,
         "ifeval": ifeval,
+        "mbpp": mbpp,
+        "commonsense_qa": commonsense_qa,
+        "arc_easy": arc_easy,
+        "arc_challenge": arc_challenge,
+        "hellaswag": hellaswag,
+        "piqa": piqa,
+        "bbeh": bbeh,
+        "niah": partial(niah, min_context=4000, max_context=32000, n_contexts=50, n_positions=10),
     }
 
 
