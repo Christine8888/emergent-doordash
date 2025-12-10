@@ -16,7 +16,7 @@ class SubmitConfig:
     qos: str | None = None
     account: str = "nlp"
     job_name_prefix: str = "exp"
-    exclude_nodes: str = "sphinx2"
+    exclude_nodes: str = "sphinx2,sphinx6"
 
     # Note: gpus_per_job will be auto-set from tensor_parallel_size if not specified
     gpus_per_job: Optional[int] = None
