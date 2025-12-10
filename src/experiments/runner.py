@@ -129,9 +129,6 @@ def run_eval_with_vllm(
     n_gpus = int(os.environ.get('SLURM_GPUS_ON_NODE', tensor_parallel_size))
     logger.info(f"Allocated {n_gpus} GPUs by SLURM")
 
-    task_kwargs = task_kwargs or {}
-    task = task_fn(**task_kwargs)
-
     with GPUMonitor(), vLLMServer(
         model_path=model_path,
         tensor_parallel_size=tensor_parallel_size,
@@ -140,6 +137,10 @@ def run_eval_with_vllm(
         n_gpus=n_gpus,
     ) as server:
         setup_vllm_env(server.port)
+
+        # Create task after env is set (some evals like niah call get_model() at creation)
+        task_kwargs = task_kwargs or {}
+        task = task_fn(**task_kwargs)
 
         return run_eval(
             task=task,
