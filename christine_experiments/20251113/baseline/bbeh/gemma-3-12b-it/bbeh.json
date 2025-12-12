@@ -1,0 +1,32 @@
+{
+  "model": "vllm/gemma-3-12b-it",
+  "total_samples": 4520,
+  "completed_samples": 4520,
+  "bbeh_scorer": {
+    "linguini": 0.045,
+    "multistep arithmetic": 0.0,
+    "movie recommendation": 0.45,
+    "boardgame qa": 0.335,
+    "word sorting": 0.045,
+    "nycc": 0.125,
+    "causal understanding": 0.5,
+    "object counting": 0.005,
+    "buggy tables": 0.0,
+    "web of lies": 0.17,
+    "object properties": 0.005,
+    "time arithmetic": 0.225,
+    "spatial reasoning": 0.115,
+    "temporal sequence": 0.01,
+    "sarc triples": 0.22,
+    "shuffled objects": 0.125,
+    "hyperbaton": 0.045,
+    "zebra puzzles": 0.22,
+    "boolean expressions": 0.23,
+    "geometric shapes": 0.33,
+    "sportqa": 0.11,
+    "disambiguation qa": 0.3333333333333333,
+    "dyck languages": 0.085,
+    "harmonic_mean_across_tasks": 0.04465035451343763,
+    "scorer": "bbeh_scorer"
+  }
+}

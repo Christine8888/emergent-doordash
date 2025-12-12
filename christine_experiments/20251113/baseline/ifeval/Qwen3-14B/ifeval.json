@@ -1,0 +1,18 @@
+{
+  "model": "vllm/Qwen3-14B",
+  "total_samples": 541,
+  "completed_samples": 541,
+  "instruction_following": {
+    "prompt_strict_acc": 0.8502772643253235,
+    "prompt_strict_stderr": 0.015354203073785721,
+    "prompt_loose_acc": 0.8835489833641405,
+    "prompt_loose_stderr": 0.01380352728407129,
+    "inst_strict_acc": 0.9004796163069544,
+    "inst_strict_stderr": 0.010108644981019719,
+    "inst_loose_acc": 0.9220623501199041,
+    "inst_loose_stderr": 0.009205516296557298,
+    "final_acc": 0.8890920535290806,
+    "final_stderr": 0.015147641110820205,
+    "scorer": "instruction_following"
+  }
+}

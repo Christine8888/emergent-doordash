@@ -1,0 +1,10 @@
+{
+  "model": "vllm/Llama-3.1-8B-Instruct",
+  "total_samples": 14042,
+  "completed_samples": 14042,
+  "choice": {
+    "accuracy": 0.6668565731377296,
+    "stderr": 0.003977707304728332,
+    "scorer": "choice"
+  }
+}

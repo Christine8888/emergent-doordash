@@ -9,7 +9,21 @@ from utils.setup import setup_logging
 import os
 logger = setup_logging()
 
+with open('/sphinx/u/cye/emergent-doordash/hf.tok', 'r') as f:
+    os.environ['HF_TOKEN'] = f.read().strip()
+
 MODELS = [
+    ("Qwen/Qwen3-0.6B", 1),
+    ("Qwen/Qwen3-1.7B", 1),
+    ("Qwen/Qwen3-4B", 1),
+    ("Qwen/Qwen3-8B", 1),
+    ("Qwen/Qwen3-14B", 1),
+    ("Qwen/Qwen3-32B", 2),
+    ("meta-llama/Llama-3.1-8B-Instruct", 1),
+    ("meta-llama/Llama-3.1-70B-Instruct", 4),
+    ("google/gemma-3-12b-it", 1),
+    ("google/gemma-3-4b-it", 1),
+    ("google/gemma-3-27b-it", 2),
     ("Qwen/Qwen2.5-0.5B-Instruct", 1),
     ("Qwen/Qwen2.5-1.5B-Instruct", 1),
     ("Qwen/Qwen2.5-3B-Instruct", 1),

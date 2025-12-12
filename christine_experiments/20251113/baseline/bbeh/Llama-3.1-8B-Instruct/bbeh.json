@@ -1,0 +1,32 @@
+{
+  "model": "vllm/Llama-3.1-8B-Instruct",
+  "total_samples": 4520,
+  "completed_samples": 4520,
+  "bbeh_scorer": {
+    "linguini": 0.025,
+    "multistep arithmetic": 0.0,
+    "movie recommendation": 0.295,
+    "boardgame qa": 0.245,
+    "word sorting": 0.025,
+    "nycc": 0.08,
+    "causal understanding": 0.375,
+    "object counting": 0.0,
+    "buggy tables": 0.005,
+    "web of lies": 0.08,
+    "object properties": 0.0,
+    "time arithmetic": 0.035,
+    "spatial reasoning": 0.035,
+    "temporal sequence": 0.0,
+    "sarc triples": 0.225,
+    "shuffled objects": 0.075,
+    "hyperbaton": 0.01,
+    "zebra puzzles": 0.1,
+    "boolean expressions": 0.125,
+    "geometric shapes": 0.205,
+    "sportqa": 0.05,
+    "disambiguation qa": 0.36666666666666664,
+    "dyck languages": 0.015,
+    "harmonic_mean_across_tasks": 0.030799519842378546,
+    "scorer": "bbeh_scorer"
+  }
+}

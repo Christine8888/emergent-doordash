@@ -52,6 +52,12 @@ EXPERIMENTS = {
 }
 
 MODELS = [
+        ("Qwen/Qwen3-0.6B", 1),
+    ("Qwen/Qwen3-1.7B", 1),
+    ("Qwen/Qwen3-4B", 1),
+    ("Qwen/Qwen3-8B", 1),
+    ("Qwen/Qwen3-14B", 1),
+    ("Qwen/Qwen3-32B", 2),
     ("Qwen/Qwen2.5-0.5B-Instruct", 1),
     ("Qwen/Qwen2.5-1.5B-Instruct", 1),
     ("Qwen/Qwen2.5-3B-Instruct", 1),
@@ -68,7 +74,7 @@ CONFIG = SubmitConfig(
     time_hours=36,
     mem_gb=64,
     cpus_per_task=4,
-    exclude_nodes="sphinx1,sphinx2"
+    exclude_nodes="sphinx1,sphinx2,sphinx6"
 )
 
 

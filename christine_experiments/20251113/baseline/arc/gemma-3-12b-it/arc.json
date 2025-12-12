@@ -1,0 +1,10 @@
+{
+  "model": "vllm/gemma-3-12b-it",
+  "total_samples": 400,
+  "completed_samples": 400,
+  "arc_scorer": {
+    "accuracy": 0.025,
+    "stderr": 0.007816023641463079,
+    "scorer": "arc_scorer"
+  }
+}
