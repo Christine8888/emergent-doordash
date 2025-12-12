@@ -8,6 +8,7 @@ Or:
 """
 
 import logging
+import os
 import random
 from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, GenerateConfig
 from inspect_ai.solver import Generate, Solver, solver
@@ -15,6 +16,7 @@ from inspect_ai.solver import TaskState
 
 from evals.prefill import PrefillConfig
 from evals.fewshot import FewShotConfig, format_fewshot_examples
+from utils.model_config import get_start_prefill
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +133,13 @@ def prefill(config: PrefillConfig) -> Solver:
             samples = prefill_data[state.sample_id]
             rng = random.Random(f"{state.epoch}_{state.sample_id}")
             prefill_text = rng.choice(list(samples.values()))
+
+            # Prepend model-specific start token if applicable (e.g., "<think>" for Qwen3)
+            model_name = os.environ.get("INSPECT_EVAL_MODEL", "")
+            start_token = get_start_prefill(model_name)
+            if start_token:
+                prefill_text = start_token + prefill_text
+
             state.messages.append(ChatMessageAssistant(content=prefill_text))
 
         return state

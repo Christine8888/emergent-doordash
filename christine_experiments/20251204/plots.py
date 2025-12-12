@@ -24,8 +24,8 @@ from plotting import (
 # Choose folder structure:
 # Option 1: New structure (with solver subfolder)
 BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251113/results/gpqa"
-SOLVER = "cot_intext_masked"  
-LABEL = "using in-text CoT (masked)"
+SOLVER = "solution_prefill_sequential"  
+LABEL = "using solution prefill (sequential)"
 FILENAME_TEMPLATE = "gpqa_" + SOLVER + "_0shot_{hint}.json"
 
 CONDITION = "0shot"
@@ -35,12 +35,23 @@ STDERR_FIELD = "stderr"
 
 # Models to plot
 MODELS = [
-   "Qwen2.5-0.5B-Instruct",
-    "Qwen2.5-1.5B-Instruct",
-    "Qwen2.5-3B-Instruct",
-    "Qwen2.5-7B-Instruct",
-    "Qwen2.5-14B-Instruct",
-    "Qwen2.5-32B-Instruct",
+#    "Qwen2.5-0.5B-Instruct",
+#     "Qwen2.5-1.5B-Instruct",
+#     "Qwen2.5-3B-Instruct",
+#     "Qwen2.5-7B-Instruct",
+#     "Qwen2.5-14B-Instruct",
+#     "Qwen2.5-32B-Instruct",
+    "Qwen3-0.6B",
+    "Qwen3-1.7B",
+    # "Qwen3-4B",
+    # "Qwen3-8B",
+    # "Qwen3-14B",
+    # "Qwen3-32B",
+    # "Llama-3.1-8B-Instruct",
+    # "Llama-3.1-70B-Instruct",
+    # "gemma-3-12b-it",
+    # "gemma-3-4b-it",
+    # "gemma-3-27b-it",
 ]
 
 HINT_FRACTIONS = [0.0, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0]

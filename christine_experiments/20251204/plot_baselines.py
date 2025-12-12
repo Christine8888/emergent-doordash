@@ -448,7 +448,96 @@ MODELS = [
     "Qwen2.5-7B-Instruct",
     "Qwen2.5-14B-Instruct",
     "Qwen2.5-32B-Instruct",
+    # "Qwen3-0.6B",
+    # "Qwen3-1.7B",
+    # "Qwen3-4B",
+    # "Qwen3-8B",
+    # "Qwen3-14B",
+    # "Qwen3-32B",
+    # "Llama-3.1-8B-Instruct",
+    # "Llama-3.1-70B-Instruct",
+    # "gemma-3-12b-it",
+    # "gemma-3-4b-it",
+    # "gemma-3-27b-it",
 ]
+
+# %%
+results_arc_easy = load_baseline_results(
+    base_folder=BASE_FOLDER,
+    eval_name="arc_easy",
+    models=MODELS,
+    grader_field="choice",
+    accuracy_field="accuracy",
+    stderr_field="stderr"
+)
+
+fig, ax = plot_baselines(
+    results=results_arc_easy,
+    models=MODELS,
+    title="ARC Easy",
+    fit_sigmoid=True,
+    fit_scaling=True,
+    pin_lower_bound=None
+)
+plt.show()
+
+# %%
+results_csqa = load_baseline_results(
+    base_folder=BASE_FOLDER,
+    eval_name="commonsense_qa",
+    models=MODELS,
+    grader_field="choice",
+    accuracy_field="accuracy",
+    stderr_field="stderr"
+)
+
+fig, ax = plot_baselines(
+    results=results_csqa,
+    models=MODELS,
+    title="CSQA",
+    fit_sigmoid=True,
+    fit_scaling=True,
+    pin_lower_bound=None
+)
+# %%
+results_arc_challenge = load_baseline_results(
+    base_folder=BASE_FOLDER,
+    eval_name="arc_challenge",
+    models=MODELS,
+    grader_field="choice",
+    accuracy_field="accuracy",
+    stderr_field="stderr"
+)
+
+fig, ax = plot_baselines(
+    results=results_arc_challenge,
+    models=MODELS,
+    title="ARC Challenge",
+    fit_sigmoid=True,
+    fit_scaling=True,
+    pin_lower_bound=None
+)
+plt.show()
+
+# %%
+results_hellaswag = load_baseline_results(
+    base_folder=BASE_FOLDER,
+    eval_name="hellaswag",
+    models=MODELS,
+    grader_field="choice",
+    accuracy_field="accuracy",
+    stderr_field="stderr"
+)
+
+fig, ax = plot_baselines(
+    results=results_hellaswag,
+    models=MODELS,
+    title="Hellaswag",
+    fit_sigmoid=True,
+    fit_scaling=True,
+    pin_lower_bound=None
+)
+plt.show()
 
 # %%
 # Plot IFEval
@@ -465,6 +554,47 @@ fig, ax = plot_baselines(
     results=results_ifeval,
     models=MODELS,
     title="IFEval",
+    fit_sigmoid=True,
+    fit_scaling=True,
+    pin_lower_bound=None
+)
+plt.show()
+
+# %%
+results_piqa = load_baseline_results(
+    base_folder=BASE_FOLDER,
+    eval_name="piqa",
+    models=MODELS,
+    grader_field="choice",
+    accuracy_field="accuracy",
+    stderr_field="stderr"
+)
+
+fig, ax = plot_baselines(
+    results=results_piqa,
+    models=MODELS,
+    title="PIQA",
+    fit_sigmoid=True,
+    fit_scaling=True,
+    pin_lower_bound=None
+)
+plt.show()
+
+
+# %%
+# plot BBEH
+results_bbeh = load_baseline_results(
+    base_folder=BASE_FOLDER,
+    eval_name="bbeh",
+    models=MODELS,
+    grader_field="bbeh_scorer",
+    accuracy_field="harmonic_mean_across_tasks",
+)
+
+fig, ax = plot_baselines(
+    results=results_bbeh,
+    models=MODELS,
+    title="BBEH",
     fit_sigmoid=True,
     fit_scaling=True,
     pin_lower_bound=None
@@ -513,38 +643,3 @@ fig, ax = plot_baselines(
     pin_lower_bound=0.25
 )
 plt.show()
-
-# %%
-# Plot multiple evaluations together
-eval_configs = [
-    {
-        'eval_name': 'ifeval',
-        'grader_field': 'instruction_following',
-        'accuracy_field': 'final_acc',
-        'stderr_field': 'final_stderr',
-        'label': 'IFEval'
-    },
-    {
-        'eval_name': 'math',
-        'grader_field': 'expression_exact_match_sympy',
-        'accuracy_field': 'accuracy',
-        'stderr_field': 'stderr',
-        'label': 'MATH'
-    }
-]
-
-all_results = load_multiple_baselines(
-    base_folder=BASE_FOLDER,
-    eval_configs=eval_configs,
-    models=MODELS
-)
-
-fig, ax = plot_multiple_baselines(
-    all_results=all_results,
-    models=MODELS,
-    title="Baseline Evaluations vs Model Size",
-    fit_sigmoid=True,
-    fit_scaling=True
-)
-plt.show()
-
