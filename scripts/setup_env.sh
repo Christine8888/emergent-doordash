@@ -1,7 +1,7 @@
 #!/bin/bash
 # Setup script for SLURM jobs - creates or activates venv
 
-export SCR=/scr-ssd/cye
+export SCR=/juice5b/scr5b/cye
 export HOME="$SCR"
 export VENV_DIR="$SCR/.venv"
 export UV_CACHE_DIR="$SCR/.cache/uv"
