@@ -10,6 +10,7 @@ from typing import Callable
 import submitit
 
 from utils.submitit_defaults import SubmitConfig, DEFAULT_CONFIG
+from utils.model_config import ModelSpec
 from utils.vllm_server import vLLMServer
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,8 @@ def _configure_executor(executor: submitit.AutoExecutor, config: SubmitConfig, n
     )
     if config.qos:
         params["slurm_qos"] = config.qos
+    if config.nodelist:
+        params["slurm_nodelist"] = config.nodelist
     executor.update_parameters(**params)
 
 
@@ -208,7 +211,7 @@ def run_baseline_eval(
 
 
 def launch_experiment(
-    experiment_class, models: list[tuple[str, int]], hint_fractions: list[float],
+    experiment_class, models: list[ModelSpec], hint_fractions: list[float],
     fewshots: list[int] = [0], epochs: int = 1, results_dir: str = "./results",
     config: SubmitConfig | None = None, skip_existing: bool = True,
     wait: bool = True, poll_interval: int = 300, max_retries: int = 3,
@@ -219,9 +222,13 @@ def launch_experiment(
     jobs = []
     job_meta = {}
 
-    for model_path, tp in models:
-        model_name = os.path.basename(model_path)
-        job_config = config.with_gpus(tp)
+    for model in models:
+        model_name = os.path.basename(model.path)
+        job_config = config.override(
+            gpus_per_job=model.tp,
+            partition=model.partitions,
+            nodelist=model.nodelist,
+        )
         job_name = f"{config.job_name_prefix}_{model_name}"
         _configure_executor(executor, job_config, job_name)
 
@@ -234,8 +241,8 @@ def launch_experiment(
                         continue
 
                 kwargs = dict(
-                    experiment_class=experiment_class, model_path=model_path,
-                    tensor_parallel_size=tp, hint_fraction=hint_fraction, fewshot=fewshot,
+                    experiment_class=experiment_class, model_path=model.path,
+                    tensor_parallel_size=model.tp, hint_fraction=hint_fraction, fewshot=fewshot,
                     epochs=epochs, results_dir=results_dir, config=job_config,
                 )
                 job = executor.submit(run_single_experiment, **kwargs)
@@ -250,7 +257,7 @@ def launch_experiment(
 
 
 def launch_baseline(
-    eval_names: list[str], models: list[tuple[str, int]], results_dir: str = "./baseline_results",
+    eval_names: list[str], models: list[ModelSpec], results_dir: str = "./baseline_results",
     config: SubmitConfig | None = None, epochs: int = 1, limit: int | None = None,
     skip_existing: bool = True, wait: bool = True, poll_interval: int = 300, max_retries: int = 3,
 ):
@@ -261,20 +268,24 @@ def launch_baseline(
     job_meta = {}
 
     for eval_name in eval_names:
-        for model_path, tp in models:
-            model_name = os.path.basename(model_path)
+        for model in models:
+            model_name = os.path.basename(model.path)
 
             if skip_existing:
                 output = str(Path(results_dir) / eval_name / model_name / f"{eval_name}.json")
                 if os.path.exists(output):
                     continue
 
-            job_config = config.with_gpus(tp)
+            job_config = config.override(
+                gpus_per_job=model.tp,
+                partition=model.partitions,
+                nodelist=model.nodelist,
+            )
             job_name = f"baseline_{eval_name}_{model_name}"
             _configure_executor(executor, job_config, job_name)
 
             kwargs = dict(
-                eval_name=eval_name, model_path=model_path, tensor_parallel_size=tp,
+                eval_name=eval_name, model_path=model.path, tensor_parallel_size=model.tp,
                 results_dir=results_dir, config=job_config, epochs=epochs, limit=limit,
             )
             job = executor.submit(run_baseline_eval, **kwargs)

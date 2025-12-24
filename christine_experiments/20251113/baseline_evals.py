@@ -1,45 +1,17 @@
 """Baseline evaluations CLI."""
 
+import os
 from concurrent.futures import ThreadPoolExecutor
 
 from experiments.registry import get_all_evals, get_external_evals, get_internal_evals
 from utils.submitit_utils import launch_baseline
-from utils.submitit_defaults import SubmitConfig
+from utils.model_config import QWEN3_MODELS, QWEN25_MODELS, LLAMA_MODELS, GEMMA_MODELS
 from utils.setup import setup_logging
-import os
+
 logger = setup_logging()
 
 with open('/sphinx/u/cye/emergent-doordash/hf.tok', 'r') as f:
     os.environ['HF_TOKEN'] = f.read().strip()
-
-MODELS = [
-    ("Qwen/Qwen3-0.6B", 1),
-    ("Qwen/Qwen3-1.7B", 1),
-    ("Qwen/Qwen3-4B", 1),
-    ("Qwen/Qwen3-8B", 1),
-    ("Qwen/Qwen3-14B", 1),
-    ("Qwen/Qwen3-32B", 2),
-    ("meta-llama/Llama-3.1-8B-Instruct", 1),
-    ("meta-llama/Llama-3.1-70B-Instruct", 4),
-    ("google/gemma-3-12b-it", 1),
-    ("google/gemma-3-4b-it", 1),
-    ("google/gemma-3-27b-it", 2),
-    ("Qwen/Qwen2.5-0.5B-Instruct", 1),
-    ("Qwen/Qwen2.5-1.5B-Instruct", 1),
-    ("Qwen/Qwen2.5-3B-Instruct", 1),
-    ("Qwen/Qwen2.5-7B-Instruct", 1),
-    ("Qwen/Qwen2.5-14B-Instruct", 1),
-    ("Qwen/Qwen2.5-32B-Instruct", 2),
-]
-
-CONFIG = SubmitConfig(
-    partition="sphinx",
-    time_hours=36,
-    mem_gb=64,
-    cpus_per_task=4,
-    exclude_nodes="sphinx1,sphinx2",
-    max_connections=128,
-)
 
 
 if __name__ == "__main__":
@@ -80,9 +52,8 @@ if __name__ == "__main__":
             executor.submit(
                 launch_baseline,
                 eval_names=[eval_name],
-                models=MODELS,
+                models=QWEN3_MODELS + QWEN25_MODELS + LLAMA_MODELS + GEMMA_MODELS,
                 results_dir=args.results_dir,
-                config=CONFIG,
                 epochs=args.epochs,
                 limit=args.limit,
                 poll_interval=30,

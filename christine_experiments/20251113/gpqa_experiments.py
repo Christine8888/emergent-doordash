@@ -5,7 +5,7 @@ from environments.gpqa.gpqa import gpqa_diamond, DEFAULT_INSTRUCTIONS
 from evals.prefill import PrefillConfig
 from evals.solvers import instructions, intext, prefill, generate
 from utils.submitit_utils import launch_experiment
-from utils.submitit_defaults import SubmitConfig
+from utils.model_config import QWEN3_MODELS, QWEN25_MODELS
 from utils.setup import setup_logging
 
 logger = setup_logging()
@@ -51,32 +51,8 @@ EXPERIMENTS = {
     "solution_prefill_sequential": make_experiment("solution", "prefill", "sequential"),
 }
 
-MODELS = [
-        ("Qwen/Qwen3-0.6B", 1),
-    ("Qwen/Qwen3-1.7B", 1),
-    ("Qwen/Qwen3-4B", 1),
-    ("Qwen/Qwen3-8B", 1),
-    ("Qwen/Qwen3-14B", 1),
-    ("Qwen/Qwen3-32B", 2),
-    ("Qwen/Qwen2.5-0.5B-Instruct", 1),
-    ("Qwen/Qwen2.5-1.5B-Instruct", 1),
-    ("Qwen/Qwen2.5-3B-Instruct", 1),
-    ("Qwen/Qwen2.5-7B-Instruct", 1),
-    ("Qwen/Qwen2.5-14B-Instruct", 1),
-    ("Qwen/Qwen2.5-32B-Instruct", 2),
-]
-
 HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 HINT_FRACTIONS += [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
-
-CONFIG = SubmitConfig(
-    partition="sphinx",
-    time_hours=36,
-    mem_gb=64,
-    cpus_per_task=4,
-    exclude_nodes="sphinx1,sphinx2,sphinx6",
-    max_connections=128,
-)
 
 
 def run_experiment(exp_name: str, epochs: int, results_dir: str):
@@ -84,11 +60,10 @@ def run_experiment(exp_name: str, epochs: int, results_dir: str):
     logger.info(f"Starting {exp_name}...")
     launch_experiment(
         experiment_class=EXPERIMENTS[exp_name],
-        models=MODELS,
+        models=QWEN3_MODELS + QWEN25_MODELS,
         hint_fractions=HINT_FRACTIONS,
         epochs=epochs,
         results_dir=results_dir,
-        config=CONFIG,
         wait=True,
         poll_interval=300,
         max_retries=3,
