@@ -37,7 +37,8 @@ CONFIG = SubmitConfig(
     time_hours=36,
     mem_gb=64,
     cpus_per_task=4,
-    exclude_nodes="sphinx1,sphinx2"
+    exclude_nodes="sphinx1,sphinx2",
+    max_connections=128,
 )
 
 
