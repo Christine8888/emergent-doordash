@@ -23,11 +23,11 @@ class SubmitConfig:
 
     # vLLM config
     max_model_len: int = 16384
-    max_connections: int = 128
+    max_connections: int = 64
     gpu_memory_utilization: float = 0.85
 
     # Experiment config
-    timeout: int = 600
+    timeout: int = 1200
     max_retries: int = 3
 
     # Submitit config

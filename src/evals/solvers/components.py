@@ -213,7 +213,7 @@ def generate(
 
     Args:
         max_tokens: Maximum tokens to generate
-        timeout: Timeout in seconds
+        timeout: Timeout in seconds (total across all retries)
 
     Returns:
         Solver that generates with appropriate configuration
@@ -229,7 +229,7 @@ def generate(
         gen_config = GenerateConfig(
             max_tokens=max_tokens,
             continue_final_message=continue_message,
-            timeout=timeout
+            timeout=timeout,
         )
 
         # Generate

@@ -126,7 +126,6 @@ class vLLMServer:
             "--data-parallel-size", str(self.data_parallel_size),
             "--max-model-len", str(self.max_model_len),
             "--gpu-memory-utilization", str(self.gpu_memory_utilization),
-            "--max-num-seqs", "16",
             "--enable-prefix-caching",
             "--enable-chunked-prefill",
             "--dtype", "auto",
