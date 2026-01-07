@@ -1,6 +1,7 @@
 """Model-specific configuration."""
 
 from dataclasses import dataclass
+from typing import Any
 
 # Explicit node lists by GPU capability
 SMALL_MODEL_NODES = "sphinx[1-11],miso[1-5],jagupard[32-39]"  # A100/H100/H200 + A6000 - for ≤4B
@@ -15,6 +16,16 @@ MODEL_PREFILL_TOKENS = {
     "Qwen3": "<think>",
 }
 
+# Generation config defaults per model family
+# Qwen3 recommended: temperature=0.6, top_p=0.95, top_k=20 for thinking mode
+# See: https://huggingface.co/Qwen/Qwen3-32B/blob/main/generation_config.json
+MODEL_GENERATION_DEFAULTS: dict[str, dict[str, Any]] = {
+    "Qwen3": {"temperature": 0.6, "top_p": 0.95, "top_k": 20},
+}
+
+# Default for models without specific config (standard sampling)
+DEFAULT_GENERATION_CONFIG: dict[str, Any] = {"temperature": 1.0}
+
 
 def get_start_prefill(model_name: str) -> str | None:
     """Get start prefill token for model family."""
@@ -22,6 +33,21 @@ def get_start_prefill(model_name: str) -> str | None:
         if prefix in model_name:
             return token
     return None
+
+
+def get_generation_defaults(model_name: str) -> dict[str, Any]:
+    """Get generation config defaults for model family.
+
+    Args:
+        model_name: Model name (e.g., "Qwen3-32B", "Llama-3.1-8B-Instruct")
+
+    Returns:
+        Dict of generation parameters (temperature, top_p, top_k, etc.)
+    """
+    for prefix, config in MODEL_GENERATION_DEFAULTS.items():
+        if prefix in model_name:
+            return config
+    return DEFAULT_GENERATION_CONFIG
 
 
 @dataclass
