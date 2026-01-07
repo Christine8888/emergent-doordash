@@ -16,7 +16,7 @@ from inspect_ai.solver import TaskState
 
 from evals.prefill import PrefillConfig
 from evals.fewshot import FewShotConfig, format_fewshot_examples
-from utils.model_config import get_start_prefill
+from utils.model_config import get_start_prefill, get_generation_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -206,10 +206,13 @@ def generate(
     max_tokens: int | None = None,
     timeout: int | None = None,
 ) -> Solver:
-    """Generate with automatic continuation detection.
+    """Generate with automatic continuation detection and model-specific defaults.
 
     If the last message is an assistant message, enables continue_final_message
     for vLLM to continue from that message.
+
+    Applies model-specific generation defaults (temperature, top_p, top_k) based
+    on the model family. See utils.model_config.MODEL_GENERATION_DEFAULTS.
 
     Args:
         max_tokens: Maximum tokens to generate
@@ -225,11 +228,18 @@ def generate(
             isinstance(state.messages[-1], ChatMessageAssistant)
         )
 
-        # Configure generation
+        # Get model-specific generation defaults
+        model_name = os.environ.get("INSPECT_EVAL_MODEL", "")
+        gen_defaults = get_generation_defaults(model_name)
+
+        # Configure generation with model-specific defaults
         gen_config = GenerateConfig(
             max_tokens=max_tokens,
             continue_final_message=continue_message,
             timeout=timeout,
+            temperature=gen_defaults.get("temperature"),
+            top_p=gen_defaults.get("top_p"),
+            top_k=gen_defaults.get("top_k"),
         )
 
         # Generate

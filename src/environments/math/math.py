@@ -12,7 +12,7 @@ Based on:
 """
 from inspect_ai import Task, task
 from inspect_ai.dataset import json_dataset
-from inspect_ai.model import GenerateConfig, Model
+from inspect_ai.model import Model
 from inspect_ai.scorer import Score, Scorer, Target, accuracy, scorer, stderr
 from inspect_ai.solver import Solver, TaskState
 from pathlib import Path
@@ -126,7 +126,6 @@ def math(
         dataset=dataset,
         solver=solver,
         scorer=expression_exact_match_sympy(),
-        config=GenerateConfig(temperature=1.0),
     )
 
 # Exact match using an LLM GRADER!!!! 
