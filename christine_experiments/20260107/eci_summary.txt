@@ -1,0 +1,23 @@
+ECI Fitting Summary
+==================================================
+
+Data: 1467 scores, 279 models, 36 benchmarks
+Anchor: Winogrande
+RMSE: 0.1062
+
+Reference model calibration:
+  claude-3-5-sonnet-20240620: 130.0 (target: 130)
+  gpt-5-2025-08-07_medium: 150.0 (target: 150)
+
+User models ECI:
+  Llama-3.1-70B-Instruct           129.2
+  Llama-3.1-8B-Instruct            125.3
+  Qwen2.5-0.5B-Instruct            115.0
+  Qwen2.5-1.5B-Instruct            127.1
+  Qwen2.5-14B-Instruct             137.8
+  Qwen2.5-32B-Instruct             139.4
+  Qwen2.5-3B-Instruct              131.8
+  Qwen2.5-7B-Instruct              135.9
+  gemma-3-12b-it                   131.1
+  gemma-3-27b-it                   131.3
+  gemma-3-4b-it                    121.9

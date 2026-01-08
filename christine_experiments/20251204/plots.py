@@ -22,12 +22,12 @@ LABEL = "using solution intext mask"
 
 # Models to plot (filter after loading)
 MODELS = [
-   "Qwen2.5-0.5B-Instruct",
-    "Qwen2.5-1.5B-Instruct",
-    "Qwen2.5-3B-Instruct",
-    "Qwen2.5-7B-Instruct",
-    "Qwen2.5-14B-Instruct",
-    "Qwen2.5-32B-Instruct",
+#    "Qwen2.5-0.5B-Instruct",
+#     "Qwen2.5-1.5B-Instruct",
+#     "Qwen2.5-3B-Instruct",
+#     "Qwen2.5-7B-Instruct",
+#     "Qwen2.5-14B-Instruct",
+#     "Qwen2.5-32B-Instruct",
     # "Qwen3-0.6B",
     # "Qwen3-1.7B",
     # "Qwen3-4B",

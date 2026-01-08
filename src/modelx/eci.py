@@ -25,12 +25,14 @@ _MANUAL_SCORES_PATH = _MODULE_DIR / "model_scores_manual.csv"
 def load_epoch_benchmark_scores(
     data_dir: Path | str = _EPOCH_DATA_DIR,
     benchmarks: list[str] | None = None,
+    only_eci_models: bool = True,
 ) -> pd.DataFrame:
     """Load Epoch's raw benchmark scores into standard format.
 
     Args:
         data_dir: Path to benchmark_data folder
         benchmarks: List of benchmarks to load. None = all available.
+        only_eci_models: If True, only include models that have ECI scores in Epoch's data.
 
     Returns:
         DataFrame with columns: model, benchmark, score
@@ -83,8 +85,24 @@ def load_epoch_benchmark_scores(
     if benchmarks is None:
         benchmarks = list(BENCHMARK_FILES.keys())
 
+    # Benchmarks that need score normalization (divisor to get 0-1 range)
+    SCORE_DIVISORS = {
+        "Lech Mazur Writing": 10.0,  # 0-10 scale
+        "Aider polyglot": 100.0,     # percentage
+        "OSWorld": 100.0,            # percentage
+        "The Agent Company": 1.0,    # already 0-1
+        "CadEval": 100.0,            # percentage
+        "SWE-Bench Verified (Bash Only)": 100.0,  # percentage
+        "Cybench": 100.0,            # percentage
+    }
+
+    # Benchmarks to skip (scores not convertible to 0-1)
+    SKIP_BENCHMARKS = {"GeoBench"}  # Distance-based scores
+
     rows = []
     for bench in benchmarks:
+        if bench in SKIP_BENCHMARKS:
+            continue
         if bench not in BENCHMARK_FILES:
             logger.warning(f"Unknown benchmark: {bench}")
             continue
@@ -100,17 +118,36 @@ def load_epoch_benchmark_scores(
             logger.warning(f"Score column '{score_col}' not in {filename}")
             continue
 
+        divisor = SCORE_DIVISORS.get(bench, 1.0)
+
         for _, row in df.iterrows():
             model = row.get("Model version") or row.get("Name")
             score = row.get(score_col)
             if pd.notna(model) and pd.notna(score):
+                normalized_score = float(score) / divisor
+                # Clamp to valid range
+                normalized_score = max(0.001, min(0.999, normalized_score))
                 rows.append({
                     "model": str(model).strip(),
                     "benchmark": bench,
-                    "score": float(score),
+                    "score": normalized_score,
                 })
 
-    return pd.DataFrame(rows)
+    result_df = pd.DataFrame(rows)
+
+    # Filter to only ECI models + user's models
+    if only_eci_models and len(result_df) > 0:
+        allowed_models = set(load_epoch_eci(data_dir).keys())
+        # Also include user's models (from both auto and manual scores)
+        if _USER_SCORES_PATH.exists():
+            auto_df = pd.read_csv(_USER_SCORES_PATH)
+            allowed_models |= set(auto_df["model"].dropna().unique())
+        if _MANUAL_SCORES_PATH.exists():
+            manual_df = pd.read_csv(_MANUAL_SCORES_PATH)
+            allowed_models |= set(manual_df["model"].dropna().unique())
+        result_df = result_df[result_df["model"].isin(allowed_models)]
+
+    return result_df
 
 
 def load_epoch_params(
@@ -221,6 +258,35 @@ def fit_eci(
     result = least_squares(residuals, x0, method='trf')
     Cm, Db, ab = unpack(result.x)
 
+    # Linear rescale so Claude 3.5 Sonnet (June) = 130, GPT-5 = 150
+    # Transform: Cm' = a*Cm + b, Db' = a*Db + b, ab' = ab/a
+    # This preserves predictions: σ(ab'*(Cm'-Db')) = σ((ab/a)*a*(Cm-Db)) = σ(ab*(Cm-Db))
+    ref_models = {
+        "claude-3-5-sonnet-20240620": 130.0,
+        "gpt-5-2025-08-07_medium": 150.0,
+    }
+    ref_vals = []
+    ref_targets = []
+    for m, target in ref_models.items():
+        if m in model_idx:
+            ref_vals.append(Cm[model_idx[m]])
+            ref_targets.append(target)
+
+    if len(ref_vals) >= 2:
+        # Solve for a, b: target = a * val + b
+        A = np.array([[ref_vals[0], 1], [ref_vals[1], 1]])
+        B = np.array(ref_targets)
+        a, b = np.linalg.solve(A, B)
+    elif len(ref_vals) == 1:
+        # Just shift
+        a, b = 1.0, ref_targets[0] - ref_vals[0]
+    else:
+        a, b = 1.0, 100.0  # fallback
+
+    Cm = a * Cm + b
+    Db = a * Db + b
+    ab = ab / a  # Adjust slopes to preserve predictions
+
     # Vectorized predictions
     pred = sigmoid(ab[b_indices] * (Cm[m_indices] - Db[b_indices]))
     pred_df = pd.DataFrame({
@@ -278,6 +344,9 @@ def load_user_scores(
     # Concat and dedupe (later entries = manual take precedence)
     combined = pd.concat(dfs, ignore_index=True)
     combined = combined.drop_duplicates(subset=["model", "benchmark"], keep="last")
+
+    # Filter out placeholder rows
+    combined = combined[~combined["model"].str.startswith("_", na=False)]
 
     return combined
 
