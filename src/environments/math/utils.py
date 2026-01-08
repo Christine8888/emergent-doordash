@@ -212,7 +212,8 @@ def extract_answer(completion: str) -> str:
     # First try to find ANSWER: pattern
     # Match ANSWER: only when it appears standalone (at line start, after whitespace, or after newline)
     # This avoids matching "**Answer:**" which has ANSWER immediately after ':'
-    pattern = r'(?i)(?:^|\n|\s)ANSWER\s*:\s*([^\n]+)'
+    # Use [ \t]* instead of \s* after colon to avoid matching across newlines
+    pattern = r'(?i)(?:^|\n|\s)ANSWER[ \t]*:[ \t]*([^\n]+)'
     matches = list(re.finditer(pattern, completion, re.MULTILINE))
     if matches:
         raw_answer = matches[-1].group(1)

@@ -17,8 +17,8 @@ from plotting import (
 
 BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251113/results"
 EVAL_NAME = "gpqa"
-SOLVER = "solution_intext_masked"
-LABEL = "using solution intext mask"
+SOLVER = "solution_intext_sequential"
+LABEL = "using solution intext (sequential)"
 
 # Models to plot (filter after loading)
 MODELS = [
@@ -28,12 +28,12 @@ MODELS = [
 #     "Qwen2.5-7B-Instruct",
 #     "Qwen2.5-14B-Instruct",
 #     "Qwen2.5-32B-Instruct",
-    # "Qwen3-0.6B",
-    # "Qwen3-1.7B",
-    # "Qwen3-4B",
-    # "Qwen3-8B",
-    # "Qwen3-14B",
-    # "Qwen3-32B",
+    "Qwen3-0.6B",
+    "Qwen3-1.7B",
+    "Qwen3-4B",
+    "Qwen3-8B",
+    "Qwen3-14B",
+    "Qwen3-32B",
     # "Llama-3.1-8B-Instruct",
     # "Llama-3.1-70B-Instruct",
     # "gemma-3-12b-it",
@@ -75,8 +75,8 @@ fig, ax = plot_error_vs_hint_transformed(
     fit_scaling=False,
     lower_asymptote_hint=1.0,  # H=1.0 -> +inf, use as lower asymptote
     upper_asymptote_hint=0.0,  # H=0.0 -> -inf, use as upper asymptote (per-model)
-    hint_transform=lambda h:  np.log(h / (1 - h)),  # logit transform
-    x_label="log(H / (1 - H))"
+    hint_transform=lambda h: h,#np.log(h / (1 - h)),  # logit transform
+    x_label="h",# "log(H / (1 - H))"
 )
 plt.show()
 
