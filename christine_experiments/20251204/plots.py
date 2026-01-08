@@ -17,19 +17,19 @@ from plotting import (
 
 BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251113/results"
 EVAL_NAME = "gpqa"
-SOLVER = "solution_prefill_sequential"
-LABEL = "using solution prefill (sequential)"
+SOLVER = "solution_intext_masked"
+LABEL = "using solution intext mask"
 
 # Models to plot (filter after loading)
 MODELS = [
-#    "Qwen2.5-0.5B-Instruct",
-#     "Qwen2.5-1.5B-Instruct",
-#     "Qwen2.5-3B-Instruct",
-#     "Qwen2.5-7B-Instruct",
-#     "Qwen2.5-14B-Instruct",
-#     "Qwen2.5-32B-Instruct",
-    "Qwen3-0.6B",
-    "Qwen3-1.7B",
+   "Qwen2.5-0.5B-Instruct",
+    "Qwen2.5-1.5B-Instruct",
+    "Qwen2.5-3B-Instruct",
+    "Qwen2.5-7B-Instruct",
+    "Qwen2.5-14B-Instruct",
+    "Qwen2.5-32B-Instruct",
+    # "Qwen3-0.6B",
+    # "Qwen3-1.7B",
     # "Qwen3-4B",
     # "Qwen3-8B",
     # "Qwen3-14B",
@@ -75,7 +75,7 @@ fig, ax = plot_error_vs_hint_transformed(
     fit_scaling=False,
     lower_asymptote_hint=1.0,  # H=1.0 -> +inf, use as lower asymptote
     upper_asymptote_hint=0.0,  # H=0.0 -> -inf, use as upper asymptote (per-model)
-    hint_transform=lambda h: np.log(h / (1 - h)),  # logit transform
+    hint_transform=lambda h:  np.log(h / (1 - h)),  # logit transform
     x_label="log(H / (1 - H))"
 )
 plt.show()
@@ -94,12 +94,12 @@ fig, ax = plot_accuracy_vs_size(
     df,
     title="GPQA, pre-filling CoT",
     fit_sigmoid_curves=False,
-    fit_joint=True,
-    fit_scaling=False,
-    include_cross=True,
-    fit_models=None,
+    # fit_joint=True,
+    # fit_scaling=False,
+    # include_cross=True,
+    # fit_models=None,
     exclude_hints=[],
-    hint_transform=lambda h: np.log(1 / (1 - h)),  # transform_hint=True equivalent
+    # hint_transform=lambda h: np.log(1 / (1 - h)),  # transform_hint=True equivalent
 )
 plt.show()
 

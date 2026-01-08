@@ -14,11 +14,15 @@ def get_external_evals() -> dict[str, Callable]:
     from inspect_evals.hellaswag import hellaswag
     from inspect_evals.piqa import piqa
     from inspect_evals.bbeh import bbeh
+    from inspect_evals.bbh import bbh
     from inspect_evals.niah import niah
 
     return {
         "mmlu_0_shot": mmlu_0_shot,
         "mmlu_5_shot": mmlu_5_shot,
+        # For models with thinking tokens (e.g., Qwen3), use cot=True to avoid max_tokens=5
+        "mmlu_0_shot_cot": partial(mmlu_0_shot, cot=True),
+        "mmlu_5_shot_cot": partial(mmlu_5_shot, cot=True),
         "ifeval": ifeval,
         "mbpp": mbpp,
         "commonsense_qa": commonsense_qa,
@@ -27,6 +31,7 @@ def get_external_evals() -> dict[str, Callable]:
         "hellaswag": hellaswag,
         "piqa": piqa,
         "bbeh": bbeh,
+        "bbh": bbh,
         "niah": partial(niah, min_context=4000, max_context=32000, n_contexts=50, n_positions=10),
     }
 
@@ -44,6 +49,7 @@ def get_internal_evals() -> dict[str, Callable]:
         "aime": aime,
         "hle": hle,
         "math": math_task,
+        "math_level_5": partial(math_task, levels=[5]),
     }
 
 

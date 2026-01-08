@@ -158,6 +158,7 @@ def clean_latex_and_markdown(text: str) -> str:
     Removes:
     - LaTeX delimiters: $...$, \\(...\\), \\[...\\]
     - Markdown bold: **...**
+    - \\boxed{} wrapper
     - Extra whitespace
 
     Args:
@@ -177,6 +178,22 @@ def clean_latex_and_markdown(text: str) -> str:
 
     # Remove $ delimiters
     text = re.sub(r'\$', '', text)
+
+    # Remove \boxed{} wrapper (handles nested braces properly)
+    text = text.strip()
+    if text.startswith('\\boxed{') and text.endswith('}'):
+        # Find matching closing brace
+        depth = 0
+        for i, c in enumerate(text):
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    # If this closing brace is at the end, extract contents
+                    if i == len(text) - 1:
+                        text = text[7:-1]  # Remove \boxed{ and }
+                    break
 
     # Strip leading/trailing whitespace
     text = text.strip()
