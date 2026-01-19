@@ -240,6 +240,7 @@ def generate(
             temperature=gen_defaults.get("temperature"),
             top_p=gen_defaults.get("top_p"),
             top_k=gen_defaults.get("top_k"),
+            presence_penalty=gen_defaults.get("presence_penalty"),
         )
 
         # Generate

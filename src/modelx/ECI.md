@@ -209,6 +209,42 @@ def eci_capability(model: str) -> float:
 3. Newer/harder benchmarks may have overestimated difficulty (sparse data at high capability)
 4. Does not account for evaluation setup differences (prompts, scaffolds, etc.)
 
+## Our Implementation Notes (eci.py)
+
+### Anchoring Approach
+
+Epoch supports two anchoring modes:
+1. **Benchmark anchoring**: Fix one benchmark's D=0, α=1 (raw scale), then shift after fitting
+2. **Model anchoring**: Fix two models' capabilities directly (e.g., Claude 3.5 Sonnet = 130, GPT-5 = 150)
+
+We use **model anchoring** since it directly produces ECI values on Epoch's published scale.
+
+### Key Implementation Details
+
+From Epoch's `fit_statistical_model()`:
+- Random initialization: `randn() * 0.1` for C and D
+- Bounds: C, D in [-10, 10], α in [0.1, 10] (for raw scale fitting)
+- Regularization: Single penalty term `sqrt(reg_strength * (sum(C²) + sum(D²) + sum(α²)) / n_params)`
+
+### Critical Fix: Regularization with Model Anchoring
+
+**Problem**: When using model anchoring with C values at ECI scale (~130-150), regularizing C² toward 0 causes severe underfitting. The regularization penalty (C² ~ 17000) dominates the loss.
+
+**Solution**: Set `reg_strength=0` when using model anchoring on ECI scale. The anchors provide sufficient constraint to avoid overfitting.
+
+**Results with fix**:
+- RMSE: 0.075 (vs 0.13 with regularization)
+- Model ECI values match Epoch's within ±0.5 points
+- Winogrande predictions improved from errors of -0.3 to -0.4 down to -0.06 to -0.08
+
+### Data Sources
+
+1. **Epoch benchmark scores**: `benchmark_data/*.csv` (37 benchmarks, 282 models with ECI)
+2. **User scores (auto)**: `src/modelx/model_scores.csv` - from baseline eval runs
+3. **User scores (manual)**: `src/modelx/model_scores_manual.csv` - from system cards
+
+Filtering: Only include Epoch's ECI models + user models to maintain scale consistency.
+
 ## References
 
 - Paper: https://arxiv.org/abs/2512.00193

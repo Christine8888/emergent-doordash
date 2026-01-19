@@ -22,7 +22,7 @@ class SubmitConfig:
     time_hours: int = 48
 
     # vLLM config
-    max_model_len: int = 16384
+    max_model_len: int = 32768
     max_connections: int = 64
     gpu_memory_utilization: float = 0.85
 

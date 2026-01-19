@@ -1,0 +1,24 @@
+ECI Fitting Summary (Model Anchoring)
+==================================================
+
+Data: 1467 scores, 279 models, 36 benchmarks
+Anchoring: Model anchoring with reg_strength=0
+  Anchor 1: claude-3-5-sonnet-20240620 = 130.0
+  Anchor 2: gpt-5-2025-08-07_medium = 150.0
+RMSE: 0.0754
+
+Note: reg_strength=0 is required for model anchoring on ECI scale.
+Regularizing C^2+D^2 when C~130 would push values toward 0.
+
+User models ECI:
+  Llama-3.1-70B-Instruct         125.4
+  Llama-3.1-8B-Instruct          117.5
+  Qwen2.5-0.5B-Instruct          96.5
+  Qwen2.5-1.5B-Instruct          108.5
+  Qwen2.5-14B-Instruct           126.3
+  Qwen2.5-32B-Instruct           132.6
+  Qwen2.5-3B-Instruct            114.9
+  Qwen2.5-7B-Instruct            121.2
+  gemma-3-12b-it                 118.2
+  gemma-3-27b-it                 131.3
+  gemma-3-4b-it                  98.0

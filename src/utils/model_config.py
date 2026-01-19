@@ -18,9 +18,10 @@ MODEL_PREFILL_TOKENS = {
 
 # Generation config defaults per model family
 # Qwen3 recommended: temperature=0.6, top_p=0.95, top_k=20 for thinking mode
-# See: https://huggingface.co/Qwen/Qwen3-32B/blob/main/generation_config.json
+# presence_penalty helps prevent endless repetitions in thinking mode
+# See: https://huggingface.co/Qwen/Qwen3-32B, https://qwen.readthedocs.io/en/latest/deployment/vllm.html
 MODEL_GENERATION_DEFAULTS: dict[str, dict[str, Any]] = {
-    "Qwen3": {"temperature": 0.6, "top_p": 0.95, "top_k": 20},
+    "Qwen3": {"temperature": 0.6, "top_p": 0.95, "top_k": 20, "presence_penalty": 1.0},
 }
 
 # Default for models without specific config (standard sampling)

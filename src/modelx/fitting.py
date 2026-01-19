@@ -66,7 +66,11 @@ def fit_sigmoid(
             U = upper if upper is not None else 1.0
             def model(x_t, m, b):
                 return lower + (U - lower) * sigmoid(m * x_t + b)
-            params, _ = curve_fit(model, x_transformed, y, p0=[1, 0], maxfev=10000)
+            # Initial guess: center sigmoid on data
+            x_mean = np.mean(x_transformed)
+            m0 = 1.0 / max(np.std(x_transformed), 1e-6)
+            b0 = -m0 * x_mean
+            params, _ = curve_fit(model, x_transformed, y, p0=[m0, b0], maxfev=10000)
             m, b = params
             fit_type = "asymptote"
             fit_params = (lower, U, m, b)
@@ -93,7 +97,11 @@ def fit_sigmoid(
         # y = σ(m*x + b)
         def model(x_t, m, b):
             return sigmoid(m * x_t + b)
-        params, _ = curve_fit(model, x_transformed, y, p0=[1, 0], maxfev=10000)
+        # Initial guess: center sigmoid on data (m*x_mean + b = 0 at midpoint)
+        x_mean = np.mean(x_transformed)
+        m0 = 1.0 / max(np.std(x_transformed), 1e-6)  # Scale by data spread
+        b0 = -m0 * x_mean
+        params, _ = curve_fit(model, x_transformed, y, p0=[m0, b0], maxfev=10000)
         m, b = params
         fit_type = "basic"
         fit_params = (m, b)
@@ -118,20 +126,25 @@ def fit_joint_sigmoid(
     hint_transform: Callable[[float], float] | None = None,
     exclude_hints: set[float] | None = None,
     fit_models: set[str] | None = None,
+    use_log_x: bool = True,
+    x_values: dict[str, float] | Callable[[str], float | None] | None = None,
 ) -> dict:
     """Fit joint sigmoid model: σ(α*C + β*H + γ*C*H + δ) or σ(α*C + β*H + δ)
 
-    where C = log(model_size), H = hint (or transformed hint).
+    where C = log(x) or x (depending on use_log_x), H = hint (or transformed hint).
 
     Args:
-        df: DataFrame with model, model_size, accuracy, hint columns
-        x_col: Column for model size
+        df: DataFrame with model, accuracy, hint columns (and optionally x_col)
+        x_col: Column for x values (used if x_values is None)
         y_col: Column for y values (accuracy)
         hint_col: Column for hint values
         include_cross: If True, include γ*C*H term
         hint_transform: Function to transform hint values
         exclude_hints: Set of hint values to exclude from fitting
         fit_models: Set of model names to include (None = all)
+        use_log_x: If True, use log(x) for fitting; if False, use x directly
+        x_values: Optional dict {model: x_value} or function(model) -> x_value
+                  If provided, uses this instead of x_col from dataframe
 
     Returns:
         Dict with keys:
@@ -139,11 +152,21 @@ def fit_joint_sigmoid(
         - 'rms': RMS error
         - 'include_cross': whether cross term was included
         - 'predict': function(x, hint) -> y
+        - 'use_log_x': whether log(x) was used
     """
     if hint_transform is None:
         hint_transform = lambda h: h
     if exclude_hints is None:
         exclude_hints = set()
+
+    # Helper to get x value for a model
+    def get_x(row):
+        if x_values is None:
+            return row[x_col]
+        elif callable(x_values):
+            return x_values(row["model"])
+        else:
+            return x_values.get(row["model"])
 
     C_all, H_all, y_all = [], [], []
 
@@ -155,7 +178,12 @@ def fit_joint_sigmoid(
         if pd.isna(row[y_col]):
             continue
 
-        C_all.append(np.log(row[x_col]))
+        x_val = get_x(row)
+        if x_val is None:
+            continue
+
+        c_val = np.log(x_val) if use_log_x else x_val
+        C_all.append(c_val)
         H_all.append(hint_transform(row[hint_col]))
         y_all.append(row[y_col])
 
@@ -173,7 +201,7 @@ def fit_joint_sigmoid(
         params, _ = curve_fit(model, CH, y_arr, p0=[1, 1, 0, 0], maxfev=10000)
         y_pred = model(CH, *params)
         def predict(x, hint):
-            C = np.log(x)
+            C = np.log(x) if use_log_x else x
             H = hint_transform(hint)
             return 1 / (1 + np.exp(-(params[0] * C + params[1] * H + params[2] * C * H + params[3])))
     else:
@@ -183,7 +211,7 @@ def fit_joint_sigmoid(
         params, _ = curve_fit(model, CH, y_arr, p0=[1, 1, 0], maxfev=10000)
         y_pred = model(CH, *params)
         def predict(x, hint):
-            C = np.log(x)
+            C = np.log(x) if use_log_x else x
             H = hint_transform(hint)
             return 1 / (1 + np.exp(-(params[0] * C + params[1] * H + params[2])))
 
@@ -194,6 +222,7 @@ def fit_joint_sigmoid(
         "rms": rms,
         "include_cross": include_cross,
         "predict": predict,
+        "use_log_x": use_log_x,
     }
 
 
