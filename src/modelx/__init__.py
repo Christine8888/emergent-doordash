@@ -1,6 +1,6 @@
 """Model X-axis mapping utilities."""
 
-from .size import size, clean_name
+from .size import size, clean_name, model_eci
 from .results import (
     load_results,
     load_baseline,
@@ -24,6 +24,7 @@ __all__ = [
     # Size utilities
     "size",
     "clean_name",
+    "model_eci",
     # Data loading
     "load_results",
     "load_baseline",

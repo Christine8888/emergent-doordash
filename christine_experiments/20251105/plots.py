@@ -7,6 +7,7 @@ from plotting import (
     load_all_results,
     plot_results_rescaled,
     plot_results_by_model_size,
+    plot_by_x_axis,
     load_pass_at_k_by_hint,
     plot_pass_at_k_by_hint,
     clean_model_name
@@ -90,18 +91,29 @@ fig, ax = plot_results_rescaled(
 plt.show()
 
 # %%
-# Plot 3: Accuracy vs Model Size
-fig, ax = plot_results_by_model_size(
+# Plot 3: Accuracy vs Model Size (using generalized plot_by_x_axis)
+fig, ax = plot_by_x_axis(
     results=results,
     models=MODELS,
     hints=HINT_FRACTIONS,
-    title="ARC, pre-filling CoT",
-    fit_sigmoid = False,
-    fit_joint = True,
-    fit_scaling = False,
-    include_cross = True,
-    fit_models=[],
-    exclude_hint=[],
+    x_axis="model_size",
+    title="GPQA, pre-filling CoT (by model size)",
+    fit_joint=True,
+    include_cross=True,
+    transform_hint=True,
+)
+plt.show()
+
+# %%
+# Plot 4: Accuracy vs ECI (Epoch Capabilities Index)
+fig, ax = plot_by_x_axis(
+    results=results,
+    models=MODELS,
+    hints=HINT_FRACTIONS,
+    x_axis="eci",
+    title="GPQA, pre-filling CoT (by ECI)",
+    fit_joint=True,
+    include_cross=True,
     transform_hint=True,
 )
 plt.show()

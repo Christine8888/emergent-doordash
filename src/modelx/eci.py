@@ -181,17 +181,31 @@ def sigmoid(x):
 
 def fit_eci(
     scores_df: pd.DataFrame,
-    anchor_benchmark: str | None = None,
-    reg_lambda: float = 0.1,
+    anchor_model1: str = "claude-3-5-sonnet-20240620",
+    anchor_model1_capability: float = 130.0,
+    anchor_model2: str = "gpt-5-2025-08-07_medium",
+    anchor_model2_capability: float = 150.0,
+    reg_strength: float = 0.0,  # 0 works best for model anchoring on ECI scale
+    random_seed: int = 42,
+    exclude_benchmarks: list[str] | None = None,
+    min_benchmarks: int = 5,
 ) -> dict:
-    """Fit ECI model jointly (Epoch's approach).
+    """Fit ECI model jointly (Epoch's approach with model anchoring).
 
     Fits: score = σ(αb × (Cm - Db))
 
+    Uses model anchoring: fix two models' capabilities directly.
+
     Args:
         scores_df: DataFrame with columns [model, benchmark, score]
-        anchor_benchmark: Benchmark to anchor (D=0, α=1). If None, uses first.
-        reg_lambda: L2 regularization strength
+        anchor_model1: First anchor model name
+        anchor_model1_capability: Fixed capability for first anchor (e.g., 130)
+        anchor_model2: Second anchor model name
+        anchor_model2_capability: Fixed capability for second anchor (e.g., 150)
+        reg_strength: L2 regularization strength
+        random_seed: Random seed for initialization
+        exclude_benchmarks: List of benchmark names to exclude from fitting
+        min_benchmarks: Minimum number of benchmark scores required per model
 
     Returns:
         dict with:
@@ -203,91 +217,111 @@ def fit_eci(
     """
     df = scores_df.dropna(subset=["score"]).copy()
 
+    # Exclude specified benchmarks
+    if exclude_benchmarks:
+        df = df[~df["benchmark"].isin(exclude_benchmarks)]
+        logger.info(f"Excluded benchmarks: {exclude_benchmarks}")
+
+    # Filter models with too few benchmarks
+    if min_benchmarks > 1:
+        model_counts = df.groupby("model").size()
+        valid_models = model_counts[model_counts >= min_benchmarks].index
+        n_before = df["model"].nunique()
+        df = df[df["model"].isin(valid_models)]
+        n_after = df["model"].nunique()
+        if n_before > n_after:
+            logger.info(f"Filtered models with <{min_benchmarks} benchmarks: {n_before} -> {n_after}")
+
+    # Clip scores to valid range
+    df["score"] = df["score"].clip(0.001, 0.999)
+
     models = df["model"].unique().tolist()
     benchmarks = df["benchmark"].unique().tolist()
 
-    if anchor_benchmark is None:
-        anchor_benchmark = benchmarks[0]
-    if anchor_benchmark not in benchmarks:
-        raise ValueError(f"Anchor benchmark '{anchor_benchmark}' not in data")
-
-    anchor_idx = benchmarks.index(anchor_benchmark)
-
     n_models = len(models)
     n_benchmarks = len(benchmarks)
-    n_obs = len(df)
 
     model_idx = {m: i for i, m in enumerate(models)}
     bench_idx = {b: i for i, b in enumerate(benchmarks)}
 
-    # Pre-compute indices and scores as arrays for vectorization
+    # Validate anchor models exist
+    if anchor_model1 not in model_idx:
+        raise ValueError(f"Anchor model '{anchor_model1}' not in data")
+    if anchor_model2 not in model_idx:
+        raise ValueError(f"Anchor model '{anchor_model2}' not in data")
+
+    anchor1_idx = model_idx[anchor_model1]
+    anchor2_idx = model_idx[anchor_model2]
+    anchor_indices = tuple(sorted([anchor1_idx, anchor2_idx]))
+
+    # Pre-compute indices and scores as arrays
     m_indices = np.array([model_idx[m] for m in df["model"]])
     b_indices = np.array([bench_idx[b] for b in df["benchmark"]])
     scores_arr = df["score"].values
 
-    def unpack(params):
-        Cm = params[:n_models].copy()
-        Db = params[n_models:n_models + n_benchmarks].copy()
-        ab = params[n_models + n_benchmarks:].copy()
-        # Fix anchor
-        Db[anchor_idx] = 0.0
-        ab[anchor_idx] = 1.0
-        return Cm, Db, ab
+    def split_params(params):
+        """Unpack params: free C values, all D, all α."""
+        C_free = params[:n_models - 2]
+        D = params[n_models - 2:n_models - 2 + n_benchmarks]
+        alpha = params[n_models - 2 + n_benchmarks:]
+
+        # Reconstruct full C with fixed anchor values
+        C = np.zeros(n_models)
+        free_idx = 0
+        for i in range(n_models):
+            if i == anchor_indices[0]:
+                C[i] = anchor_model1_capability if anchor1_idx < anchor2_idx else anchor_model2_capability
+            elif i == anchor_indices[1]:
+                C[i] = anchor_model2_capability if anchor1_idx < anchor2_idx else anchor_model1_capability
+            else:
+                C[i] = C_free[free_idx]
+                free_idx += 1
+        return C, D, alpha
 
     def residuals(params):
-        Cm, Db, ab = unpack(params)
-
-        # Vectorized prediction
-        pred = sigmoid(ab[b_indices] * (Cm[m_indices] - Db[b_indices]))
+        C, D, alpha = split_params(params)
+        pred = sigmoid(alpha[b_indices] * (C[m_indices] - D[b_indices]))
         resid = pred - scores_arr
 
-        # L2 regularization (exclude anchor from Db, ab regularization)
-        reg_Cm = np.sqrt(reg_lambda) * Cm
-        reg_Db = np.sqrt(reg_lambda) * np.delete(Db, anchor_idx)
-        reg_ab = np.sqrt(reg_lambda) * (np.delete(ab, anchor_idx) - 1)
+        # L2 regularization (Epoch style: single penalty term)
+        if reg_strength > 0:
+            free_C_mask = np.ones(n_models, dtype=bool)
+            free_C_mask[list(anchor_indices)] = False
+            reg_term = reg_strength * (
+                np.sum(C[free_C_mask] ** 2) +
+                np.sum(D ** 2) +
+                np.sum(alpha ** 2)
+            ) / (n_models - 2 + n_benchmarks + n_benchmarks)
+            reg_penalty = np.sqrt(reg_term) if reg_term > 0 else 0
+            return np.append(resid, reg_penalty)
 
-        return np.concatenate([resid, reg_Cm, reg_Db, reg_ab])
+        return resid
 
-    # Initialize
+    # Initialize on ECI scale (centered around anchor capabilities)
+    rng = np.random.RandomState(random_seed)
+    center = (anchor_model1_capability + anchor_model2_capability) / 2  # ~140
     x0 = np.concatenate([
-        np.zeros(n_models),       # Cm
-        np.zeros(n_benchmarks),   # Db
-        np.ones(n_benchmarks),    # αb
+        center + rng.randn(n_models - 2) * 10,  # C_free around 140
+        center + rng.randn(n_benchmarks) * 10,   # D around 140
+        np.full(n_benchmarks, 0.1),              # α (small slopes, ~0.05-0.2)
     ])
 
-    result = least_squares(residuals, x0, method='trf')
-    Cm, Db, ab = unpack(result.x)
+    # Only bound alpha to be positive
+    lower = np.concatenate([
+        np.full(n_models - 2, -np.inf),
+        np.full(n_benchmarks, -np.inf),
+        np.full(n_benchmarks, 0.001),  # α must be positive
+    ])
+    upper = np.concatenate([
+        np.full(n_models - 2, np.inf),
+        np.full(n_benchmarks, np.inf),
+        np.full(n_benchmarks, np.inf),
+    ])
 
-    # Linear rescale so Claude 3.5 Sonnet (June) = 130, GPT-5 = 150
-    # Transform: Cm' = a*Cm + b, Db' = a*Db + b, ab' = ab/a
-    # This preserves predictions: σ(ab'*(Cm'-Db')) = σ((ab/a)*a*(Cm-Db)) = σ(ab*(Cm-Db))
-    ref_models = {
-        "claude-3-5-sonnet-20240620": 130.0,
-        "gpt-5-2025-08-07_medium": 150.0,
-    }
-    ref_vals = []
-    ref_targets = []
-    for m, target in ref_models.items():
-        if m in model_idx:
-            ref_vals.append(Cm[model_idx[m]])
-            ref_targets.append(target)
+    result = least_squares(residuals, x0, bounds=(lower, upper), method='trf')
+    Cm, Db, ab = split_params(result.x)
 
-    if len(ref_vals) >= 2:
-        # Solve for a, b: target = a * val + b
-        A = np.array([[ref_vals[0], 1], [ref_vals[1], 1]])
-        B = np.array(ref_targets)
-        a, b = np.linalg.solve(A, B)
-    elif len(ref_vals) == 1:
-        # Just shift
-        a, b = 1.0, ref_targets[0] - ref_vals[0]
-    else:
-        a, b = 1.0, 100.0  # fallback
-
-    Cm = a * Cm + b
-    Db = a * Db + b
-    ab = ab / a  # Adjust slopes to preserve predictions
-
-    # Vectorized predictions
+    # Compute predictions
     pred = sigmoid(ab[b_indices] * (Cm[m_indices] - Db[b_indices]))
     pred_df = pd.DataFrame({
         "model": df["model"].values,
@@ -304,7 +338,7 @@ def fit_eci(
         "ab": dict(zip(benchmarks, ab)),
         "predictions": pred_df,
         "rmse": rmse,
-        "anchor": anchor_benchmark,
+        "anchors": {anchor_model1: anchor_model1_capability, anchor_model2: anchor_model2_capability},
     }
 
 

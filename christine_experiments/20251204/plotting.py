@@ -11,13 +11,20 @@ Expected DataFrame columns:
 - stderr: Standard error (optional)
 """
 
+import sys
+from pathlib import Path
+# Add project root to path for src.modelx imports
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from typing import Callable, Tuple
 import seaborn as sns
 
-from src.modelx import size, clean_name, fit_sigmoid, fit_joint_sigmoid, format_equation
+from src.modelx import size, clean_name, model_eci, fit_sigmoid, fit_joint_sigmoid, format_equation
 
 # Set style
 sns.set_style("whitegrid")
@@ -408,6 +415,224 @@ def plot_accuracy_vs_size(
     ax.set_title(title, fontsize=15, fontweight="bold", pad=20)
     ax.grid(True, alpha=0.3)
     ax.set_xscale("log")
+
+    plt.tight_layout()
+    return fig, ax
+
+
+def plot_by_x_axis(
+    df: pd.DataFrame,
+    x_axis: str = "model_size",
+    title: str = "Accuracy vs X",
+    figsize: Tuple[int, int] = (12, 7),
+    fit_sigmoid_curves: bool = False,
+    fit_scaling: bool = False,
+    fit_models: list[str] | int | None = None,
+    fit_joint: bool = False,
+    include_cross: bool = True,
+    exclude_hints: list[float] | float | None = None,
+    hint_transform: Callable[[float], float] | None = None,
+    xscale: str = "log",
+):
+    """Plot accuracy vs configurable x-axis (model size or ECI).
+
+    Args:
+        df: DataFrame with columns: model, hint, accuracy, stderr (optional)
+        x_axis: What to plot on x-axis:
+            - "model_size": Model size in billions (from size())
+            - "eci": Epoch Capabilities Index (from model_eci())
+        title: Plot title
+        figsize: Figure size
+        fit_sigmoid_curves: If True, fit per-hint sigmoids
+        fit_scaling: If True, fit y = h·σ(...), else y = σ(...)
+        fit_models: Models to use for fitting:
+            - None: use all models
+            - int: use first N models (sorted by x value)
+            - list[str]: use specific model names
+        fit_joint: If True, fit joint model: σ(α*C + β*H + γ*C*H + δ)
+        include_cross: If True, include cross term γ*C*H in joint fit
+        exclude_hints: Hint(s) to exclude from joint fit
+        hint_transform: Transform for hint in joint fit
+        xscale: Scale for x-axis ('log' or 'linear')
+
+    Returns:
+        Figure and Axes objects
+    """
+    from matplotlib.lines import Line2D
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    if hint_transform is None:
+        hint_transform = lambda h: h
+
+    # Normalize exclude_hints
+    if exclude_hints is None:
+        exclude_set = set()
+    elif isinstance(exclude_hints, (list, tuple)):
+        exclude_set = set(exclude_hints)
+    else:
+        exclude_set = {exclude_hints}
+
+    # Get x-axis function and label
+    if x_axis == "model_size":
+        get_x_value = size
+        x_label = "model size (B)"
+    elif x_axis == "eci":
+        get_x_value = model_eci
+        x_label = "ECI (Epoch Capabilities Index)"
+    else:
+        raise ValueError(f"Unknown x_axis: {x_axis}. Use 'model_size' or 'eci'")
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    hints = sorted(df["hint"].unique())
+    models = df["model"].unique()
+
+    # Build (model, x_value) pairs, filtering out None
+    model_x_values = []
+    for m in models:
+        x_val = get_x_value(m)
+        if x_val is not None:
+            model_x_values.append((m, x_val))
+        else:
+            logger.warning(f"Could not get {x_axis} for model: {m}")
+
+    model_x_values = sorted(model_x_values, key=lambda x: x[1])
+
+    if not model_x_values:
+        raise ValueError(f"No valid {x_axis} values found for any model")
+
+    # Determine fit models
+    if fit_models is None:
+        fit_model_names = set(m for m, _ in model_x_values)
+    elif isinstance(fit_models, int):
+        fit_model_names = set([m for m, _ in model_x_values[:fit_models]])
+    else:
+        fit_model_names = set(fit_models)
+
+    cmap = plt.cm.viridis
+    colors = [cmap(i / max(len(hints) - 1, 1)) for i in range(len(hints))]
+
+    # Fit joint model if requested (using modelx.fit_joint_sigmoid)
+    joint_fit = None
+    if fit_joint:
+        try:
+            joint_fit = fit_joint_sigmoid(
+                df,
+                include_cross=include_cross,
+                hint_transform=hint_transform,
+                exclude_hints=exclude_set,
+                fit_models=fit_model_names,
+                use_log_x=(xscale == "log"),
+                x_values=get_x_value,  # Pass the getter function
+            )
+            params = joint_fit["params"]
+            if include_cross:
+                print(f"Joint fit: α={params[0]:.3f}, β={params[1]:.3f}, γ={params[2]:.3f}, δ={params[3]:.3f}")
+            else:
+                print(f"Joint fit: α={params[0]:.3f}, β={params[1]:.3f}, δ={params[2]:.3f}")
+            print(f"Average RMS error = {joint_fit['rms']:.4f}")
+        except Exception as e:
+            print(f"Warning: Failed to fit joint model: {e}")
+
+    hint_fits = {}
+
+    for hint_idx, hint in enumerate(hints):
+        x_vals, y_vals, y_errs = [], [], []
+        x_vals_fit, y_vals_fit = [], []
+
+        for model, x_val in model_x_values:
+            row = df[(df["model"] == model) & (df["hint"] == hint)]
+            if len(row) > 0:
+                acc = row["accuracy"].iloc[0]
+                if pd.notna(acc):
+                    x_vals.append(x_val)
+                    y_vals.append(acc)
+                    y_errs.append(row["stderr"].iloc[0] if "stderr" in row.columns and pd.notna(row["stderr"].iloc[0]) else 0)
+                    if model in fit_model_names:
+                        x_vals_fit.append(x_val)
+                        y_vals_fit.append(acc)
+
+        if not x_vals:
+            continue
+
+        color = colors[hint_idx]
+        ax.errorbar(
+            x_vals, y_vals, yerr=y_errs,
+            color=color, linestyle="none",
+            marker="o", markersize=8, capsize=4,
+            linewidth=2, alpha=0.8, label=f"{hint}",
+        )
+
+        # Fit per-hint sigmoid
+        min_points = 3 if fit_scaling else 2
+        if fit_sigmoid_curves and len(x_vals_fit) >= min_points:
+            try:
+                fit_result = fit_sigmoid(
+                    np.array(x_vals_fit), np.array(y_vals_fit),
+                    use_log=(xscale == "log"), scale=fit_scaling,
+                )
+                hint_fits[hint] = fit_result
+
+                if xscale == "log":
+                    x_smooth = np.logspace(np.log10(min(x_vals)), np.log10(max(x_vals)), 100)
+                else:
+                    x_range = max(x_vals) - min(x_vals)
+                    x_smooth = np.linspace(min(x_vals) - 0.05 * x_range, max(x_vals) + 0.05 * x_range, 100)
+                y_smooth = fit_result["predict"](x_smooth)
+                ax.plot(x_smooth, y_smooth, color=color, linestyle="-", linewidth=2, alpha=0.6)
+            except Exception as e:
+                print(f"Warning: Failed to fit sigmoid for hint={hint}: {e}")
+
+        # Plot joint model prediction
+        if joint_fit is not None:
+            try:
+                if xscale == "log":
+                    x_smooth = np.logspace(np.log10(min(x_vals)), np.log10(max(x_vals)), 100)
+                else:
+                    x_range = max(x_vals) - min(x_vals)
+                    x_smooth = np.linspace(min(x_vals) - 0.05 * x_range, max(x_vals) + 0.05 * x_range, 100)
+                y_predicted = joint_fit["predict"](x_smooth, hint)
+                ax.plot(x_smooth, y_predicted, color=color, linestyle="--", linewidth=2, alpha=0.6)
+            except Exception as e:
+                print(f"Warning: Failed to plot joint prediction for hint={hint}: {e}")
+
+    # Legend (commented out)
+    # use_transform = hint_transform(0.5) != 0.5
+    # hint_handles = []
+    # hint_labels = []
+    #
+    # for hint_idx, hint in enumerate(hints):
+    #     color = colors[hint_idx]
+    #     base_label = f"{hint} (H'={hint_transform(hint):.2f})" if use_transform else f"{hint}"
+    #
+    #     if hint in hint_fits:
+    #         equation = format_equation(hint_fits[hint])
+    #         label_text = f"{base_label}: {equation}"
+    #     else:
+    #         label_text = base_label
+    #
+    #     handle = Line2D([0], [0], color=color, linewidth=2, marker="o", markersize=8)
+    #     hint_handles.append(handle)
+    #     hint_labels.append(label_text)
+    #
+    # if joint_fit is not None:
+    #     H_label = "H'" if use_transform else "H"
+    #     params = joint_fit["params"]
+    #     if joint_fit["include_cross"]:
+    #         joint_eq = f"σ({params[0]:.2f}C {params[1]:+.2f}{H_label} {params[2]:+.2f}C{H_label} {params[3]:+.2f})"
+    #     else:
+    #         joint_eq = f"σ({params[0]:.2f}C {params[1]:+.2f}{H_label} {params[2]:+.2f})"
+    #     hint_handles.append(Line2D([0], [0], color="gray", linestyle="--", linewidth=2))
+    #     hint_labels.append(joint_eq)
+    #
+    # ax.legend(hint_handles, hint_labels, title="hint fraction", framealpha=0.9, loc="upper left")
+    ax.set_xlabel(x_label, fontsize=13, fontweight="bold")
+    ax.set_ylabel("eval accuracy", fontsize=13, fontweight="bold")
+    ax.set_title(title, fontsize=15, fontweight="bold", pad=20)
+    ax.grid(True, alpha=0.3)
+    ax.set_xscale(xscale)
 
     plt.tight_layout()
     return fig, ax
