@@ -1,0 +1,10 @@
+{
+  "model": "vllm/Qwen3-0.6B",
+  "total_samples": 400,
+  "completed_samples": 400,
+  "arc_scorer": {
+    "accuracy": 0.0125,
+    "stderr": 0.005562078459710898,
+    "scorer": "arc_scorer"
+  }
+}

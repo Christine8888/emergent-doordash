@@ -5,8 +5,11 @@ from environments.gpqa.gpqa import gpqa_diamond, DEFAULT_INSTRUCTIONS
 from evals.prefill import PrefillConfig
 from evals.solvers import instructions, intext, prefill, generate
 from utils.submitit_utils import launch_experiment
-from utils.model_config import QWEN3_MODELS, QWEN25_MODELS
+from utils.model_config import QWEN3_MODELS, QWEN25_MODELS, GEMMA_MODELS, LLAMA_MODELS
 from utils.setup import setup_logging
+import os
+with open("/sphinx/u/cye/emergent-doordash/hf.tok", 'r') as f:
+    os.environ['HF_TOKEN']=f.read().strip()
 
 logger = setup_logging()
 
@@ -47,8 +50,8 @@ EXPERIMENTS = {
     "cot_intext_masked": make_experiment("cot", "intext", "masked"),
     "solution_intext_sequential": make_experiment("solution", "intext", "sequential"),
     "solution_intext_masked": make_experiment("solution", "intext", "masked"),
-    "cot_prefill_sequential": make_experiment("cot", "prefill", "sequential"),
-    "solution_prefill_sequential": make_experiment("solution", "prefill", "sequential"),
+    #"cot_prefill_sequential": make_experiment("cot", "prefill", "sequential"),
+    #"solution_prefill_sequential": make_experiment("solution", "prefill", "sequential"),
 }
 
 HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
@@ -60,7 +63,7 @@ def run_experiment(exp_name: str, epochs: int, results_dir: str):
     logger.info(f"Starting {exp_name}...")
     launch_experiment(
         experiment_class=EXPERIMENTS[exp_name],
-        models=QWEN3_MODELS + QWEN25_MODELS,
+        models=QWEN3_MODELS + QWEN25_MODELS + GEMMA_MODELS + LLAMA_MODELS,
         hint_fractions=HINT_FRACTIONS,
         epochs=epochs,
         results_dir=results_dir,
