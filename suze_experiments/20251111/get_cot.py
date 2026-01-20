@@ -104,9 +104,10 @@ def main():
     # models = ["o3-2025-04-16", "gpt-5-2025-08-07", "claude-opus-4-1-20250805", "claude-sonnet-4-5-20250929", "Qwen/Qwen-7B-Chat", "Qwen/Qwen2.5-7B-Instruct", "deepseek-ai/DeepSeek-V3.1", "moonshotai/Kimi-K2-Thinking"]
     # models = ["gpt-5-nano-2025-08-07"] # for testing; low cost
     # models = ["o3-2025-04-16", "gpt-5-2025-08-07", "claude-opus-4-1-20250805", "claude-sonnet-4-5-20250929"]
-    models = ["claude-sonnet-4-5-20250929"]
+    models = ["gpt-5-2025-08-07"]
 
-    cot_samples = random.sample(cot_dataset.data, NUM_SAMPLES)
+    # cot_samples = random.sample(cot_dataset.data, NUM_SAMPLES)
+    cot_samples = cot_dataset.data # use all data
     
     # Loop over models first, then batch all samples for each model
     for model_name in models:
@@ -329,7 +330,8 @@ def main():
     # (see aime_cot.json; not saved to github!)
 
 
-
+# TODO next: run with gpt5 hints over all problems. First add cost calculator
+# TODO: once we have all the hints, eval
 
     
 
