@@ -1,0 +1,12 @@
+model,benchmark,score,source,notes
+Qwen2.5-0.5B-Instruct,GSM8K,0.496,system card,
+Qwen2.5-1.5B-Instruct,GSM8K,0.732,system card,
+Qwen2.5-3B-Instruct,GSM8K,0.867,system card,
+Qwen2.5-7B-Instruct,GSM8K,0.916,system card,
+Qwen2.5-14B-Instruct,GSM8K,0.948,system card,
+Qwen2.5-32B-Instruct,GSM8K,0.959,system card,
+Llama-3.1-70B-Instruct,GSM8K,0.951,system card,
+Llama-3.1-8B-Instruct,GSM8K,0.845,system card,
+_MISSING,GSM8K,,,Gemma 3 IT - numbers not found
+_MISSING,GSM8K,,,Qwen3 - numbers not found
+_MISSING,MMLU,,,Qwen3 - 0.0 scores due to thinking tokens consuming max_tokens=5

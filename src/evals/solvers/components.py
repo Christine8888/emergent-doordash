@@ -8,12 +8,15 @@ Or:
 """
 
 import logging
+import os
+import random
 from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, GenerateConfig
 from inspect_ai.solver import Generate, Solver, solver
 from inspect_ai.solver import TaskState
 
 from evals.prefill import PrefillConfig
 from evals.fewshot import FewShotConfig, format_fewshot_examples
+from utils.model_config import get_start_prefill, get_generation_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -118,19 +121,25 @@ def prefill(config: PrefillConfig) -> Solver:
     Raises:
         KeyError: If sample_id is not in prefill data (when fraction > 0.0)
     """
-    # Load prefill data (sample_id -> prefill_text)
     prefill_data = config.get_data()
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        # Only validate sample existence when actually using prefill
         if config.fraction > 0.0:
             if state.sample_id not in prefill_data:
                 raise KeyError(
                     f"Sample '{state.sample_id}' not found in prefill data. "
                     f"Available samples should be filtered using config.get_available_ids()"
                 )
-            # Add prefill as assistant message
-            prefill_text = prefill_data[state.sample_id]
+            samples = prefill_data[state.sample_id]
+            rng = random.Random(f"{state.epoch}_{state.sample_id}")
+            prefill_text = rng.choice(list(samples.values()))
+
+            # Prepend model-specific start token if applicable (e.g., "<think>" for Qwen3)
+            model_name = os.environ.get("INSPECT_EVAL_MODEL", "")
+            start_token = get_start_prefill(model_name)
+            if start_token:
+                prefill_text = start_token + prefill_text
+
             state.messages.append(ChatMessageAssistant(content=prefill_text))
 
         return state
@@ -156,19 +165,18 @@ def intext(config: PrefillConfig, prefix: str = "Here is part of a hint that may
     Raises:
         KeyError: If sample_id is not in prefill data (when fraction > 0.0)
     """
-    # Load hint data (sample_id -> hint_text)
     hint_data = config.get_data()
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        # Only validate sample existence when actually using hints
         if config.fraction > 0.0:
             if state.sample_id not in hint_data:
                 raise KeyError(
                     f"Sample '{state.sample_id}' not found in hint data. "
                     f"Available samples should be filtered using config.get_available_ids()"
                 )
-            # Append hint to user prompt
-            hint_text = hint_data[state.sample_id]
+            samples = hint_data[state.sample_id]
+            rng = random.Random(f"{state.epoch}_{state.sample_id}")
+            hint_text = rng.choice(list(samples.values()))
             state.user_prompt.text = state.user_prompt.text + "\n\n" + prefix + hint_text
 
         return state
@@ -198,14 +206,17 @@ def generate(
     max_tokens: int | None = None,
     timeout: int | None = None,
 ) -> Solver:
-    """Generate with automatic continuation detection.
+    """Generate with automatic continuation detection and model-specific defaults.
 
     If the last message is an assistant message, enables continue_final_message
     for vLLM to continue from that message.
 
+    Applies model-specific generation defaults (temperature, top_p, top_k) based
+    on the model family. See utils.model_config.MODEL_GENERATION_DEFAULTS.
+
     Args:
         max_tokens: Maximum tokens to generate
-        timeout: Timeout in seconds
+        timeout: Timeout in seconds (total across all retries)
 
     Returns:
         Solver that generates with appropriate configuration
@@ -217,11 +228,19 @@ def generate(
             isinstance(state.messages[-1], ChatMessageAssistant)
         )
 
-        # Configure generation
+        # Get model-specific generation defaults
+        model_name = os.environ.get("INSPECT_EVAL_MODEL", "")
+        gen_defaults = get_generation_defaults(model_name)
+
+        # Configure generation with model-specific defaults
         gen_config = GenerateConfig(
             max_tokens=max_tokens,
             continue_final_message=continue_message,
-            timeout=timeout
+            timeout=timeout,
+            temperature=gen_defaults.get("temperature"),
+            top_p=gen_defaults.get("top_p"),
+            top_k=gen_defaults.get("top_k"),
+            presence_penalty=gen_defaults.get("presence_penalty"),
         )
 
         # Generate

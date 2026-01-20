@@ -1,14 +1,13 @@
 # %%
 import matplotlib.pyplot as plt
-import os
 import sys
 # append parent directory to sys.path
 sys.path.append("/Users/christineye/emergent-doordash/christine_experiments/20251105")
 from plotting import (
     load_all_results,
-    plot_results,
     plot_results_rescaled,
     plot_results_by_model_size,
+    plot_by_x_axis,
     load_pass_at_k_by_hint,
     plot_pass_at_k_by_hint,
     clean_model_name
@@ -20,7 +19,7 @@ from plotting import (
 # Choose folder structure:
 # Option 1: New structure (with solver subfolder)
 BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251105/results/gpqa"
-SOLVER = "solution_intext_mask" #"solution"  # Set to None for old structure
+SOLVER = "solution_intext_mask"  # Set to None for old structure
 FILENAME_TEMPLATE = "gpqa_" + SOLVER + "_0shot_{hint}.json"
 
 CONDITION = "0shot"
@@ -30,7 +29,7 @@ STDERR_FIELD = "stderr"
 
 # Models to plot
 MODELS = [
-    "Qwen2.5-0.5B-Instruct",
+   "Qwen2.5-0.5B-Instruct",
     "Qwen2.5-1.5B-Instruct",
     "Qwen2.5-3B-Instruct",
     "Qwen2.5-7B-Instruct",
@@ -38,8 +37,7 @@ MODELS = [
     "Qwen2.5-32B-Instruct",
 ]
 
-HINT_FRACTIONS = [0.0, 0.1, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]#, 1.0]
-
+HINT_FRACTIONS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 # =========================================
 
 # %%
@@ -59,39 +57,63 @@ results = load_all_results(
 print("Done!")
 
 # %%
-# Plot 1: Accuracy vs Hint Fraction
-fig, ax = plot_results(
-    results=results,
-    models=MODELS,
-    hints=HINT_FRACTIONS,
-    title="GPQA, using solution-based hints"
-)
-plt.show()
-
-# %%
-# Plot 2: Rescaled plot with sigmoid fitting
+# Plot 1: Accuracy vs Hint Fraction (with identity transform and exponential fit)
 fig, ax = plot_results_rescaled(
     results=results,
     models=MODELS,
     hints=HINT_FRACTIONS,
-    title="GPQA, providing edited solutions in-text, using masking strategy",
-    fit_scaling=False
+    title="GPQA, using prefill-based hints",
+    hint_transform=lambda h: h,  # identity transform
+    xlabel='fraction of reasoning chain as hint',
+    xscale='linear',
+    fit_scaling=True,
+    fit_type='exponential'  # options: 'sigmoid', 'exponential'
 )
 plt.show()
 
 # %%
-# Plot 3: Accuracy vs Model Size
-fig, ax = plot_results_by_model_size(
+# export data as CSV
+with open("gpqa_cot_prefill_data.csv", "w") as f:
+    f.write("model,hint_fraction,accuracy,stderr\n")
+    for model in results:
+        for hint_fraction in results[model]:
+            f.write(f"{model},{hint_fraction},{results[model][hint_fraction][0]},{results[model][hint_fraction][1]}\n")
+
+# %%
+# Plot 2: Rescaled plot with 1/(1-H) transform and sigmoid fitting
+fig, ax = plot_results_rescaled(
     results=results,
     models=MODELS,
     hints=HINT_FRACTIONS,
-    title="GPQA, masking solutions",
-    fit_sigmoid = False,
-    fit_joint = True,
-    fit_scaling = False,
-    include_cross = True,
-    fit_models=["Qwen2.5-0.5B-Instruct", "Qwen2.5-1.5B-Instruct"],
-    exclude_hint=[0.0],
+    title="GPQA, providing edited solutions in-text, using masking strategy"
+    # default hint_transform is 1/(1-h)
+)
+plt.show()
+
+# %%
+# Plot 3: Accuracy vs Model Size (using generalized plot_by_x_axis)
+fig, ax = plot_by_x_axis(
+    results=results,
+    models=MODELS,
+    hints=HINT_FRACTIONS,
+    x_axis="model_size",
+    title="GPQA, pre-filling CoT (by model size)",
+    fit_joint=True,
+    include_cross=True,
+    transform_hint=True,
+)
+plt.show()
+
+# %%
+# Plot 4: Accuracy vs ECI (Epoch Capabilities Index)
+fig, ax = plot_by_x_axis(
+    results=results,
+    models=MODELS,
+    hints=HINT_FRACTIONS,
+    x_axis="eci",
+    title="GPQA, pre-filling CoT (by ECI)",
+    fit_joint=True,
+    include_cross=True,
     transform_hint=True,
 )
 plt.show()

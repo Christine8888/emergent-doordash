@@ -13,11 +13,18 @@ def setup_env():
     dotenv.load_dotenv(_project_root / ".env")
 
 
+class FlushingStreamHandler(logging.StreamHandler):
+    def emit(self, record):
+        super().emit(record)
+        self.flush()
+
+
 def setup_logging(level=logging.INFO):
-    """Configure consistent logging across all scripts."""
-    logging.basicConfig(
-        level=level,
-        format='%(message)s',
-        force=True
-    )
+    """Configure consistent logging across all scripts with immediate flushing."""
+    root = logging.getLogger()
+    root.setLevel(level)
+    root.handlers.clear()
+    handler = FlushingStreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter('%(message)s'))
+    root.addHandler(handler)
     return logging.getLogger(__name__)

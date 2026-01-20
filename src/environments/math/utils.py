@@ -158,6 +158,7 @@ def clean_latex_and_markdown(text: str) -> str:
     Removes:
     - LaTeX delimiters: $...$, \\(...\\), \\[...\\]
     - Markdown bold: **...**
+    - \\boxed{} wrapper
     - Extra whitespace
 
     Args:
@@ -178,6 +179,22 @@ def clean_latex_and_markdown(text: str) -> str:
     # Remove $ delimiters
     text = re.sub(r'\$', '', text)
 
+    # Remove \boxed{} wrapper (handles nested braces properly)
+    text = text.strip()
+    if text.startswith('\\boxed{') and text.endswith('}'):
+        # Find matching closing brace
+        depth = 0
+        for i, c in enumerate(text):
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    # If this closing brace is at the end, extract contents
+                    if i == len(text) - 1:
+                        text = text[7:-1]  # Remove \boxed{ and }
+                    break
+
     # Strip leading/trailing whitespace
     text = text.strip()
 
@@ -195,7 +212,8 @@ def extract_answer(completion: str) -> str:
     # First try to find ANSWER: pattern
     # Match ANSWER: only when it appears standalone (at line start, after whitespace, or after newline)
     # This avoids matching "**Answer:**" which has ANSWER immediately after ':'
-    pattern = r'(?i)(?:^|\n|\s)ANSWER\s*:\s*([^\n]+)'
+    # Use [ \t]* instead of \s* after colon to avoid matching across newlines
+    pattern = r'(?i)(?:^|\n|\s)ANSWER[ \t]*:[ \t]*([^\n]+)'
     matches = list(re.finditer(pattern, completion, re.MULTILINE))
     if matches:
         raw_answer = matches[-1].group(1)
@@ -376,6 +394,12 @@ async def normalize_final_answer(final_answer: str) -> str:
 
     final_answer = re.sub(r"ANSWER: ", "", final_answer)
     final_answer = re.sub(r"Answer: ", "", final_answer)
+
+    try:
+        final_answer = str(int(final_answer))
+    except ValueError:
+        pass
+
     return final_answer
 
 

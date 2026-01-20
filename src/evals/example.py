@@ -14,7 +14,9 @@ class Example:
     - target: The target answer (required)
     - response: The full response from the model (required)
     - hint: Hint data handled by solver, can be any type (required)
+    - sample_idx: Index for multiple samples of same question (required, default 0)
     - prompt: The full prompt into the model (optional)
+    - metadata: Additional metadata dict (optional)
 
     Args:
         id: Sample identifier
@@ -22,14 +24,18 @@ class Example:
         target: The target answer (e.g., "A", "B", "C", "D", or numeric answer)
         response: The full response from the model
         hint: Hint data for solver (any type)
+        sample_idx: Index for multiple samples of same question (default 0)
         prompt: The full prompt into the model (optional)
+        metadata: Additional metadata dict (optional)
     """
     id: str
     question: str
     target: str
     response: str
     hint: Any
+    sample_idx: int = 0
     prompt: str | None = None
+    metadata: dict[str, Any] | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Example":
@@ -37,7 +43,7 @@ class Example:
 
         Args:
             data: Dictionary with keys: id, question, target, response, hint (required),
-                  prompt (optional)
+                  sample_idx (optional, default 0), prompt (optional), metadata (optional)
 
         Returns:
             Example instance
@@ -60,7 +66,9 @@ class Example:
             target=data["target"],
             response=data["response"],
             hint=data["hint"],
+            sample_idx=data.get("sample_idx", 0),
             prompt=data.get("prompt"),
+            metadata=data.get("metadata"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -70,3 +78,11 @@ class Example:
             Dictionary with all fields, including None values
         """
         return asdict(self)
+
+    def has_valid_hint(self) -> bool:
+        """Check if this example has a valid hint.
+
+        Returns:
+            True if hint is a non-empty string.
+        """
+        return isinstance(self.hint, str) and bool(self.hint.strip())

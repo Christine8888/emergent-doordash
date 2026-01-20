@@ -1,0 +1,2 @@
+/var/lib/slurm/slurmd/job13063464/slurm_script: line 15: /scr-ssd/cye/.venv/bin/activate: No such file or directory
+/sphinx/u/cye/emergent-doordash/src/utils/start_vllm.sh: line 94: vllm: command not found

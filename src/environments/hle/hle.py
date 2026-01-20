@@ -8,7 +8,6 @@ from typing import Any
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import Dataset, Sample, hf_dataset
-from inspect_ai.model import GenerateConfig
 from inspect_ai.scorer import CORRECT, INCORRECT, Score, Scorer, Target, accuracy, scorer, stderr
 from inspect_ai.solver import Solver, TaskState
 
@@ -186,5 +185,4 @@ def hle(
         dataset=dataset,
         solver=solver,
         scorer=hle_scorer(),
-        config=GenerateConfig(temperature=1.0),
     )

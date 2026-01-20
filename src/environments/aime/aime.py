@@ -8,7 +8,6 @@ from typing import Any
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample, hf_dataset
-from inspect_ai.model import GenerateConfig
 from inspect_ai.scorer import Score, Scorer, Target, accuracy, scorer, stderr
 from inspect_ai.solver import Solver, TaskState
 
@@ -115,7 +114,6 @@ def aime(
         dataset=dataset,
         solver=solver,
         scorer=aime_scorer(),
-        config=GenerateConfig(temperature=1.0),
     )
 
 

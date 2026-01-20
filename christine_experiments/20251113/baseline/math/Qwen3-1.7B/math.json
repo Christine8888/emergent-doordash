@@ -1,0 +1,10 @@
+{
+  "model": "vllm/Qwen3-1.7B",
+  "total_samples": 5000,
+  "completed_samples": 5000,
+  "expression_exact_match_sympy": {
+    "accuracy": 0.8288,
+    "stderr": 0.005327643827974196,
+    "scorer": "expression_exact_match_sympy"
+  }
+}

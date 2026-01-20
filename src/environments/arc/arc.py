@@ -9,7 +9,6 @@ from pathlib import Path
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import Dataset, MemoryDataset, Sample
-from inspect_ai.model import GenerateConfig
 from inspect_ai.scorer import CORRECT, INCORRECT, Score, Scorer, Target, accuracy, scorer, stderr
 from inspect_ai.solver import Solver, TaskState
 
@@ -154,5 +153,4 @@ def arc(
         dataset=dataset,
         solver=solver,
         scorer=arc_scorer(),
-        config=GenerateConfig(temperature=1.0),
     )

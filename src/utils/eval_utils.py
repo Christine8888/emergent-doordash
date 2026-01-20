@@ -128,66 +128,57 @@ def run_eval(
     return log[0]
 
 
-def get_valid_problem_ids(jsonl_paths: list[str], require_hint: bool = False) -> set[str] | None:
-    """Get intersection of problem IDs across multiple JSONL files with Example objects.
+def get_valid_problem_ids(jsonl_paths: list[str]) -> dict[str, set[int]] | None:
+    """Get valid (problem_id, sample_idx) pairs across JSONL files.
 
     Args:
         jsonl_paths: List of paths to JSONL files containing Example objects
-        require_hint: If True, only include samples with non-empty hint field
 
     Returns:
-        Set of IDs that appear in ALL files, or None if any file doesn't exist
-        or is empty
-
-    Example:
-        >>> ids = get_valid_problem_ids([
-        ...     "data/cot/gpqa.jsonl",
-        ...     "data/solution/gpqa.jsonl"
-        ... ])
-        >>> print(f"Found {len(ids)} common problems")
+        Dictionary mapping problem IDs to sets of valid sample_idx values,
+        or None if any file doesn't exist or has no valid entries.
+        Only includes entries with non-empty string hints.
     """
     if not jsonl_paths:
         return None
 
-    id_sets = []
+    file_data: list[dict[str, set[int]]] = []
 
     for path in jsonl_paths:
         if not os.path.exists(path):
             logger.warning(f"File not found: {path}")
             return None
 
-        ids = set()
-        try:
-            with open(path) as f:
-                for line_num, line in enumerate(f, 1):
-                    try:
-                        data = json.loads(line)
-                        example = Example.from_dict(data)
+        path_data: dict[str, set[int]] = {}
+        with open(path) as f:
+            for line in f:
+                data = json.loads(line)
+                example = Example.from_dict(data)
 
-                        # Skip if hint is required but missing or empty
-                        if require_hint and (not example.hint or not example.hint.strip()):
-                            continue
+                if not example.has_valid_hint():
+                    continue
 
-                        ids.add(example.id)
-                    except (json.JSONDecodeError, KeyError, ValueError) as e:
-                        logger.warning(f"{path}:{line_num}: Skipping invalid line - {e}")
+                if example.id not in path_data:
+                    path_data[example.id] = set()
+                path_data[example.id].add(example.sample_idx)
 
-            if not ids:
-                logger.warning(f"No valid IDs found in {path}")
-                return None
-
-            id_sets.append(ids)
-            logger.info(f"Loaded {len(ids)} IDs from {path}")
-
-        except Exception as e:
-            logger.error(f"Error reading {path}: {e}")
+        if not path_data:
+            logger.warning(f"No valid entries found in {path}")
             return None
 
-    # Compute intersection of all ID sets
-    valid_ids = id_sets[0]
-    for id_set in id_sets[1:]:
-        valid_ids &= id_set
+        total_samples = sum(len(indices) for indices in path_data.values())
+        logger.info(f"Loaded {total_samples} valid samples for {len(path_data)} problems from {path}")
+        file_data.append(path_data)
 
-    logger.info(f"Found {len(valid_ids)} problems common to all {len(jsonl_paths)} files")
+    result = file_data[0]
+    for other in file_data[1:]:
+        common_ids = set(result.keys()) & set(other.keys())
+        result = {
+            id: result[id] | other[id]
+            for id in common_ids
+        }
 
-    return valid_ids if valid_ids else None
+    total_samples = sum(len(indices) for indices in result.values())
+    logger.info(f"Found {total_samples} valid samples for {len(result)} problems common to all {len(jsonl_paths)} files")
+
+    return result if result else None

@@ -1,0 +1,32 @@
+{
+  "model": "vllm/Qwen2.5-7B-Instruct",
+  "total_samples": 4520,
+  "completed_samples": 4520,
+  "bbeh_scorer": {
+    "linguini": 0.035,
+    "multistep arithmetic": 0.0,
+    "movie recommendation": 0.295,
+    "boardgame qa": 0.305,
+    "word sorting": 0.035,
+    "nycc": 0.115,
+    "causal understanding": 0.24,
+    "object counting": 0.0,
+    "buggy tables": 0.005,
+    "web of lies": 0.02,
+    "object properties": 0.0,
+    "time arithmetic": 0.18,
+    "spatial reasoning": 0.0,
+    "temporal sequence": 0.035,
+    "sarc triples": 0.17,
+    "shuffled objects": 0.095,
+    "hyperbaton": 0.015,
+    "zebra puzzles": 0.21,
+    "boolean expressions": 0.17,
+    "geometric shapes": 0.325,
+    "sportqa": 0.015,
+    "disambiguation qa": 0.35833333333333334,
+    "dyck languages": 0.0,
+    "harmonic_mean_across_tasks": 0.028704664635073582,
+    "scorer": "bbeh_scorer"
+  }
+}

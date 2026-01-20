@@ -1,0 +1,10 @@
+{
+  "model": "vllm/Qwen3-4B",
+  "total_samples": 198,
+  "completed_samples": 198,
+  "gpqa_scorer": {
+    "accuracy": 0.5202020202020202,
+    "stderr": 0.035594435655639176,
+    "scorer": "gpqa_scorer"
+  }
+}

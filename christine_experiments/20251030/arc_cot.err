@@ -48,3 +48,298 @@ Loaded 314 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/
 Found 314 problems common to all 1 files
 Running on 314 samples with 0.9 hint fraction
 Loaded 314 hints with fraction=0.9, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Loaded 314 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Found 314 problems common to all 1 files
+Running on 314 samples with 0.8 hint fraction
+Loaded 314 hints with fraction=0.8, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Loaded 314 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Found 314 problems common to all 1 files
+Running on 314 samples with 0.7 hint fraction
+Loaded 314 hints with fraction=0.7, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Loaded 314 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Found 314 problems common to all 1 files
+Running on 314 samples with 0.6 hint fraction
+Loaded 314 hints with fraction=0.6, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Loaded 314 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Found 314 problems common to all 1 files
+Running on 314 samples with 0.5 hint fraction
+Loaded 314 hints with fraction=0.5, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Loaded 314 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Found 314 problems common to all 1 files
+Running on 314 samples with 0.4 hint fraction
+Loaded 314 hints with fraction=0.4, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Loaded 314 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Found 314 problems common to all 1 files
+Running on 314 samples with 0.3 hint fraction
+Loaded 314 hints with fraction=0.3, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m INFO:     connection rejected (400 Bad Request)
+[1;36m(APIServer pid=153811)[0;0m INFO:     connection closed
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Unsupported upgrade request.
+[1;36m(APIServer pid=153811)[0;0m INFO:     connection rejected (400 Bad Request)
+[1;36m(APIServer pid=153811)[0;0m INFO:     connection closed
+[1;36m(APIServer pid=153811)[0;0m INFO:     connection rejected (400 Bad Request)
+[1;36m(APIServer pid=153811)[0;0m INFO:     connection closed
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Unsupported upgrade request.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+[1;36m(APIServer pid=153811)[0;0m WARNING:  Invalid HTTP request received.
+Loaded 314 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Found 314 problems common to all 1 files
+Running on 314 samples with 0.2 hint fraction
+Loaded 314 hints with fraction=0.2, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Loaded 314 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Found 314 problems common to all 1 files
+Running on 314 samples with 0.1 hint fraction
+Loaded 314 hints with fraction=0.1, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Loaded 314 IDs from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+Found 314 problems common to all 1 files
+Running on 314 samples with 0.0 hint fraction
+Loaded 314 hints with fraction=0.0, mode=sequential from /sphinx/u/cye/emergent-doordash//christine_experiments/data/cot/arc_filtered_long.jsonl
+[rank3]:[W1114 05:41:12.611095064 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank2]:[W1114 05:41:13.702606098 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank1]:[W1114 05:41:13.823933238 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[rank0]:[W1114 05:41:13.840530966 ProcessGroupNCCL.cpp:1538] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
+[1;36m(APIServer pid=153811)[0;0m INFO:     Shutting down
+[1;36m(APIServer pid=153811)[0;0m INFO:     Waiting for application shutdown.
+[1;36m(APIServer pid=153811)[0;0m INFO:     Application shutdown complete.

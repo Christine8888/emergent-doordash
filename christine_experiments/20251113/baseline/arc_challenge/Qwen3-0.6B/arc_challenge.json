@@ -1,0 +1,10 @@
+{
+  "model": "vllm/Qwen3-0.6B",
+  "total_samples": 1172,
+  "completed_samples": 1172,
+  "choice": {
+    "accuracy": 0.7047781569965871,
+    "stderr": 0.013329750293382441,
+    "scorer": "choice"
+  }
+}
