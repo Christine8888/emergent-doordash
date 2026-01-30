@@ -181,29 +181,24 @@ def sigmoid(x):
 
 def fit_eci(
     scores_df: pd.DataFrame,
-    anchor_model1: str = "claude-3-5-sonnet-20240620",
-    anchor_model1_capability: float = 130.0,
-    anchor_model2: str = "gpt-5-2025-08-07_medium",
-    anchor_model2_capability: float = 150.0,
-    reg_strength: float = 0.0,  # 0 works best for model anchoring on ECI scale
-    random_seed: int = 42,
+    anchor_benchmark: str = "Winogrande",
+    reg_strength: float = 0.1,
     exclude_benchmarks: list[str] | None = None,
     min_benchmarks: int = 5,
 ) -> dict:
-    """Fit ECI model jointly (Epoch's approach with model anchoring).
+    """Fit ECI model using Epoch's exact approach (benchmark anchoring).
 
     Fits: score = σ(αb × (Cm - Db))
 
-    Uses model anchoring: fix two models' capabilities directly.
+    Uses benchmark anchoring per Epoch's paper:
+    1. Initialize C, D at 0, α at 1
+    2. Fit with L2 regularization (default 0.1)
+    3. Fix anchor benchmark's α=1, then shift so D_anchor=0
 
     Args:
         scores_df: DataFrame with columns [model, benchmark, score]
-        anchor_model1: First anchor model name
-        anchor_model1_capability: Fixed capability for first anchor (e.g., 130)
-        anchor_model2: Second anchor model name
-        anchor_model2_capability: Fixed capability for second anchor (e.g., 150)
-        reg_strength: L2 regularization strength
-        random_seed: Random seed for initialization
+        anchor_benchmark: Benchmark to anchor (α=1, D=0 after shifting)
+        reg_strength: L2 regularization strength (default 0.1 per Epoch)
         exclude_benchmarks: List of benchmark names to exclude from fitting
         min_benchmarks: Minimum number of benchmark scores required per model
 
@@ -244,15 +239,11 @@ def fit_eci(
     model_idx = {m: i for i, m in enumerate(models)}
     bench_idx = {b: i for i, b in enumerate(benchmarks)}
 
-    # Validate anchor models exist
-    if anchor_model1 not in model_idx:
-        raise ValueError(f"Anchor model '{anchor_model1}' not in data")
-    if anchor_model2 not in model_idx:
-        raise ValueError(f"Anchor model '{anchor_model2}' not in data")
-
-    anchor1_idx = model_idx[anchor_model1]
-    anchor2_idx = model_idx[anchor_model2]
-    anchor_indices = tuple(sorted([anchor1_idx, anchor2_idx]))
+    # Validate anchor benchmark exists
+    if anchor_benchmark not in bench_idx:
+        logger.warning(f"Anchor benchmark '{anchor_benchmark}' not in data, using first benchmark")
+        anchor_benchmark = benchmarks[0]
+    anchor_bench_idx = bench_idx[anchor_benchmark]
 
     # Pre-compute indices and scores as arrays
     m_indices = np.array([model_idx[m] for m in df["model"]])
@@ -260,21 +251,19 @@ def fit_eci(
     scores_arr = df["score"].values
 
     def split_params(params):
-        """Unpack params: free C values, all D, all α."""
-        C_free = params[:n_models - 2]
-        D = params[n_models - 2:n_models - 2 + n_benchmarks]
-        alpha = params[n_models - 2 + n_benchmarks:]
+        """Unpack params: all C, all D, free α (anchor α fixed at 1)."""
+        C = params[:n_models]
+        D = params[n_models:n_models + n_benchmarks]
+        alpha_free = params[n_models + n_benchmarks:]
 
-        # Reconstruct full C with fixed anchor values
-        C = np.zeros(n_models)
+        # Reconstruct full alpha with anchor fixed at 1
+        alpha = np.ones(n_benchmarks)
         free_idx = 0
-        for i in range(n_models):
-            if i == anchor_indices[0]:
-                C[i] = anchor_model1_capability if anchor1_idx < anchor2_idx else anchor_model2_capability
-            elif i == anchor_indices[1]:
-                C[i] = anchor_model2_capability if anchor1_idx < anchor2_idx else anchor_model1_capability
+        for i in range(n_benchmarks):
+            if i == anchor_bench_idx:
+                alpha[i] = 1.0
             else:
-                C[i] = C_free[free_idx]
+                alpha[i] = alpha_free[free_idx]
                 free_idx += 1
         return C, D, alpha
 
@@ -283,43 +272,45 @@ def fit_eci(
         pred = sigmoid(alpha[b_indices] * (C[m_indices] - D[b_indices]))
         resid = pred - scores_arr
 
-        # L2 regularization (Epoch style: single penalty term)
+        # L2 regularization (Epoch style: C, D toward 0; α toward 1)
         if reg_strength > 0:
-            free_C_mask = np.ones(n_models, dtype=bool)
-            free_C_mask[list(anchor_indices)] = False
+            n_params = n_models + n_benchmarks + (n_benchmarks - 1)
             reg_term = reg_strength * (
-                np.sum(C[free_C_mask] ** 2) +
+                np.sum(C ** 2) +
                 np.sum(D ** 2) +
-                np.sum(alpha ** 2)
-            ) / (n_models - 2 + n_benchmarks + n_benchmarks)
+                np.sum((alpha - 1) ** 2)
+            ) / n_params
             reg_penalty = np.sqrt(reg_term) if reg_term > 0 else 0
             return np.append(resid, reg_penalty)
 
         return resid
 
-    # Initialize on ECI scale (centered around anchor capabilities)
-    rng = np.random.RandomState(random_seed)
-    center = (anchor_model1_capability + anchor_model2_capability) / 2  # ~140
+    # Initialize per Epoch: C=0, D=0, α=1
     x0 = np.concatenate([
-        center + rng.randn(n_models - 2) * 10,  # C_free around 140
-        center + rng.randn(n_benchmarks) * 10,   # D around 140
-        np.full(n_benchmarks, 0.1),              # α (small slopes, ~0.05-0.2)
+        np.zeros(n_models),           # C
+        np.zeros(n_benchmarks),       # D
+        np.ones(n_benchmarks - 1),    # α_free (anchor is fixed at 1)
     ])
 
-    # Only bound alpha to be positive
+    # Bound alpha to be positive
     lower = np.concatenate([
-        np.full(n_models - 2, -np.inf),
+        np.full(n_models, -np.inf),
         np.full(n_benchmarks, -np.inf),
-        np.full(n_benchmarks, 0.001),  # α must be positive
+        np.full(n_benchmarks - 1, 0.001),
     ])
     upper = np.concatenate([
-        np.full(n_models - 2, np.inf),
+        np.full(n_models, np.inf),
         np.full(n_benchmarks, np.inf),
-        np.full(n_benchmarks, np.inf),
+        np.full(n_benchmarks - 1, np.inf),
     ])
 
     result = least_squares(residuals, x0, bounds=(lower, upper), method='trf')
     Cm, Db, ab = split_params(result.x)
+
+    # Shift so anchor benchmark has D=0 (per Epoch's identifiability fix)
+    shift = Db[anchor_bench_idx]
+    Cm = Cm - shift
+    Db = Db - shift
 
     # Compute predictions
     pred = sigmoid(ab[b_indices] * (Cm[m_indices] - Db[b_indices]))
@@ -338,7 +329,7 @@ def fit_eci(
         "ab": dict(zip(benchmarks, ab)),
         "predictions": pred_df,
         "rmse": rmse,
-        "anchors": {anchor_model1: anchor_model1_capability, anchor_model2: anchor_model2_capability},
+        "anchor_benchmark": anchor_benchmark,
     }
 
 
@@ -399,121 +390,6 @@ def load_epoch_eci(
     df = df.dropna(subset=["ECI Score"])
 
     return dict(zip(df["Model version"], df["ECI Score"]))
-
-
-def estimate_eci_single(
-    score: float,
-    benchmark: str,
-    params: dict,
-) -> float | None:
-    """Estimate ECI for a single (score, benchmark) pair.
-
-    Formula: Cm = Db + logit(score) / αb
-
-    Args:
-        score: Benchmark score (0 to 1)
-        benchmark: Benchmark name (must match Epoch's naming)
-        params: Output of load_epoch_params()
-
-    Returns:
-        Estimated ECI score, or None if benchmark not found
-    """
-    if benchmark not in params["difficulty"]:
-        logger.warning(f"Benchmark '{benchmark}' not in Epoch's data")
-        return None
-
-    # Clamp score to avoid infinite logit
-    score = np.clip(score, 0.001, 0.999)
-
-    Db = params["difficulty"][benchmark]
-    ab = params["slope"][benchmark]
-
-    logit_score = np.log(score / (1 - score))
-    Cm = Db + logit_score / ab
-
-    return float(Cm)
-
-
-def estimate_eci(
-    scores: dict[str, float],
-    params: dict | None = None,
-) -> float | None:
-    """Estimate ECI from multiple benchmark scores (averaged).
-
-    Args:
-        scores: {benchmark_name: score} mapping
-        params: Output of load_epoch_params(), loaded if None
-
-    Returns:
-        Average estimated ECI across benchmarks, or None if no valid estimates
-    """
-    if params is None:
-        params = load_epoch_params()
-
-    estimates = []
-    for benchmark, score in scores.items():
-        Cm = estimate_eci_single(score, benchmark, params)
-        if Cm is not None:
-            estimates.append(Cm)
-
-    if not estimates:
-        return None
-
-    return float(np.mean(estimates))
-
-
-def get_eci(
-    model: str,
-    params: dict | None = None,
-    user_scores: pd.DataFrame | None = None,
-    epoch_eci: dict[str, float] | None = None,
-    fallback_to_epoch: bool = True,
-) -> float | None:
-    """Get ECI for a model, using user scores or falling back to Epoch's data.
-
-    Priority:
-        1. Estimate from user's benchmark scores (if available)
-        2. Lookup in Epoch's pre-computed ECI (if fallback_to_epoch=True)
-        3. Return None
-
-    Args:
-        model: Model name
-        params: Epoch parameters (loaded if None)
-        user_scores: User's scores DataFrame (loaded if None)
-        epoch_eci: Epoch's pre-computed ECI (loaded if fallback_to_epoch and None)
-        fallback_to_epoch: Whether to use Epoch's data if user scores unavailable
-
-    Returns:
-        ECI score or None
-    """
-    if params is None:
-        params = load_epoch_params()
-    if user_scores is None:
-        user_scores = load_user_scores()
-
-    # Try user's scores first
-    model_scores = user_scores[user_scores["model"] == model]
-    if len(model_scores) > 0:
-        scores_dict = dict(zip(model_scores["benchmark"], model_scores["score"]))
-        eci = estimate_eci(scores_dict, params)
-        if eci is not None:
-            return eci
-
-    # Fallback to Epoch's pre-computed values
-    if fallback_to_epoch:
-        if epoch_eci is None:
-            epoch_eci = load_epoch_eci()
-
-        # Try exact match first
-        if model in epoch_eci:
-            return epoch_eci[model]
-
-        # Try partial match (model name contained in version string)
-        for version, eci in epoch_eci.items():
-            if model.lower() in version.lower():
-                return eci
-
-    return None
 
 
 def list_benchmarks() -> list[str]:

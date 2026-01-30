@@ -4,6 +4,7 @@ import numpy as np
 
 import sys
 sys.path.append("/Users/christineye/emergent-doordash/christine_experiments/20251204")
+sys.path.append("/Users/christineye/emergent-doordash")
 from src.modelx import load_results, clean_name, size, model_eci
 from plotting import (
     plot_accuracy_vs_hint,
@@ -25,23 +26,23 @@ LABEL = "using solution intext masked"
 
 # Models to plot (filter after loading)
 MODELS = [
-   "Qwen2.5-0.5B-Instruct",
+   # "Qwen2.5-0.5B-Instruct",
     "Qwen2.5-1.5B-Instruct",
     "Qwen2.5-3B-Instruct",
     "Qwen2.5-7B-Instruct",
     "Qwen2.5-14B-Instruct",
     "Qwen2.5-32B-Instruct",
-    # "Qwen3-0.6B",
-    # "Qwen3-1.7B",
-    # "Qwen3-4B",
-    # "Qwen3-8B",
-    # "Qwen3-14B",
-    # "Qwen3-32B",
-    # "Llama-3.1-8B-Instruct",
-    # "Llama-3.1-70B-Instruct",
-    # "gemma-3-12b-it",
-    # "gemma-3-4b-it",
-    # "gemma-3-27b-it",
+    "Qwen3-0.6B",
+    "Qwen3-1.7B",
+    "Qwen3-4B",
+    "Qwen3-8B",
+    "Qwen3-14B",
+    "Qwen3-32B",
+    "Llama-3.1-8B-Instruct",
+    "Llama-3.1-70B-Instruct",
+    "gemma-3-12b-it",
+    "gemma-3-4b-it",
+    "gemma-3-27b-it",
 ]
 
 HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]

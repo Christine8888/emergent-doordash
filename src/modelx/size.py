@@ -56,8 +56,8 @@ def _load_eci_cache() -> dict[str, float]:
 
     _ECI_CACHE = {}
 
-    # Try fitted values first
-    fitted_path = Path(__file__).parent.parent.parent / "christine_experiments/20260107/eci_model_capabilities.csv"
+    # Try fitted values first (most recent fitting)
+    fitted_path = Path(__file__).parent.parent.parent / "christine_experiments/20260129_fitting/eci_model_capabilities.csv"
     if fitted_path.exists():
         import pandas as pd
         df = pd.read_csv(fitted_path)
