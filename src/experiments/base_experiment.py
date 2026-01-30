@@ -10,11 +10,23 @@ from inspect_ai import eval
 from inspect_ai.dataset import Sample
 from utils.eval_utils import get_valid_problem_ids
 from utils.inspect_utils import extract_scores_from_log, compute_bootstrap_over_epochs, compute_pass_at_k
-from utils.setup import setup_logging
+from utils.setup import setup_logging, setup_inspect_logging
 from experiments.runner import setup_vllm_env
 import json
 
 logger = setup_logging()
+
+
+def init_inspect_debug(debug: bool = False, log_file: str | None = None):
+    """Initialize Inspect debug logging if enabled.
+
+    Args:
+        debug: If True, sets log level to "http" for detailed request logging
+        log_file: Optional path to write logs to file
+    """
+    if debug:
+        setup_inspect_logging(level="http", log_file=log_file)
+        logger.info("Inspect debug logging enabled (level=http)")
 
 
 class Experiment(ABC):

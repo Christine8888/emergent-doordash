@@ -27,6 +27,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--results_dir", type=str, default="./baseline_results")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--debug", action="store_true", help="Enable Inspect HTTP debug logging")
     args = parser.parse_args()
 
     if args.eval == "all":
@@ -57,6 +58,7 @@ if __name__ == "__main__":
                 epochs=args.epochs,
                 limit=args.limit,
                 poll_interval=30,
+                debug=args.debug,
             )
             for eval_name in evals_to_run
         ]
