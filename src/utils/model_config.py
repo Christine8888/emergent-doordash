@@ -83,11 +83,12 @@ QWEN25_MODELS = [
 # Llama models
 LLAMA_MODELS = [
     ModelSpec("meta-llama/Llama-3.1-8B-Instruct", partitions=LARGE_MODEL_PARTITIONS, nodelist=LARGE_MODEL_NODES),
-    ModelSpec("meta-llama/Llama-3.1-70B-Instruct", tp=4, partitions=LARGE_MODEL_PARTITIONS, nodelist=H200_NODES),
+    ModelSpec("meta-llama/Llama-3.1-70B-Instruct", tp=2, partitions=LARGE_MODEL_PARTITIONS, nodelist=H200_NODES),
 ]
 
 # Gemma models
 GEMMA_MODELS = [
+    ModelSpec("google/gemma-3-1b-it"),
     ModelSpec("google/gemma-3-4b-it"),
     ModelSpec("google/gemma-3-12b-it", partitions=LARGE_MODEL_PARTITIONS, nodelist=LARGE_MODEL_NODES),
     ModelSpec("google/gemma-3-27b-it", tp=2, partitions=LARGE_MODEL_PARTITIONS,
