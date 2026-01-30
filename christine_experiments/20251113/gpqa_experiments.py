@@ -50,8 +50,8 @@ EXPERIMENTS = {
     "cot_intext_masked": make_experiment("cot", "intext", "masked"),
     "solution_intext_sequential": make_experiment("solution", "intext", "sequential"),
     "solution_intext_masked": make_experiment("solution", "intext", "masked"),
-    #"cot_prefill_sequential": make_experiment("cot", "prefill", "sequential"),
-    #"solution_prefill_sequential": make_experiment("solution", "prefill", "sequential"),
+    "cot_prefill_sequential": make_experiment("cot", "prefill", "sequential"),
+    "solution_prefill_sequential": make_experiment("solution", "prefill", "sequential"),
 }
 
 HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
