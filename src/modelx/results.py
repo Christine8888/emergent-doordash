@@ -151,13 +151,19 @@ def load_baseline(
             for col_name, json_path in metrics.items():
                 row[col_name] = _get_nested(data, json_path)
         else:
-            # Auto-extract: find scorer fields (dicts with 'accuracy' or similar)
+            # Auto-extract: find scorer fields (dicts with 'accuracy' or 'all')
             for key, value in data.items():
-                if isinstance(value, dict) and "accuracy" in value:
-                    row["accuracy"] = value.get("accuracy")
-                    row["stderr"] = value.get("stderr")
-                    row["scorer"] = key
-                    break
+                if isinstance(value, dict):
+                    if "accuracy" in value:
+                        row["accuracy"] = value.get("accuracy")
+                        row["stderr"] = value.get("stderr")
+                        row["scorer"] = key
+                        break
+                    elif "all" in value:
+                        row["accuracy"] = value.get("all")
+                        row["stderr"] = value.get("stderr")
+                        row["scorer"] = key
+                        break
 
         rows.append(row)
 

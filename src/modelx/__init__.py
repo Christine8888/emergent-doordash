@@ -10,6 +10,7 @@ from .results import (
 from .fitting import sigmoid, fit_sigmoid, fit_joint_sigmoid, format_equation
 from .eci import (
     fit_eci,
+    estimate_eci_from_epoch_params,
     load_epoch_params,
     load_user_scores,
     load_epoch_eci,
@@ -36,6 +37,7 @@ __all__ = [
     "format_equation",
     # ECI
     "fit_eci",
+    "estimate_eci_from_epoch_params",
     "load_epoch_params",
     "load_user_scores",
     "load_epoch_eci",

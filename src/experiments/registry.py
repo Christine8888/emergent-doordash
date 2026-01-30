@@ -4,12 +4,12 @@ from functools import partial
 from typing import Callable
 
 
-def _winogrande_extended():
-    """Winogrande with extended max_tokens (1024) for thinking models."""
+def _winogrande_0shot():
+    """Winogrande 0-shot with extended max_tokens (8192) for thinking models."""
     from inspect_evals.winogrande import winogrande
     from inspect_ai.model import GenerateConfig
-    task = winogrande()
-    task.config = GenerateConfig(max_tokens=1024)
+    task = winogrande(fewshot=0)
+    task.config = GenerateConfig(max_tokens=8192)
     return task
 
 
@@ -40,7 +40,7 @@ def get_external_evals() -> dict[str, Callable]:
         "arc_challenge": arc_challenge,
         "hellaswag": hellaswag,
         "piqa": piqa,
-        "winogrande": _winogrande_extended,  # 1,267 problems, 5-shot, max_tokens=1024
+        "winogrande": _winogrande_0shot,  # 1,267 problems, 0-shot, max_tokens=8192
         "bbeh": bbeh,
         "bbh": bbh,
         "niah": partial(niah, min_context=4000, max_context=32000, n_contexts=50, n_positions=10),

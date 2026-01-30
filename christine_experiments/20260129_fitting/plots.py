@@ -83,12 +83,6 @@ missing = df[df["eci"].isna()]["model"].unique()
 if len(missing) > 0:
     print(f"WARNING: Missing ECI for {len(missing)} models: {missing.tolist()}")
     df = df.dropna(subset=["eci"])
-
-# %%
-# Plot 1: Accuracy vs hint fraction (sanity check)
-fig, ax = plot_accuracy_vs_hint(df, title=f"GPQA, {LABEL}")
-plt.show()
-
 # %%
 # Plot 2: Accuracy vs ECI (linear scale), all hint levels
 # Custom plotting since plot_by_x_axis uses model_eci() which reads from old cache

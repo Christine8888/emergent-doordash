@@ -1,5 +1,10 @@
 # %%
-"""Fit ECI from baseline data + Epoch benchmark scores."""
+"""Fit ECI from baseline data.
+
+Two modes:
+- "simple": Use Epoch's pre-fitted D and α, only estimate C for your models
+- "full": Re-fit all parameters (C, D, α) jointly with Epoch's data
+"""
 
 import json
 import sys
@@ -13,7 +18,9 @@ from src.modelx import (
     load_baseline,
     load_epoch_benchmark_scores,
     load_epoch_params,
+    load_epoch_eci,
     fit_eci,
+    estimate_eci_from_epoch_params,
 )
 
 %load_ext autoreload
@@ -21,27 +28,33 @@ from src.modelx import (
 
 # %%
 # Configuration
+MODE = "simple"  # "simple" or "full"
+
 BASELINE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251113/baseline"
 OUTPUT_DIR = Path("/Users/christineye/emergent-doordash/christine_experiments/20260129_fitting")
 EPOCH_ECI_FILE = "/Users/christineye/emergent-doordash/src/modelx/eci/eci_scores.json"
-
-# Two anchor models for rescaling (must be in Epoch's data)
-ANCHOR1 = ("claude-3-5-sonnet-20240620", 130.0)
-ANCHOR2 = ("gpt-5-2025-08-07_medium", 150.0)
 
 # Mapping from baseline eval names to ECI benchmark names
 EVAL_TO_ECI = {
     "hellaswag": "HellaSwag",
     "piqa": "PIQA",
     "mmlu_5_shot_cot": "MMLU",
-    "math_level_5": "MATH level 5",
-    # "gpqa": "GPQA diamond",  # Excluded: causes fitting issues for small models
+    "bbh": "BBH",
+    "arc_challenge": "ARC AI2",  # Epoch only uses Challenge score
+    # "math_level_5": "MATH level 5",
+    # "gpqa": "GPQA diamond",
 }
+
+# For full mode only: anchor models for rescaling
+ANCHOR1 = ("claude-3-5-sonnet-20240620", 130.0)
+ANCHOR2 = ("gpt-5-2025-08-07_medium", 150.0)
+
+# For full mode only: benchmarks to exclude
+EXCLUDE_BENCHMARKS = ["OTIS Mock AIME 2024-2025"]
 
 # %%
 # Load Epoch's pre-computed ECI scores for comparison
-with open(EPOCH_ECI_FILE) as f:
-    epoch_eci = json.load(f)
+epoch_eci = load_epoch_eci()
 print(f"Loaded {len(epoch_eci)} Epoch ECI scores for comparison")
 
 # %%
@@ -67,138 +80,131 @@ for eval_name, eci_benchmark in EVAL_TO_ECI.items():
             })
 
 user_scores = pd.DataFrame(user_rows)
-user_models = user_scores["model"].unique()
+user_models = list(user_scores["model"].unique())
 print(f"\nTotal user scores: {len(user_scores)}")
 print(f"User models: {len(user_models)}")
 
 # %%
-# Load Epoch benchmark scores and combine
-print("\nLoading Epoch benchmark scores...")
-epoch_scores = load_epoch_benchmark_scores(only_eci_models=True)
-print(f"Epoch scores: {len(epoch_scores)} ({epoch_scores['model'].nunique()} models)")
+# Fit ECI based on mode
+print(f"\n{'='*70}")
+print(f"MODE: {MODE}")
+print(f"{'='*70}")
 
-combined = pd.concat([epoch_scores, user_scores], ignore_index=True)
-combined = combined.drop_duplicates(subset=["model", "benchmark"], keep="last")
-print(f"Combined: {len(combined)} scores, {combined['model'].nunique()} models")
+if MODE == "simple":
+    # Simple mode: use Epoch's pre-fitted D and α, only estimate C
+    print("\nUsing Epoch's pre-fitted benchmark parameters (D, α)")
+    print("Only estimating model capabilities (C)")
 
-# %%
-# Fit ECI
-print("\nFitting ECI...")
-result = fit_eci(
-    combined,
-    anchor_benchmark="Winogrande",
-    reg_strength=0.1,
-    min_benchmarks=3,
-)
-print(f"RMSE: {result['rmse']:.4f}")
+    eci_scores = estimate_eci_from_epoch_params(user_scores, min_benchmarks=3)
 
-# %%
-# Rescale using two anchors
-print(f"\nRescaling with anchors:")
-print(f"  {ANCHOR1[0]} = {ANCHOR1[1]}")
-print(f"  {ANCHOR2[0]} = {ANCHOR2[1]}")
+    print(f"\nEstimated ECI for {len(eci_scores)} models")
 
-raw1 = result["Cm"].get(ANCHOR1[0])
-raw2 = result["Cm"].get(ANCHOR2[0])
+elif MODE == "full":
+    # Full mode: re-fit everything jointly with Epoch data
+    print("\nRe-fitting all parameters (C, D, α) jointly")
+    print(f"Excluding benchmarks: {EXCLUDE_BENCHMARKS}")
 
-if raw1 is None or raw2 is None:
-    raise ValueError(f"Anchor models not found in fit results")
+    # Load Epoch benchmark scores and combine
+    print("\nLoading Epoch benchmark scores...")
+    epoch_scores = load_epoch_benchmark_scores(only_eci_models=True)
+    print(f"Epoch scores: {len(epoch_scores)} ({epoch_scores['model'].nunique()} models)")
 
-scale = (ANCHOR2[1] - ANCHOR1[1]) / (raw2 - raw1)
-offset = ANCHOR1[1] - scale * raw1
-print(f"\nTransform: ECI = {scale:.4f} * raw + {offset:.2f}")
+    combined = pd.concat([epoch_scores, user_scores], ignore_index=True)
+    combined = combined.drop_duplicates(subset=["model", "benchmark"], keep="last")
+    print(f"Combined: {len(combined)} scores, {combined['model'].nunique()} models")
 
-rescaled = {m: scale * c + offset for m, c in result["Cm"].items()}
+    # Fit
+    result = fit_eci(
+        combined,
+        anchor_benchmark="Winogrande",
+        reg_strength=0.1,
+        min_benchmarks=3,
+        exclude_benchmarks=EXCLUDE_BENCHMARKS,
+    )
+    print(f"RMSE: {result['rmse']:.4f}")
 
-# %%
-# Debug: Compare fitted benchmark params to Epoch's
-print("\nBenchmark parameters (fitted vs Epoch):")
-epoch_params = load_epoch_params()
-print(f"{'Benchmark':<30} {'D_fit':>8} {'D_epoch':>8} {'α_fit':>8} {'α_epoch':>8}")
-for bench in sorted(result["Db"].keys()):
-    d_fit = result["Db"][bench]
-    a_fit = result["ab"][bench]
-    d_epoch = epoch_params["difficulty"].get(bench, None)
-    a_epoch = epoch_params["slope"].get(bench, None)
-    if d_epoch:
-        print(f"  {bench:<28} {d_fit:>8.2f} {d_epoch:>8.2f} {a_fit:>8.4f} {a_epoch:>8.4f}")
-    else:
-        print(f"  {bench:<28} {d_fit:>8.2f} {'N/A':>8} {a_fit:>8.4f} {'N/A':>8}")
+    # Rescale using two anchors
+    print(f"\nRescaling with anchors:")
+    print(f"  {ANCHOR1[0]} = {ANCHOR1[1]}")
+    print(f"  {ANCHOR2[0]} = {ANCHOR2[1]}")
 
-# %%
-# Debug: Check raw values before rescaling for small models
-print("\nDebug: Raw values for small models:")
-small_models = ["Qwen2.5-0.5B-Instruct", "Qwen3-0.6B", "gemma-3-1b-it"]
-for model in small_models:
-    if model in result["Cm"]:
-        raw = result["Cm"][model]
-        # What benchmarks does this model have?
-        model_scores = combined[combined["model"] == model]
-        print(f"\n  {model}: raw={raw:.2f}")
-        for _, row in model_scores.iterrows():
-            bench = row["benchmark"]
-            score = row["score"]
-            d = result["Db"].get(bench, 0)
-            a = result["ab"].get(bench, 1)
-            # What capability would this single score imply?
-            # score = sigmoid(a * (C - D)) => C = D + logit(score)/a
-            score_clipped = np.clip(score, 0.01, 0.99)
-            implied_c = d + np.log(score_clipped / (1 - score_clipped)) / a
-            print(f"    {bench:<20} score={score:.3f} -> implied C={implied_c:.1f} (D={d:.1f}, α={a:.3f})")
+    raw1 = result["Cm"].get(ANCHOR1[0])
+    raw2 = result["Cm"].get(ANCHOR2[0])
 
-# %%
-# Debug: Predictions for small models
-print("\nDebug: Predictions for small models:")
-pred_df = result["predictions"]
-for model in small_models:
-    if model in result["Cm"]:
-        model_preds = pred_df[pred_df["model"] == model]
-        print(f"\n  {model} (raw Cm = {result['Cm'][model]:.2f}):")
-        for _, row in model_preds.iterrows():
-            print(f"    {row['benchmark']:<20} actual={row['score']:.3f} pred={row['predicted']:.3f} err={row['error']:+.3f}")
+    if raw1 is None or raw2 is None:
+        raise ValueError(f"Anchor models not found in fit results")
+
+    scale = (ANCHOR2[1] - ANCHOR1[1]) / (raw2 - raw1)
+    offset = ANCHOR1[1] - scale * raw1
+    print(f"Transform: ECI = {scale:.4f} * raw + {offset:.2f}")
+
+    eci_scores = {m: scale * c + offset for m, c in result["Cm"].items()}
+
+    # Debug: Compare fitted benchmark params to Epoch's (on same scale)
+    print("\nBenchmark parameters (fitted vs Epoch, rescaled):")
+    epoch_params = load_epoch_params()
+    anchor = result["anchor_benchmark"]
+    k = epoch_params["slope"].get(anchor, 0.0454)
+    d_offset = epoch_params["difficulty"].get(anchor, 109.75)
+
+    print(f"{'Benchmark':<25} {'D_fit':>8} {'D_epoch':>8} {'α_fit':>8} {'α_epoch':>8}")
+    for bench in sorted(result["Db"].keys()):
+        d_fit_scaled = result["Db"][bench] / k + d_offset
+        a_fit_scaled = result["ab"][bench] * k
+        d_epoch = epoch_params["difficulty"].get(bench, None)
+        a_epoch = epoch_params["slope"].get(bench, None)
+        if d_epoch:
+            print(f"  {bench:<23} {d_fit_scaled:>8.1f} {d_epoch:>8.1f} {a_fit_scaled:>8.4f} {a_epoch:>8.4f}")
+        else:
+            print(f"  {bench:<23} {d_fit_scaled:>8.1f} {'N/A':>8} {a_fit_scaled:>8.4f} {'N/A':>8}")
+
+else:
+    raise ValueError(f"Unknown mode: {MODE}. Use 'simple' or 'full'.")
 
 # %%
-# Print results with comparison to Epoch's values
-print("\n" + "="*80)
-print(f"{'Model':<40} {'Raw':>8} {'Fitted':>10} {'Epoch':>10} {'Diff':>10}")
-print("="*80)
+# Print results
+print("\n" + "="*70)
+print(f"{'Model':<40} {'Fitted':>10} {'Epoch':>10} {'Diff':>8}")
+print("="*70)
 
-# User models first
 print("\nUser models:")
 for model in sorted(user_models):
-    if model in rescaled:
-        fitted = rescaled[model]
+    if model in eci_scores:
+        fitted = eci_scores[model]
         epoch_val = epoch_eci.get(model)
         if epoch_val:
             diff = fitted - epoch_val
-            print(f"  {model:<38} {fitted:>10.1f} {epoch_val:>10.1f} {diff:>+10.1f}")
+            print(f"  {model:<38} {fitted:>10.1f} {epoch_val:>10.1f} {diff:>+8.1f}")
         else:
-            print(f"  {model:<38} {fitted:>10.1f} {'N/A':>10} {'':>10}")
+            print(f"  {model:<38} {fitted:>10.1f}")
 
-# Sample of Epoch models for validation
-print("\nEpoch models (sample):")
-epoch_only = [m for m in rescaled.keys() if m not in user_models and m in epoch_eci]
-epoch_sorted = sorted(epoch_only, key=lambda m: rescaled[m], reverse=True)
+# For full mode, also show sample of Epoch models
+if MODE == "full":
+    print("\nEpoch models (sample):")
+    epoch_only = [m for m in eci_scores.keys() if m not in user_models and m in epoch_eci]
+    epoch_sorted = sorted(epoch_only, key=lambda m: eci_scores[m], reverse=True)
 
-# Show top, middle, bottom
-n = len(epoch_sorted)
-sample_idx = [0, 1, 2, n//4, n//2, 3*n//4, n-3, n-2, n-1]
-for i in set(sample_idx):
-    if 0 <= i < n:
-        model = epoch_sorted[i]
-        fitted = rescaled[model]
-        epoch_val = epoch_eci[model]
-        diff = fitted - epoch_val
-        print(f"  {model:<38} {fitted:>10.1f} {epoch_val:>10.1f} {diff:>+10.1f}")
+    n = len(epoch_sorted)
+    if n > 0:
+        sample_idx = [0, 1, 2, n//4, n//2, 3*n//4, n-3, n-2, n-1]
+        for i in sorted(set(sample_idx)):
+            if 0 <= i < n:
+                model = epoch_sorted[i]
+                fitted = eci_scores[model]
+                epoch_val = epoch_eci[model]
+                diff = fitted - epoch_val
+                print(f"  {model:<38} {fitted:>10.1f} {epoch_val:>10.1f} {diff:>+8.1f}")
 
 # %%
 # Save results
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 cm_df = pd.DataFrame([
-    {"model": m, "Cm_fitted": rescaled[m], "Cm_epoch": epoch_eci.get(m)}
-    for m in sorted(rescaled.keys(), key=lambda x: -rescaled[x])
+    {"model": m, "eci_fitted": eci_scores[m], "eci_epoch": epoch_eci.get(m)}
+    for m in sorted(eci_scores.keys(), key=lambda x: -eci_scores[x])
 ])
 cm_df.to_csv(OUTPUT_DIR / "eci_model_capabilities.csv", index=False)
 
 print(f"\nSaved to {OUTPUT_DIR / 'eci_model_capabilities.csv'}")
+
+# %%

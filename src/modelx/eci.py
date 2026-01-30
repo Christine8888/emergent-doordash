@@ -185,6 +185,7 @@ def fit_eci(
     reg_strength: float = 0.1,
     exclude_benchmarks: list[str] | None = None,
     min_benchmarks: int = 5,
+    min_score: float = 0.05,
 ) -> dict:
     """Fit ECI model using Epoch's exact approach (benchmark anchoring).
 
@@ -201,6 +202,7 @@ def fit_eci(
         reg_strength: L2 regularization strength (default 0.1 per Epoch)
         exclude_benchmarks: List of benchmark names to exclude from fitting
         min_benchmarks: Minimum number of benchmark scores required per model
+        min_score: Exclude scores below this threshold (likely erroneous)
 
     Returns:
         dict with:
@@ -211,6 +213,13 @@ def fit_eci(
             - rmse: root mean squared error
     """
     df = scores_df.dropna(subset=["score"]).copy()
+
+    # Filter out suspiciously low scores (likely erroneous, e.g. 0% MMLU)
+    n_before = len(df)
+    df = df[df["score"] >= min_score]
+    n_filtered = n_before - len(df)
+    if n_filtered > 0:
+        logger.info(f"Filtered {n_filtered} scores below {min_score}")
 
     # Exclude specified benchmarks
     if exclude_benchmarks:
@@ -398,6 +407,73 @@ def list_benchmarks() -> list[str]:
     return params["benchmarks"]
 
 
+def estimate_eci_from_epoch_params(
+    scores_df: pd.DataFrame,
+    min_benchmarks: int = 3,
+    min_score: float = 0.05,
+) -> dict[str, float]:
+    """Estimate ECI for models using Epoch's pre-fitted benchmark parameters.
+
+    This is the principled approach when you want ECIs consistent with Epoch's scale.
+    Instead of re-fitting D and α, we use Epoch's values and only solve for C.
+
+    For each model, finds C that minimizes:
+        Σ_b (score_mb - σ(αb × (C - Db)))²
+
+    Args:
+        scores_df: DataFrame with columns [model, benchmark, score]
+        min_benchmarks: Minimum benchmarks required per model
+        min_score: Exclude scores below this threshold (likely erroneous)
+
+    Returns:
+        Dict mapping model -> ECI score (on Epoch's scale, ~100-160)
+    """
+    from scipy.optimize import minimize_scalar
+
+    # Load Epoch's benchmark parameters
+    params = load_epoch_params()
+    D = params["difficulty"]  # benchmark -> difficulty
+    alpha = params["slope"]   # benchmark -> slope
+
+    # Filter to benchmarks we have params for
+    valid_benchmarks = set(D.keys())
+    df = scores_df[scores_df["benchmark"].isin(valid_benchmarks)].copy()
+
+    # Filter out suspiciously low scores (likely erroneous, e.g. 0% MMLU)
+    n_before = len(df)
+    df = df[df["score"] >= min_score]
+    n_filtered = n_before - len(df)
+    if n_filtered > 0:
+        logger.info(f"Filtered {n_filtered} scores below {min_score}")
+
+    df["score"] = df["score"].clip(0.001, 0.999)
+
+    results = {}
+
+    for model in df["model"].unique():
+        model_df = df[df["model"] == model]
+
+        if len(model_df) < min_benchmarks:
+            continue
+
+        benchmarks = model_df["benchmark"].values
+        scores = model_df["score"].values
+
+        # Get D and α for this model's benchmarks
+        Db = np.array([D[b] for b in benchmarks])
+        ab = np.array([alpha[b] for b in benchmarks])
+
+        def loss(C):
+            pred = sigmoid(ab * (C - Db))
+            return np.sum((pred - scores) ** 2)
+
+        # Optimize - search in reasonable range
+        result = minimize_scalar(loss, bounds=(50, 200), method='bounded')
+        results[model] = result.x
+
+    return results
+
+
 # Mapping from your eval names to ECI benchmark names
 EVAL_TO_ECI = {
     "hellaswag": "HellaSwag",
@@ -405,12 +481,12 @@ EVAL_TO_ECI = {
     "mmlu_5_shot": "MMLU",
     "math_level_5": "MATH level 5",
     "bbh": "BBH",
+    "arc_challenge": "ARC AI2",  # Epoch only uses Challenge score
     # Excluded or not directly mappable:
     # "gpqa" - excluded per user request
     # "mmlu_0_shot" - using 5_shot instead
     # "math" - use math_level_5 instead
-    # "arc_challenge" - ECI's ARC AI2 combines easy+challenge
-    # "arc_easy" - ECI's ARC AI2 combines easy+challenge
+    # "arc_easy" - Epoch only uses Challenge, not Easy
     # "bbeh" - different from BBH
     # "aime", "hle", "ifeval", "niah", "commonsense_qa" - not in ECI
 }
