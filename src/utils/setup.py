@@ -1,3 +1,4 @@
+import os
 import sys
 import logging
 from pathlib import Path
@@ -11,6 +12,22 @@ if str(_project_root) not in sys.path:
 
 def setup_env():
     dotenv.load_dotenv(_project_root / ".env")
+
+
+def setup_inspect_logging(level: str = "warning", log_file: str | None = None):
+    """Configure Inspect AI logging level.
+
+    Args:
+        level: Log level - "debug", "trace", "http", "info", "warning" (default)
+               Use "http" to see all HTTP requests/retries (useful for debugging hangs)
+        log_file: Optional path to write Python logs to file
+    """
+    os.environ["INSPECT_LOG_LEVEL"] = level
+    os.environ["INSPECT_LOG_LEVEL_TRANSCRIPT"] = level
+
+    if log_file:
+        os.environ["INSPECT_PY_LOGGER_FILE"] = log_file
+        os.environ["INSPECT_PY_LOGGER_LEVEL"] = level
 
 
 class FlushingStreamHandler(logging.StreamHandler):

@@ -55,7 +55,7 @@ HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 HINT_FRACTIONS += [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
 
 
-def run_experiment(exp_name: str, epochs: int, results_dir: str):
+def run_experiment(exp_name: str, epochs: int, results_dir: str, debug: bool = False):
     """Run a single experiment with full retry logic."""
     logger.info(f"Starting {exp_name}...")
     launch_experiment(
@@ -67,6 +67,7 @@ def run_experiment(exp_name: str, epochs: int, results_dir: str):
         wait=True,
         poll_interval=300,
         max_retries=3,
+        debug=debug,
     )
 
 
@@ -78,13 +79,14 @@ if __name__ == "__main__":
     parser.add_argument("--experiment", choices=list(EXPERIMENTS.keys()) + ["all"], default="all")
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--results_dir", type=str, default="./results")
+    parser.add_argument("--debug", action="store_true", help="Enable Inspect HTTP debug logging")
     args = parser.parse_args()
 
     experiments_to_run = list(EXPERIMENTS.keys()) if args.experiment == "all" else [args.experiment]
 
     with ThreadPoolExecutor(max_workers=len(experiments_to_run)) as executor:
         futures = [
-            executor.submit(run_experiment, exp_name, args.epochs, args.results_dir)
+            executor.submit(run_experiment, exp_name, args.epochs, args.results_dir, args.debug)
             for exp_name in experiments_to_run
         ]
         for future in futures:

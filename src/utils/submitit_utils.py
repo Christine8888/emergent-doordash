@@ -175,10 +175,13 @@ def _wait_with_retries(
 def run_single_experiment(
     experiment_class, model_path: str, tensor_parallel_size: int,
     hint_fraction: float, fewshot: int, epochs: int, results_dir: str, config: SubmitConfig,
+    debug: bool = False,
 ) -> dict:
     """Run single experiment inside submitit job."""
-    from utils.setup import setup_logging
+    from utils.setup import setup_logging, setup_inspect_logging
     setup_logging()
+    if debug:
+        setup_inspect_logging(level="http")
 
     model_name = os.path.basename(model_path)
     n_gpus = int(os.environ.get('SLURM_GPUS_ON_NODE', tensor_parallel_size))
@@ -197,10 +200,15 @@ def run_single_experiment(
 def run_baseline_eval(
     eval_name: str, model_path: str, tensor_parallel_size: int,
     results_dir: str, config: SubmitConfig, epochs: int = 1, limit: int | None = None,
+    debug: bool = False,
 ) -> dict:
     """Run single baseline eval inside submitit job."""
+    from utils.setup import setup_inspect_logging
     from experiments.runner import run_eval_with_vllm
     from experiments.registry import get_eval
+
+    if debug:
+        setup_inspect_logging(level="http")
 
     model_name = os.path.basename(model_path)
     output_file = str(Path(results_dir) / eval_name / model_name / f"{eval_name}.json")
@@ -215,6 +223,7 @@ def launch_experiment(
     fewshots: list[int] = [0], epochs: int = 1, results_dir: str = "./results",
     config: SubmitConfig | None = None, skip_existing: bool = True,
     wait: bool = True, poll_interval: int = 300, max_retries: int = 3,
+    debug: bool = False,
 ):
     """Launch experiment grid with retry logic."""
     config = config or DEFAULT_CONFIG
@@ -243,7 +252,7 @@ def launch_experiment(
                 kwargs = dict(
                     experiment_class=experiment_class, model_path=model.path,
                     tensor_parallel_size=model.tp, hint_fraction=hint_fraction, fewshot=fewshot,
-                    epochs=epochs, results_dir=results_dir, config=job_config,
+                    epochs=epochs, results_dir=results_dir, config=job_config, debug=debug,
                 )
                 job = executor.submit(run_single_experiment, **kwargs)
                 jobs.append(job)
@@ -260,6 +269,7 @@ def launch_baseline(
     eval_names: list[str], models: list[ModelSpec], results_dir: str = "./baseline_results",
     config: SubmitConfig | None = None, epochs: int = 1, limit: int | None = None,
     skip_existing: bool = True, wait: bool = True, poll_interval: int = 300, max_retries: int = 3,
+    debug: bool = False,
 ):
     """Launch baseline evals with retry logic."""
     config = config or DEFAULT_CONFIG
@@ -286,7 +296,7 @@ def launch_baseline(
 
             kwargs = dict(
                 eval_name=eval_name, model_path=model.path, tensor_parallel_size=model.tp,
-                results_dir=results_dir, config=job_config, epochs=epochs, limit=limit,
+                results_dir=results_dir, config=job_config, epochs=epochs, limit=limit, debug=debug,
             )
             job = executor.submit(run_baseline_eval, **kwargs)
             jobs.append(job)
