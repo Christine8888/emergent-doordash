@@ -63,9 +63,10 @@ def run_eval(
         epochs=epochs,
         limit=limit,
         max_connections=max_connections,
+        max_retries=10,  # HTTP-level retries (prevents infinite retry loops)
         display="plain",
         fail_on_error=False,
-        retry_on_error=10,
+        retry_on_error=10,  # sample-level retries
         metadata=metadata or {},
     )
 

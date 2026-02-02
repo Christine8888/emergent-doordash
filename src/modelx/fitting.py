@@ -128,10 +128,13 @@ def fit_joint_sigmoid(
     fit_models: set[str] | None = None,
     use_log_x: bool = True,
     x_values: dict[str, float] | Callable[[str], float | None] | None = None,
+    lower: float | None = None,
 ) -> dict:
     """Fit joint sigmoid model: σ(α*C + β*H + γ*C*H + δ) or σ(α*C + β*H + δ)
 
     where C = log(x) or x (depending on use_log_x), H = hint (or transformed hint).
+
+    If lower is set, fits: L + (1-L) * σ(...)
 
     Args:
         df: DataFrame with model, accuracy, hint columns (and optionally x_col)
@@ -145,6 +148,7 @@ def fit_joint_sigmoid(
         use_log_x: If True, use log(x) for fitting; if False, use x directly
         x_values: Optional dict {model: x_value} or function(model) -> x_value
                   If provided, uses this instead of x_col from dataframe
+        lower: If set, pin lower asymptote to this value (e.g., 0.2 for random baseline)
 
     Returns:
         Dict with keys:
@@ -153,6 +157,7 @@ def fit_joint_sigmoid(
         - 'include_cross': whether cross term was included
         - 'predict': function(x, hint) -> y
         - 'use_log_x': whether log(x) was used
+        - 'lower': lower asymptote if set
     """
     if hint_transform is None:
         hint_transform = lambda h: h
@@ -191,29 +196,50 @@ def fit_joint_sigmoid(
     if len(C_all) < min_points:
         raise ValueError(f"Not enough data points for joint fit: {len(C_all)}")
 
-    CH = np.array([C_all, H_all])
+    C_arr = np.array(C_all)
+    H_arr = np.array(H_all)
     y_arr = np.array(y_all)
+    CH = np.array([C_arr, H_arr])
+
+    # Compute data-dependent initial guesses
+    # α should scale so sigmoid transitions across C range: α ≈ 4 / range(C)
+    # δ should center the sigmoid: δ ≈ -α * mean(C)
+    c_range = max(C_arr.max() - C_arr.min(), 1e-6)
+    c_mean = C_arr.mean()
+    h_range = max(H_arr.max() - H_arr.min(), 1e-6)
+    alpha_init = 4.0 / c_range
+    beta_init = 4.0 / h_range if h_range > 0.1 else 1.0
+    delta_init = -alpha_init * c_mean
+
+    L = lower if lower is not None else 0.0
+    U = 1.0
 
     if include_cross:
         def model(CH, alpha, beta, gamma, delta):
             C, H = CH
-            return 1 / (1 + np.exp(-(alpha * C + beta * H + gamma * C * H + delta)))
-        params, _ = curve_fit(model, CH, y_arr, p0=[1, 1, 0, 0], maxfev=10000)
+            sig = 1 / (1 + np.exp(-(alpha * C + beta * H + gamma * C * H + delta)))
+            return L + (U - L) * sig
+        p0 = [alpha_init, beta_init, 0, delta_init]
+        params, _ = curve_fit(model, CH, y_arr, p0=p0, maxfev=10000)
         y_pred = model(CH, *params)
         def predict(x, hint):
             C = np.log(x) if use_log_x else x
             H = hint_transform(hint)
-            return 1 / (1 + np.exp(-(params[0] * C + params[1] * H + params[2] * C * H + params[3])))
+            sig = 1 / (1 + np.exp(-(params[0] * C + params[1] * H + params[2] * C * H + params[3])))
+            return L + (U - L) * sig
     else:
         def model(CH, alpha, beta, delta):
             C, H = CH
-            return 1 / (1 + np.exp(-(alpha * C + beta * H + delta)))
-        params, _ = curve_fit(model, CH, y_arr, p0=[1, 1, 0], maxfev=10000)
+            sig = 1 / (1 + np.exp(-(alpha * C + beta * H + delta)))
+            return L + (U - L) * sig
+        p0 = [alpha_init, beta_init, delta_init]
+        params, _ = curve_fit(model, CH, y_arr, p0=p0, maxfev=10000)
         y_pred = model(CH, *params)
         def predict(x, hint):
             C = np.log(x) if use_log_x else x
             H = hint_transform(hint)
-            return 1 / (1 + np.exp(-(params[0] * C + params[1] * H + params[2])))
+            sig = 1 / (1 + np.exp(-(params[0] * C + params[1] * H + params[2])))
+            return L + (U - L) * sig
 
     rms = np.sqrt(np.mean((y_arr - y_pred) ** 2))
 
@@ -223,6 +249,7 @@ def fit_joint_sigmoid(
         "include_cross": include_cross,
         "predict": predict,
         "use_log_x": use_log_x,
+        "lower": lower,
     }
 
 
@@ -238,12 +265,16 @@ def format_equation(fit_result: dict) -> str:
     if "include_cross" in fit_result:
         # Joint model
         params = fit_result["params"]
+        lower = fit_result.get("lower")
         if fit_result["include_cross"]:
             alpha, beta, gamma, delta = params
-            return f"σ({alpha:.2f}C {beta:+.2f}H {gamma:+.2f}CH {delta:+.2f})"
+            sig = f"σ({alpha:.2f}C {beta:+.2f}H {gamma:+.2f}CH {delta:+.2f})"
         else:
             alpha, beta, delta = params
-            return f"σ({alpha:.2f}C {beta:+.2f}H {delta:+.2f})"
+            sig = f"σ({alpha:.2f}C {beta:+.2f}H {delta:+.2f})"
+        if lower is not None:
+            return f"{lower:.2f} + {1-lower:.2f}·{sig}"
+        return sig
 
     # Single sigmoid
     fit_type = fit_result["type"]

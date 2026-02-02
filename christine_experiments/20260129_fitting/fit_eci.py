@@ -29,6 +29,7 @@ from src.modelx import (
 # %%
 # Configuration
 MODE = "simple"  # "simple" or "full"
+PRIORITIZE_EPOCH = False  # If True, use Epoch's ECI when available instead of fitting
 
 BASELINE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251113/baseline"
 OUTPUT_DIR = Path("/Users/christineye/emergent-doordash/christine_experiments/20260129_fitting")
@@ -41,6 +42,7 @@ EVAL_TO_ECI = {
     "mmlu_5_shot_cot": "MMLU",
     "bbh": "BBH",
     "arc_challenge": "ARC AI2",  # Epoch only uses Challenge score
+    "winogrande": "Winogrande",  # 0-shot, 8192 tokens
     # "math_level_5": "MATH level 5",
     # "gpqa": "GPQA diamond",
 }
@@ -162,27 +164,49 @@ else:
     raise ValueError(f"Unknown mode: {MODE}. Use 'simple' or 'full'.")
 
 # %%
+# Apply PRIORITIZE_EPOCH: use Epoch's ECI when available
+eci_fitted = eci_scores.copy()  # Keep original fitted values for display
+eci_final = {}
+
+if PRIORITIZE_EPOCH:
+    n_from_epoch = 0
+    n_from_fitted = 0
+    for model in eci_scores:
+        if model in epoch_eci:
+            eci_final[model] = epoch_eci[model]
+            n_from_epoch += 1
+        else:
+            eci_final[model] = eci_scores[model]
+            n_from_fitted += 1
+    print(f"\nPRIORITIZE_EPOCH=True:")
+    print(f"  Using Epoch's ECI: {n_from_epoch} models")
+    print(f"  Using fitted ECI: {n_from_fitted} models")
+else:
+    eci_final = eci_scores.copy()
+    print(f"\nPRIORITIZE_EPOCH=False: Using fitted ECI for all models")
+
+# %%
 # Print results
 print("\n" + "="*70)
-print(f"{'Model':<40} {'Fitted':>10} {'Epoch':>10} {'Diff':>8}")
+print(f"{'Model':<40} {'Final':>10} {'Fitted':>10} {'Epoch':>10} {'Source':<8}")
 print("="*70)
 
 print("\nUser models:")
 for model in sorted(user_models):
-    if model in eci_scores:
-        fitted = eci_scores[model]
+    if model in eci_final:
+        final = eci_final[model]
+        fitted = eci_fitted.get(model)
         epoch_val = epoch_eci.get(model)
-        if epoch_val:
-            diff = fitted - epoch_val
-            print(f"  {model:<38} {fitted:>10.1f} {epoch_val:>10.1f} {diff:>+8.1f}")
-        else:
-            print(f"  {model:<38} {fitted:>10.1f}")
+        source = "epoch" if (PRIORITIZE_EPOCH and epoch_val) else "fitted"
+        fitted_str = f"{fitted:>10.1f}" if fitted else f"{'--':>10}"
+        epoch_str = f"{epoch_val:>10.1f}" if epoch_val else f"{'--':>10}"
+        print(f"  {model:<38} {final:>10.1f} {fitted_str} {epoch_str} {source:<8}")
 
 # For full mode, also show sample of Epoch models
 if MODE == "full":
     print("\nEpoch models (sample):")
-    epoch_only = [m for m in eci_scores.keys() if m not in user_models and m in epoch_eci]
-    epoch_sorted = sorted(epoch_only, key=lambda m: eci_scores[m], reverse=True)
+    epoch_only = [m for m in eci_final.keys() if m not in user_models and m in epoch_eci]
+    epoch_sorted = sorted(epoch_only, key=lambda m: eci_final[m], reverse=True)
 
     n = len(epoch_sorted)
     if n > 0:
@@ -190,18 +214,24 @@ if MODE == "full":
         for i in sorted(set(sample_idx)):
             if 0 <= i < n:
                 model = epoch_sorted[i]
-                fitted = eci_scores[model]
+                final = eci_final[model]
                 epoch_val = epoch_eci[model]
-                diff = fitted - epoch_val
-                print(f"  {model:<38} {fitted:>10.1f} {epoch_val:>10.1f} {diff:>+8.1f}")
+                diff = final - epoch_val
+                print(f"  {model:<38} {final:>10.1f} {epoch_val:>10.1f} {diff:>+8.1f}")
 
 # %%
 # Save results
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 cm_df = pd.DataFrame([
-    {"model": m, "eci_fitted": eci_scores[m], "eci_epoch": epoch_eci.get(m)}
-    for m in sorted(eci_scores.keys(), key=lambda x: -eci_scores[x])
+    {
+        "model": m,
+        "eci_fitted": eci_final[m],  # This is the value to use (may be from Epoch if PRIORITIZE_EPOCH)
+        "eci_our_fit": eci_fitted.get(m),  # Our fitted value
+        "eci_epoch": epoch_eci.get(m),  # Epoch's published value
+        "source": "epoch" if (PRIORITIZE_EPOCH and m in epoch_eci) else "fitted",
+    }
+    for m in sorted(eci_final.keys(), key=lambda x: -eci_final[x])
 ])
 cm_df.to_csv(OUTPUT_DIR / "eci_model_capabilities.csv", index=False)
 
