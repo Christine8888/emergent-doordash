@@ -2,8 +2,12 @@
 """Joint scaling plots with ECI on x-axis for GPQA with all hint levels."""
 
 import sys
-sys.path.append("/Users/christineye/emergent-doordash/christine_experiments/20251204")
-sys.path.append("/Users/christineye/emergent-doordash")
+from pathlib import Path
+
+# Project root (works on any machine)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.append(str(PROJECT_ROOT / "christine_experiments/20251204"))
+sys.path.append(str(PROJECT_ROOT))
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,9 +23,9 @@ from plot_baselines import plot_baseline
 
 # %%
 # Configuration
-BASE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251113/results"
-BASELINE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251113/baseline"
-ECI_FILE = "/Users/christineye/emergent-doordash/christine_experiments/20260129_fitting/eci_model_capabilities.csv"
+BASE_FOLDER = str(PROJECT_ROOT / "christine_experiments/20251113/results")
+BASELINE_FOLDER = str(PROJECT_ROOT / "christine_experiments/20251113/baseline")
+ECI_FILE = str(PROJECT_ROOT / "christine_experiments/20260129_fitting/eci_model_capabilities.csv")
 
 EVAL_NAME = "gpqa"
 SOLVER = "solution_intext_masked"

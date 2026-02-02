@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 # Default paths
 _MODULE_DIR = Path(__file__).parent
-_EPOCH_DATA_DIR = Path("/Users/christineye/emergent-doordash/benchmark_data")
+_PROJECT_ROOT = _MODULE_DIR.parent.parent  # src/modelx -> src -> project root
+_EPOCH_DATA_DIR = _PROJECT_ROOT / "benchmark_data"
 _USER_SCORES_PATH = _MODULE_DIR / "model_scores.csv"
 _MANUAL_SCORES_PATH = _MODULE_DIR / "model_scores_manual.csv"
 

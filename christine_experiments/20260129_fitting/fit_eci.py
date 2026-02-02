@@ -8,11 +8,14 @@ Two modes:
 
 import json
 import sys
-sys.path.append("/Users/christineye/emergent-doordash")
+from pathlib import Path
+
+# Project root (works on any machine)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.append(str(PROJECT_ROOT))
 
 import pandas as pd
 import numpy as np
-from pathlib import Path
 
 from src.modelx import (
     load_baseline,
@@ -30,9 +33,9 @@ from src.modelx import (
 # Configuration
 MODE = "simple"  # "simple" or "full"
 
-BASELINE_FOLDER = "/Users/christineye/emergent-doordash/christine_experiments/20251113/baseline"
-OUTPUT_DIR = Path("/Users/christineye/emergent-doordash/christine_experiments/20260129_fitting")
-EPOCH_ECI_FILE = "/Users/christineye/emergent-doordash/src/modelx/eci/eci_scores.json"
+BASELINE_FOLDER = PROJECT_ROOT / "christine_experiments/20251113/baseline"
+OUTPUT_DIR = PROJECT_ROOT / "christine_experiments/20260129_fitting"
+EPOCH_ECI_FILE = PROJECT_ROOT / "src/modelx/eci/eci_scores.json"
 
 # Mapping from baseline eval names to ECI benchmark names
 EVAL_TO_ECI = {
@@ -63,7 +66,7 @@ print("\nLoading baseline results...")
 user_rows = []
 
 for eval_name, eci_benchmark in EVAL_TO_ECI.items():
-    df = load_baseline(BASELINE_FOLDER, eval_name)
+    df = load_baseline(str(BASELINE_FOLDER), eval_name)
     if df.empty:
         print(f"  {eval_name}: no results")
         continue
