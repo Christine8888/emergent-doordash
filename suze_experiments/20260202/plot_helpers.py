@@ -8,19 +8,13 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
-# ------------------------------ constants ------------------------------
-
-DEFAULT_FIG_DPI = 200
-DEFAULT_FIG_BBOX_INCHES = "tight"
-JSON_INDENT = 2
-
 
 # ------------------------------ hint transforms ------------------------------
 
@@ -38,17 +32,77 @@ HINT_TRANSFORMS: dict[str, Callable[[float], float]] = {
 }
 
 
+@dataclass(frozen=True)
+class PiecewiseLinearHintTransform:
+    """Monotone piecewise-linear mapping from raw hint fraction to usefulness."""
+
+    knot_x: np.ndarray  # shape (K,)
+    knot_y: np.ndarray  # shape (K,)
+
+    def __post_init__(self) -> None:
+        x = np.asarray(self.knot_x, dtype=float)
+        y = np.asarray(self.knot_y, dtype=float)
+        if x.ndim != 1 or y.ndim != 1 or x.shape[0] != y.shape[0]:
+            raise ValueError("knot_x and knot_y must be 1D arrays of same length")
+        if x.shape[0] < 2:
+            raise ValueError("Need at least 2 knots")
+        if np.any(np.diff(x) <= 0):
+            raise ValueError("knot_x must be strictly increasing")
+        if np.min(x) < 0.0 or np.max(x) > 1.0:
+            raise ValueError("knot_x must be within [0, 1]")
+        if np.any(np.diff(y) < 0):
+            raise ValueError("knot_y must be monotone non-decreasing")
+
+    def __call__(self, h: float) -> float:
+        x = np.asarray(self.knot_x, dtype=float)
+        y = np.asarray(self.knot_y, dtype=float)
+        h_clip = float(np.clip(h, x[0], x[-1]))
+        return float(np.interp(h_clip, x, y))
+
+    def vectorized(self, h: np.ndarray) -> np.ndarray:
+        x = np.asarray(self.knot_x, dtype=float)
+        y = np.asarray(self.knot_y, dtype=float)
+        h_clip = np.clip(h.astype(float), x[0], x[-1])
+        return np.interp(h_clip, x, y)
+
+
+def plot_hint_transform_mapping(
+    *,
+    knot_x: np.ndarray,
+    knot_y: np.ndarray,
+    output_dir: Path,
+    title: str,
+) -> Path:
+    """Plot raw hint fraction vs learned usefulness mapping."""
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.plot(knot_x, knot_y, "-o", linewidth=2, markersize=5)
+    ax.set_xlabel("raw hint fraction")
+    ax.set_ylabel("learned hint usefulness")
+    ax.set_title(title)
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(-0.02, 1.02)
+    y_min = float(np.min(knot_y))
+    y_max = float(np.max(knot_y))
+    pad = 0.05 * max(1e-6, y_max - y_min)
+    ax.set_ylim(y_min - pad, y_max + pad)
+    plt.tight_layout()
+
+    out_path = output_dir / "hint_transform_mapping.png"
+    save_figure(fig, out_path)
+    return out_path
+
+
 # ------------------------------ io helpers ------------------------------
 
 def write_json(path: Path, obj: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj, indent=JSON_INDENT, sort_keys=True) + "\n")
+    path.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n")
 
 
 def save_figure(fig: plt.Figure, out_path: Path) -> None:
     """Save a matplotlib figure and close it."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=DEFAULT_FIG_DPI, bbox_inches=DEFAULT_FIG_BBOX_INCHES)
+    fig.savefig(out_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -131,6 +185,184 @@ def format_joint_latex(result: dict, hint_transform: Callable[[float], float] = 
     if lower is not None:
         return rf"${lower:.2f} + {1-lower:.2f} \cdot {sig}$"
     return rf"${sig}$"
+
+
+def _sigmoid(z: np.ndarray) -> np.ndarray:
+    return 1.0 / (1.0 + np.exp(-z))
+
+
+def _validate_knots(knots: list[float], *, require_endpoints: bool) -> np.ndarray:
+    knot_x = np.asarray(knots, dtype=float)
+    if knot_x.ndim != 1 or knot_x.shape[0] < 2:
+        raise ValueError("hint_knots must be a list of at least 2 floats")
+    if np.any(np.diff(knot_x) <= 0):
+        raise ValueError("hint_knots must be strictly increasing")
+    if float(np.min(knot_x)) < 0.0 or float(np.max(knot_x)) > 1.0:
+        raise ValueError("hint_knots must lie within [0, 1]")
+    if require_endpoints:
+        if not np.isclose(knot_x[0], 0.0) or not np.isclose(knot_x[-1], 1.0):
+            raise ValueError("For fixed-endpoints learned transform, hint_knots must start at 0.0 and end at 1.0")
+    return knot_x
+
+
+def _decode_monotone_knot_y_fixed_endpoints(t: np.ndarray) -> np.ndarray:
+    """Given unconstrained t (len K-1), return y knots (len K) with y0=0, y_last=1 monotone."""
+    u = np.exp(t)  # positive increments
+    s = float(np.sum(u))
+    cum = np.cumsum(u) / s  # len K-1, last is 1
+    y = np.concatenate([np.array([0.0]), cum])
+    return y
+
+
+def _decode_monotone_knot_y_free_endpoints(y0: float, t: np.ndarray) -> np.ndarray:
+    """Given y0 and unconstrained t (len K-1), return y knots (len K) monotone with free endpoints.
+
+    We fix total increase to 1.0 for identifiability (so g(1)=g(0)+1), while allowing a free shift y0.
+    """
+    u = np.exp(t)
+    s = float(np.sum(u))
+    cum = np.cumsum(u) / s  # last is 1
+    y = y0 + np.concatenate([np.array([0.0]), cum])
+    return y
+
+
+def fit_joint_sigmoid_with_learned_hint_transform(
+    *,
+    df: pd.DataFrame,
+    eci_map: dict[str, float],
+    fit_models: set[str],
+    hint_knots: list[float],
+    include_cross: bool,
+    lower: float | None,
+    mode: str,
+) -> dict[str, object]:
+    """Fit joint sigmoid with a learned monotone piecewise-linear hint transform.
+
+    Args:
+        df: DataFrame with columns model, hint, accuracy
+        eci_map: mapping model->eci
+        fit_models: set of model names to fit on (train set)
+        hint_knots: x-knots in [0,1] (strictly increasing)
+        include_cross: include C*H term
+        lower: lower asymptote L
+        mode: 'fixed_endpoints' or 'free_endpoints'
+    """
+    from scipy.optimize import minimize
+    from src.modelx.fitting import fit_joint_sigmoid
+
+    if mode not in {"fixed_endpoints", "free_endpoints"}:
+        raise ValueError(f"Unknown mode: {mode}")
+
+    require_endpoints = (mode == "fixed_endpoints")
+    knot_x = _validate_knots(hint_knots, require_endpoints=require_endpoints)
+    K = int(knot_x.shape[0])
+
+    train_df = df[df["model"].isin(fit_models)].copy()
+    if len(train_df) == 0:
+        raise ValueError("No training rows after filtering to fit_models")
+
+    # Build training arrays
+    C = train_df["model"].map(eci_map).astype(float).to_numpy()
+    H_raw = train_df["hint"].astype(float).to_numpy()
+    y = train_df["accuracy"].astype(float).to_numpy()
+
+    L = float(lower) if lower is not None else 0.0
+    U_minus_L = 1.0 - L
+
+    # Initialize joint params using existing fitter with identity transform.
+    init = fit_joint_sigmoid(
+        df,
+        y_col="accuracy",
+        hint_col="hint",
+        include_cross=include_cross,
+        hint_transform=hint_identity,
+        use_log_x=False,
+        x_values=eci_map,
+        fit_models=fit_models,
+        lower=lower,
+    )
+    init_params = np.asarray(init["params"], dtype=float)
+
+    # Parameter vector:
+    # - joint params (3 or 4)
+    # - transform params:
+    #   - fixed_endpoints: t of length K-1
+    #   - free_endpoints: y0 (scalar) + t of length K-1
+    if include_cross:
+        p_joint = 4
+    else:
+        p_joint = 3
+
+    t0 = np.zeros(K - 1, dtype=float)  # exp(t)=1 -> linear mapping
+    if mode == "fixed_endpoints":
+        theta0 = np.concatenate([init_params[:p_joint], t0])
+    else:
+        y0 = 0.0
+        theta0 = np.concatenate([init_params[:p_joint], np.array([y0]), t0])
+
+    def unpack(theta: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        joint = theta[:p_joint]
+        if mode == "fixed_endpoints":
+            t = theta[p_joint:]
+            knot_y = _decode_monotone_knot_y_fixed_endpoints(t)
+        else:
+            y0_local = float(theta[p_joint])
+            t = theta[p_joint + 1 :]
+            knot_y = _decode_monotone_knot_y_free_endpoints(y0_local, t)
+        return joint, knot_y
+
+    def mse(theta: np.ndarray) -> float:
+        joint, knot_y = unpack(theta)
+        g = np.interp(np.clip(H_raw, knot_x[0], knot_x[-1]), knot_x, knot_y)
+        if include_cross:
+            alpha, beta, gamma, delta = joint
+            z = alpha * C + beta * g + gamma * C * g + delta
+        else:
+            alpha, beta, delta = joint
+            z = alpha * C + beta * g + delta
+        yhat = L + U_minus_L * _sigmoid(z)
+        err = yhat - y
+        return float(np.mean(err * err))
+
+    res = minimize(
+        mse,
+        theta0,
+        method="L-BFGS-B",
+        options={"maxiter": 2000},
+    )
+
+    joint_opt, knot_y_opt = unpack(res.x)
+    transform = PiecewiseLinearHintTransform(knot_x=knot_x, knot_y=knot_y_opt)
+
+    def predict(eci: float, hint: float) -> float:
+        g = transform(hint)
+        if include_cross:
+            alpha, beta, gamma, delta = joint_opt
+            z = alpha * float(eci) + beta * g + gamma * float(eci) * g + delta
+        else:
+            alpha, beta, delta = joint_opt
+            z = alpha * float(eci) + beta * g + delta
+        return float(L + U_minus_L * (1.0 / (1.0 + math.exp(-z))))
+
+    # Compute RMS on train objective data
+    rms = float(math.sqrt(mse(res.x)))
+
+    return {
+        "params": joint_opt,
+        "rms": rms,
+        "include_cross": include_cross,
+        "predict": predict,
+        "use_log_x": False,
+        "lower": lower,
+        "hint_transform_type": f"learned_piecewise_linear_{mode}",
+        "hint_knots": knot_x,
+        "learned_knot_y": knot_y_opt,
+        "optimizer_success": bool(res.success),
+        "optimizer_status": int(res.status),
+        "optimizer_message": str(res.message),
+        "optimizer_nit": int(getattr(res, "nit", -1)),
+        "optimizer_fun": float(getattr(res, "fun", float("nan"))),
+    }
 
 
 def fit_individual_sigmoids_by_hint(
@@ -552,6 +784,7 @@ def run_joint_scaling_plots(
     include_cross: bool,
     lower_asymptote: float | None,
     hint_transform: str | Callable[[float], float],
+    hint_knots: list[float] | None = None,
     output_dir: Path,
 ) -> dict[str, object]:
     """Run the joint scaling analysis and write artifacts to `output_dir`.
@@ -565,14 +798,26 @@ def run_joint_scaling_plots(
     # Write plots directly into the run directory (no nested `plots/`).
     plots_dir = output_dir
 
+    learned_mode: str | None = None
+    learned_knot_x: np.ndarray | None = None
+    learned_knot_y: np.ndarray | None = None
+    learned_optimizer_meta: dict[str, object] | None = None
+
     if isinstance(hint_transform, str):
         hint_transform_name = hint_transform
-        if hint_transform_name not in HINT_TRANSFORMS:
-            raise ValueError(
-                f"Unknown hint_transform={hint_transform_name!r}. "
-                f"Choose one of: {sorted(HINT_TRANSFORMS.keys())}"
-            )
-        hint_transform_fn = HINT_TRANSFORMS[hint_transform_name]
+        if hint_transform_name in {"learned_piecewise_linear_fixed_endpoints", "learned_piecewise_linear_free_endpoints"}:
+            if hint_knots is None:
+                raise ValueError(f"hint_knots must be provided for hint_transform={hint_transform_name!r}")
+            learned_mode = "fixed_endpoints" if hint_transform_name == "learned_piecewise_linear_fixed_endpoints" else "free_endpoints"
+            # We'll fill hint_transform_fn after we compute the train set and run the learned fit.
+            hint_transform_fn = hint_identity
+        else:
+            if hint_transform_name not in HINT_TRANSFORMS:
+                raise ValueError(
+                    f"Unknown hint_transform={hint_transform_name!r}. "
+                    f"Choose one of: {sorted(HINT_TRANSFORMS.keys()) + ['learned_piecewise_linear_fixed_endpoints', 'learned_piecewise_linear_free_endpoints']}"
+                )
+            hint_transform_fn = HINT_TRANSFORMS[hint_transform_name]
     else:
         hint_transform_fn = hint_transform
         hint_transform_name = getattr(hint_transform_fn, "__name__", "custom")
@@ -603,19 +848,49 @@ def run_joint_scaling_plots(
         train_models=train_set,
     )
 
-    from src.modelx.fitting import fit_joint_sigmoid, format_equation
+    from src.modelx.fitting import format_equation
 
-    joint_result = fit_joint_sigmoid(
-        df,
-        y_col="accuracy",
-        hint_col="hint",
-        include_cross=include_cross,
-        hint_transform=hint_transform_fn,
-        use_log_x=False,
-        x_values=eci_map,
-        fit_models=train_set,
-        lower=lower_asymptote,
-    )
+    if learned_mode is None:
+        from src.modelx.fitting import fit_joint_sigmoid
+
+        joint_result = fit_joint_sigmoid(
+            df,
+            y_col="accuracy",
+            hint_col="hint",
+            include_cross=include_cross,
+            hint_transform=hint_transform_fn,
+            use_log_x=False,
+            x_values=eci_map,
+            fit_models=train_set,
+            lower=lower_asymptote,
+        )
+    else:
+        learned_fit = fit_joint_sigmoid_with_learned_hint_transform(
+            df=df,
+            eci_map=eci_map,
+            fit_models=train_set,
+            hint_knots=hint_knots if hint_knots is not None else [],
+            include_cross=include_cross,
+            lower=lower_asymptote,
+            mode=learned_mode,
+        )
+        joint_result = learned_fit
+        learned_knot_x = np.asarray(learned_fit["hint_knots"], dtype=float)
+        learned_knot_y = np.asarray(learned_fit["learned_knot_y"], dtype=float)
+        hint_transform_fn = PiecewiseLinearHintTransform(knot_x=learned_knot_x, knot_y=learned_knot_y)
+        learned_optimizer_meta = {
+            "optimizer_success": bool(learned_fit.get("optimizer_success")),
+            "optimizer_status": int(learned_fit.get("optimizer_status", -1)),
+            "optimizer_message": str(learned_fit.get("optimizer_message", "")),
+            "optimizer_nit": int(learned_fit.get("optimizer_nit", -1)),
+            "optimizer_fun": float(learned_fit.get("optimizer_fun", float("nan"))),
+        }
+        plot_hint_transform_mapping(
+            knot_x=learned_knot_x,
+            knot_y=learned_knot_y,
+            output_dir=plots_dir,
+            title=f"{label} - learned hint mapping ({learned_mode})",
+        )
 
     joint_latex = format_joint_latex(joint_result, hint_transform_fn)
     joint_equation = format_equation(joint_result)
@@ -629,7 +904,8 @@ def run_joint_scaling_plots(
 
     individual_by_hint_all = fit_individual_sigmoids_by_hint(df, eci_map, fit_models=None, lower=lower_asymptote)
     individual_by_hint_train = fit_individual_sigmoids_by_hint(df, eci_map, fit_models=train_set, lower=lower_asymptote)
-    individual_by_model = fit_individual_sigmoids_by_model(df, hint_transform_fn, fit_models=None, lower=lower_asymptote)
+    # Keep per-model curves in raw hint space so the x-axis remains "hint fraction".
+    individual_by_model = fit_individual_sigmoids_by_model(df, hint_identity, fit_models=None, lower=lower_asymptote)
 
     midpoint_errors_all = compute_midpoint_errors(joint_result, individual_by_hint_all, hint_fractions, hint_transform_fn)
     midpoint_errors_train = compute_midpoint_errors(joint_result, individual_by_hint_train, hint_fractions, hint_transform_fn)
@@ -702,6 +978,9 @@ def run_joint_scaling_plots(
         "include_cross": bool(include_cross),
         "lower_asymptote": lower_asymptote,
         "hint_transform": hint_transform_name,
+        "hint_knots": hint_knots,
+        "learned_knot_y": learned_knot_y.tolist() if learned_knot_y is not None else None,
+        "learned_optimizer": learned_optimizer_meta,
     }
 
     metrics: dict[str, object] = {
