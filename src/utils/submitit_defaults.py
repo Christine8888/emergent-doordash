@@ -12,7 +12,12 @@ _SETUP_SCRIPTS = {
 def _get_setup_commands() -> list:
     """Get setup commands for current user."""
     user = getpass.getuser()
-    script = _SETUP_SCRIPTS.get(user, _SETUP_SCRIPTS["cye"])  # fallback to Christine's
+    if user not in _SETUP_SCRIPTS:
+        raise RuntimeError(
+            f"Unknown user '{user}' for submitit setup script. "
+            f"Add your script path to _SETUP_SCRIPTS in {__file__}."
+        )
+    script = _SETUP_SCRIPTS[user]
     return [f"source {script}"]
 
 

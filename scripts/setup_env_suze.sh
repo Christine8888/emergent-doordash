@@ -1,24 +1,34 @@
 #!/bin/bash
 # Setup script for SLURM jobs - suzeva's version
-# Uses Christine's shared venv (on juice - accessible from all nodes)
 
-# Use Christine's venv on shared storage (works on sphinx and miso)
-export VENV_DIR="/juice5b/scr5b/cye/.venv"
-export UV_CACHE_DIR="/juice5b/scr5b/cye/.cache/uv"
+# ----------------------------
+# Constants (keep at top)
+# ----------------------------
+CONDA_BASE="/sphinx/u/${USER}/miniconda3"
+CONDA_ENV_NAME="emergent_doordash"
+PROJECT_ROOT="/afs/cs.stanford.edu/u/suzeva/emergent-doordash"
 
-# Use Christine's HF cache (has models pre-downloaded, faster storage)
-export HF_HOME="/sphinx/u/cye/.cache/huggingface" # TODO should probably use /sphinx/u/suzeva/models
-export HOME="/scr/suzeva"
-mkdir -p "$HOME"
-mkdir -p "$HF_HOME"
+# ----------------------------
+# Environment
+# ----------------------------
+# Keep everything in your own dirs (avoid any /.../cye/... paths).
+# Mirrors the minimal style of scripts/setup_env.sh.
+export HOME="/scr/${USER}"
+export HF_HUB_CACHE="${HF_HUB_CACHE:-/sphinx/u/${USER}/models}"
+export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-/sphinx/u/${USER}/.cache/huggingface/datasets}"
 
-# Activate the shared venv
-if [ -d "$VENV_DIR" ]; then
-    source "$VENV_DIR/bin/activate"
+mkdir -p "$HOME" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE"
+
+# Activate your conda env if available; otherwise fall back to your own venv.
+if [ -f "$CONDA_BASE/etc/profile.d/conda.sh" ]; then
+    # shellcheck disable=SC1090
+    source "$CONDA_BASE/etc/profile.d/conda.sh"
+    conda activate "$CONDA_ENV_NAME"
 else
-    echo "ERROR: Venv not found at $VENV_DIR"
+    echo "ERROR: conda not found at $CONDA_BASE."
+    echo "  If you want venv fallback, add it back here."
     exit 1
 fi
 
 # Add project src/ to PYTHONPATH so submitit workers can find modules
-export PYTHONPATH="/afs/cs.stanford.edu/u/suzeva/emergent-doordash/src:${PYTHONPATH:-}"
+export PYTHONPATH="$PROJECT_ROOT/src:${PYTHONPATH:-}"
