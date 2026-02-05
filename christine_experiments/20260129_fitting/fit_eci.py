@@ -9,6 +9,7 @@ Two modes:
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 # Project root (works on any machine)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -59,7 +60,8 @@ EXCLUDE_BENCHMARKS = ["OTIS Mock AIME 2024-2025"]
 
 # %%
 # Load Epoch's pre-computed ECI scores for comparison
-epoch_eci = load_epoch_eci()
+epoch_eci = load_epoch_eci() # this loads existing eci scores
+print(epoch_eci)
 print(f"Loaded {len(epoch_eci)} Epoch ECI scores for comparison")
 
 # %%
@@ -68,7 +70,7 @@ print("\nLoading baseline results...")
 user_rows = []
 
 for eval_name, eci_benchmark in EVAL_TO_ECI.items():
-    df = load_baseline(str(BASELINE_FOLDER), eval_name)
+    df = load_baseline(str(BASELINE_FOLDER), eval_name) # loads benchmark scores for baselines: no hinting, just model performance on a specific benchmark
     if df.empty:
         print(f"  {eval_name}: no results")
         continue
@@ -88,6 +90,17 @@ user_scores = pd.DataFrame(user_rows)
 user_models = list(user_scores["model"].unique())
 print(f"\nTotal user scores: {len(user_scores)}")
 print(f"User models: {len(user_models)}")
+
+# Print which models have missing scores
+all_benchmarks = set(EVAL_TO_ECI.values())
+print(f"\nMissing scores per model (out of {len(all_benchmarks)} benchmarks):")
+for model in sorted(user_models):
+    model_benchmarks = set[Any](user_scores[user_scores["model"] == model]["benchmark"])
+    missing = all_benchmarks - model_benchmarks
+    if missing:
+        print(f"  {model}: missing {len(missing)} - {sorted(missing)}")
+    else:
+        print(f"  {model}: complete")
 
 # %%
 # Fit ECI based on mode

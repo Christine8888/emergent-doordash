@@ -450,11 +450,13 @@ def estimate_eci_from_epoch_params(
     df["score"] = df["score"].clip(0.001, 0.999)
 
     results = {}
+    benchmark_counts = {}
 
     for model in df["model"].unique():
         model_df = df[df["model"] == model]
 
         if len(model_df) < min_benchmarks:
+            logger.info(f"Skipping {model}: only {len(model_df)} benchmarks (need {min_benchmarks})")
             continue
 
         benchmarks = model_df["benchmark"].values
@@ -471,6 +473,12 @@ def estimate_eci_from_epoch_params(
         # Optimize - search in reasonable range
         result = minimize_scalar(loss, bounds=(50, 200), method='bounded')
         results[model] = result.x
+        benchmark_counts[model] = len(benchmarks)
+
+    # Print benchmark counts for each model
+    print(f"\nECI estimation - benchmarks used per model:")
+    for model in sorted(results.keys(), key=lambda m: results[m], reverse=True):
+        print(f"  {model}: {benchmark_counts[model]} benchmarks, ECI={results[model]:.1f}")
 
     return results
 
