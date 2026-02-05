@@ -59,17 +59,18 @@ ALL_MODELS = [
 ]
 
 # Train/test split (for now, use all as train)
-TRAIN_MODELS = set(["Qwen2.5-1.5B-Instruct",
+TRAIN_MODELS = set([
+    "Qwen2.5-1.5B-Instruct",
     "Qwen2.5-3B-Instruct",
     "Qwen2.5-7B-Instruct",
-        "Qwen3-0.6B",
-     "Llama-3.1-8B-Instruct",
-      "gemma-3-4b-it",
-      "Qwen3-1.7B",
-      "gemma-3-12b-it",
-      "Qwen2.5-14B-Instruct",
-      "gemma-3-27b-it",
-      "Qwen3-4B"])
+    "Qwen3-0.6B",
+    "Llama-3.1-8B-Instruct",
+    "gemma-3-4b-it",
+    "Qwen3-1.7B",
+    "gemma-3-12b-it",
+    "Qwen2.5-14B-Instruct",
+    "gemma-3-27b-it",
+    "Qwen3-4B"])
 TEST_MODELS = set()  # Empty for now
 
 HINT_FRACTIONS = [0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0]
@@ -89,7 +90,7 @@ LOWER_ASYMPTOTE: float | None = 0.2
 eci_df = pd.read_csv(ECI_FILE)
 eci_map = dict(zip(eci_df["model"], eci_df["eci_fitted"]))
 
-print("Fitted ECIs for models:")
+print(f"Fitted ECIs for {len(ALL_MODELS)} models:")
 for model in sorted(ALL_MODELS, key=lambda m: eci_map.get(m, 0)):
     eci = eci_map.get(model)
     split = "TRAIN" if model in TRAIN_MODELS else "TEST"
