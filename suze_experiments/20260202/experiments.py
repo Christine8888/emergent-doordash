@@ -136,9 +136,6 @@ def joint_scaling_learned_hint_fixed_endpoints() -> None:
     run_name = "joint_scaling_learned_hint_fixed_endpoints" + "_feb_5"
     run_dir = make_run_dir(run_name=run_name)
 
-    # Custom knots for the piecewise-linear mapping (must start at 0 and end at 1 for fixed-endpoints).
-    hint_knots = [0.0, 0.05, 0.10, 0.20, 0.35, 0.50, 0.70, 0.85, 1.0]
-
     run_joint_scaling_plots(
         base_folder=PROJECT_ROOT / "christine_experiments/20251113/results",
         eci_file=PROJECT_ROOT / "christine_experiments/20260129_fitting/eci_model_capabilities.csv",
@@ -170,7 +167,7 @@ def joint_scaling_learned_hint_fixed_endpoints() -> None:
         include_cross=True,
         lower_asymptote=0.2,
         hint_transform="learned_piecewise_linear_fixed_endpoints",
-        hint_knots=hint_knots,
+        hint_knots=[round(i / 20.0, 2) for i in range(21)],
         output_dir=run_dir,
     )
 
@@ -265,12 +262,58 @@ def joint_scaling_learned_hint_fixed_endpoints_train_on_some() -> None:
     )
 
 
+def joint_scaling_learned_hint_fixed_endpoints_sequential_solution() -> None:
+    # python experiments.py -e joint_scaling_learned_hint_fixed_endpoints_sequential_solution
+    _ensure_project_root_on_path()
+
+    # User-defined run name: edit here per experiment.
+    run_name = "joint_scaling_learned_hint_fixed_endpoints_sequential_solution" + "_feb_5"
+    run_dir = make_run_dir(run_name=run_name)
+
+    run_joint_scaling_plots(
+        base_folder=PROJECT_ROOT / "christine_experiments/20251113/results",
+        eci_file=PROJECT_ROOT / "christine_experiments/20260129_fitting/eci_model_capabilities.csv",
+        eval_name="gpqa",
+        solver="solution_intext_sequential",
+        condition="0shot",
+        label="GPQA solution intext sequential",
+        all_models=[
+            "Qwen2.5-1.5B-Instruct",
+            "Qwen2.5-3B-Instruct",
+            "Qwen2.5-7B-Instruct",
+            "Qwen2.5-14B-Instruct",
+            "Qwen2.5-32B-Instruct",
+            "Qwen3-0.6B",
+            "Qwen3-1.7B",
+            "Qwen3-4B",
+            "Qwen3-8B",
+            "Qwen3-14B",
+            "Qwen3-32B",
+            "Llama-3.1-8B-Instruct",
+            "Llama-3.1-70B-Instruct",
+            "gemma-3-4b-it",
+            "gemma-3-12b-it",
+            "gemma-3-27b-it",
+        ],
+        num_holdout_models=0,
+        hint_fractions=[round(i / 20.0, 2) for i in range(21)],
+        eval_hints_for_sweep=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+        include_cross=True,
+        lower_asymptote=0.2,
+        hint_transform="learned_piecewise_linear_fixed_endpoints",
+        hint_knots=[round(i / 20.0, 2) for i in range(21)],
+        output_dir=run_dir,
+    )
+
+
+
 EXPERIMENTS = {
     "joint_scaling_gpqa_train_on_all": joint_scaling_gpqa_train_on_all,
     "joint_scaling_gpqa_train_on_some": joint_scaling_gpqa_train_on_some,
     "joint_scaling_learned_hint_fixed_endpoints": joint_scaling_learned_hint_fixed_endpoints,
     "joint_scaling_learned_hint_free_endpoints": joint_scaling_learned_hint_free_endpoints,
-    "joint_scaling_learned_hint_fixed_endpoints_train_on_some": joint_scaling_learned_hint_fixed_endpoints_train_on_some
+    "joint_scaling_learned_hint_fixed_endpoints_train_on_some": joint_scaling_learned_hint_fixed_endpoints_train_on_some,
+    "joint_scaling_learned_hint_fixed_endpoints_sequential_solution": joint_scaling_learned_hint_fixed_endpoints_sequential_solution,
 }
 
 
