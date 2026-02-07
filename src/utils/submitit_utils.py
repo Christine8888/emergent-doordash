@@ -15,6 +15,9 @@ from utils.vllm_server import vLLMServer
 
 logger = logging.getLogger(__name__)
 
+_SMOKE_DEFAULT_PROMPT = "Reply with exactly: OK"
+_SMOKE_DEFAULT_MAX_TOKENS = 8
+
 
 class GPUMonitor:
     def __init__(self, interval: float = 5.0):
@@ -307,3 +310,75 @@ def launch_baseline(
     if not jobs or not wait:
         return jobs
     return _wait_with_retries(jobs, job_meta, executor, poll_interval, max_retries)
+
+
+def run_smoke_inference(
+    model_path: str,
+    tensor_parallel_size: int,
+    config: SubmitConfig,
+    prompt: str = _SMOKE_DEFAULT_PROMPT,
+    max_tokens: int = _SMOKE_DEFAULT_MAX_TOKENS,
+) -> dict:
+    """Start vLLM and run one tiny OpenAI-style request."""
+    from utils.setup import setup_logging
+
+    setup_logging()
+
+    n_gpus = int(os.environ.get("SLURM_GPUS_ON_NODE", tensor_parallel_size))
+    logger.info(f"Allocated {n_gpus} GPUs by SLURM")
+
+    with GPUMonitor(), vLLMServer(
+        model_path=model_path,
+        tensor_parallel_size=tensor_parallel_size,
+        max_model_len=config.max_model_len,
+        gpu_memory_utilization=config.gpu_memory_utilization,
+        n_gpus=n_gpus,
+    ) as server:
+        import openai
+
+        base_url = f"http://localhost:{server.port}/v1"
+        logger.info(f"Sending smoke request to {base_url}")
+        client = openai.OpenAI(base_url=base_url, api_key="local")
+
+        response = client.chat.completions.create(
+            model=server.served_model_name,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_tokens=max_tokens,
+        )
+        text = response.choices[0].message.content
+        logger.info(f"Smoke response: {text!r}")
+        return {
+            "status": "ok",
+            "model_path": model_path,
+            "served_model_name": server.served_model_name,
+            "base_url": base_url,
+            "prompt": prompt,
+            "response": text,
+        }
+
+
+def launch_smoke_inference(
+    model: ModelSpec,
+    config: SubmitConfig | None = None,
+    prompt: str = _SMOKE_DEFAULT_PROMPT,
+    max_tokens: int = _SMOKE_DEFAULT_MAX_TOKENS,
+    wait: bool = True,
+) -> submitit.Job:
+    """Submit a single 1-job smoke test."""
+    config = config or DEFAULT_CONFIG
+    executor = submitit.AutoExecutor(folder=config.submitit_folder)
+    _configure_executor(executor, config, name=f"smoke_{os.path.basename(model.path)}")
+
+    kwargs = dict(
+        model_path=model.path,
+        tensor_parallel_size=model.tp,
+        config=config,
+        prompt=prompt,
+        max_tokens=max_tokens,
+    )
+    job = executor.submit(run_smoke_inference, **kwargs)
+    logger.info(f"submitted {job.job_id}: smoke / {os.path.basename(model.path)}")
+    if wait:
+        job.result()
+    return job

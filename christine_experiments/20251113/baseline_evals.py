@@ -117,10 +117,10 @@ if __name__ == "__main__":
 cd /afs/cs.stanford.edu/u/suzeva/emergent-doordash/christine_experiments/20251113
 python baseline_evals.py --eval bbh --model meta-llama/Llama-3.1-70B-Instruct
 
-running at: 14368114
+running at: 14407660
 
-tail -f /afs/cs.stanford.edu/u/suzeva/emergent-doordash/christine_experiments/20251113/submitit_logs/14368114_0_log.err
+tail -f /afs/cs.stanford.edu/u/suzeva/emergent-doordash/christine_experiments/20251113/submitit_logs/14407660_0_log.err
 
-squeue -j 14368114        # Check if still running
-sacct -j 14368114         # Check completion status
+squeue -j 14407660        # Check if still running
+sacct -j 14407660         # Check completion status
 """
