@@ -1,6 +1,7 @@
 """Submitit utilities for launching experiments."""
 
 import os
+import json
 import logging
 import subprocess
 import time
@@ -203,6 +204,8 @@ def run_single_experiment(
 def run_baseline_eval(
     eval_name: str, model_path: str, tensor_parallel_size: int,
     results_dir: str, config: SubmitConfig, epochs: int = 1, limit: int | None = None,
+    *,
+    max_tokens: int,
     debug: bool = False,
 ) -> dict:
     """Run single baseline eval inside submitit job."""
@@ -217,8 +220,19 @@ def run_baseline_eval(
     output_file = str(Path(results_dir) / eval_name / model_name / f"{eval_name}.json")
     return run_eval_with_vllm(
         task_fn=get_eval(eval_name), model_path=model_path, tensor_parallel_size=tensor_parallel_size,
-        output_file=output_file, config=config, epochs=epochs, limit=limit,
+        output_file=output_file, config=config, epochs=epochs, limit=limit, max_tokens=max_tokens,
     )
+
+
+def _output_json_is_complete(path: str) -> bool:
+    """Return True iff output JSON exists and indicates completion."""
+    if not os.path.exists(path):
+        return False
+    with open(path, "r") as f:
+        data = json.load(f)
+    total = data.get("total_samples")
+    completed = data.get("completed_samples")
+    return isinstance(total, int) and isinstance(completed, int) and total > 0 and completed == total
 
 
 def launch_experiment(
@@ -269,8 +283,10 @@ def launch_experiment(
 
 
 def launch_baseline(
-    eval_names: list[str], models: list[ModelSpec], results_dir: str = "./baseline_results",
+    eval_names: list[str], models: list[ModelSpec], results_dir: str = "./baseline",
     config: SubmitConfig | None = None, epochs: int = 1, limit: int | None = None,
+    *,
+    max_tokens: int,
     skip_existing: bool = True, wait: bool = True, poll_interval: int = 300, max_retries: int = 3,
     debug: bool = False,
 ):
@@ -286,7 +302,7 @@ def launch_baseline(
 
             if skip_existing:
                 output = str(Path(results_dir) / eval_name / model_name / f"{eval_name}.json")
-                if os.path.exists(output):
+                if _output_json_is_complete(output):
                     continue
 
             job_config = config.override(
@@ -299,7 +315,8 @@ def launch_baseline(
 
             kwargs = dict(
                 eval_name=eval_name, model_path=model.path, tensor_parallel_size=model.tp,
-                results_dir=results_dir, config=job_config, epochs=epochs, limit=limit, debug=debug,
+                results_dir=results_dir, config=job_config, epochs=epochs, limit=limit,
+                max_tokens=max_tokens, debug=debug,
             )
             job = executor.submit(run_baseline_eval, **kwargs)
             jobs.append(job)

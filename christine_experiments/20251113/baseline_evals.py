@@ -40,8 +40,11 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default=None,
                         help="Model(s) to run: comma-separated list (e.g. meta-llama/Llama-3.1-70B-Instruct). Default: all models")
     parser.add_argument("--epochs", type=int, default=1)
-    parser.add_argument("--results_dir", type=str, default="./baseline_results")
+    parser.add_argument("--results_dir", type=str, default="./baseline",
+                        help="Directory to write Inspect logs and summary JSONs (default: ./baseline)")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--max_tokens", type=int, default=8192,
+                        help="Max tokens to generate per sample (default: 8192)")
     parser.add_argument("--nodelist", type=str, default=None,
                         help="Override node list (e.g. 'sphinx[10-11]' for sphinx-only)")
     parser.add_argument("--partition", type=str, default=None,
@@ -104,6 +107,7 @@ if __name__ == "__main__":
                 results_dir=args.results_dir,
                 epochs=args.epochs,
                 limit=args.limit,
+                max_tokens=args.max_tokens,
                 poll_interval=30,
                 debug=args.debug,
             )
@@ -117,10 +121,15 @@ if __name__ == "__main__":
 cd /afs/cs.stanford.edu/u/suzeva/emergent-doordash/christine_experiments/20251113
 python baseline_evals.py --eval bbh --model meta-llama/Llama-3.1-70B-Instruct
 
-running at: 14407660
+running at: 14409840
 
-tail -f /afs/cs.stanford.edu/u/suzeva/emergent-doordash/christine_experiments/20251113/submitit_logs/14407660_0_log.err
+tail -f /afs/cs.stanford.edu/u/suzeva/emergent-doordash/christine_experiments/20251113/submitit_logs/14409840_0_log.err
 
-squeue -j 14407660        # Check if still running
-sacct -j 14407660         # Check completion status
+squeue -j 14409840        # Check if still running
+sacct -j 14409840         # Check completion status
+
+
+(older one: 14407660)
+
+NEW: 14426770
 """
