@@ -115,21 +115,3 @@ if __name__ == "__main__":
         ]
         for future in futures:
             future.result()
-
-
-"""
-cd /afs/cs.stanford.edu/u/suzeva/emergent-doordash/christine_experiments/20251113
-python baseline_evals.py --eval bbh --model meta-llama/Llama-3.1-70B-Instruct
-
-running at: 14409840
-
-tail -f /afs/cs.stanford.edu/u/suzeva/emergent-doordash/christine_experiments/20251113/submitit_logs/14409840_0_log.err
-
-squeue -j 14409840        # Check if still running
-sacct -j 14409840         # Check completion status
-
-
-(older one: 14407660)
-
-NEW: 14426770
-"""
