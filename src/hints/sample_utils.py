@@ -1,5 +1,6 @@
 """Shared utilities for sampling scripts."""
 
+import sys
 import asyncio
 import json
 from argparse import ArgumentParser
@@ -8,18 +9,39 @@ from typing import Callable
 from inspect_ai.model import get_model, ChatMessageUser, GenerateConfig
 from tqdm.asyncio import tqdm
 
+_SRC_DIR = Path(__file__).resolve().parent.parent
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 from evals.example import Example
 from utils.setup import setup_env, setup_logging
 
 setup_env()
 logger = setup_logging()
 
+_DEFAULT_DEBUG_MAX_CHARS = 800
+
 
 def create_base_parser(description: str) -> ArgumentParser:
     """Create argument parser with common arguments for sampling scripts."""
     parser = ArgumentParser(description=description)
     parser.add_argument("--eval", type=str, required=True,
-                        choices=["gpqa", "aime", "math", "hle", "arc"],
+                        choices=[
+                            # Internal environments (existing)
+                            "gpqa",
+                            "aime",
+                            "math",
+                            "math_level_5",
+                            "hle",
+                            "arc",
+                            # External baselines (new)
+                            "hellaswag",
+                            "piqa",
+                            "mmlu_5_shot_cot",
+                            "bbh",
+                            "arc_challenge",
+                            "winogrande",
+                        ],
                         help="Eval name")
     parser.add_argument("--output-file", type=str, required=True,
                         help="Output JSONL file path")
@@ -40,6 +62,17 @@ def create_base_parser(description: str) -> ArgumentParser:
                         help="Add answer hint to prompt (rationalize mode)")
     parser.add_argument("--prompt-suffix", type=str, default=None,
                         help="Additional text to append to prompt")
+    parser.add_argument(
+        "--debug-first-problem",
+        action="store_true",
+        help="Print one representative problem's prompt/target and per-attempt accept/reject logs",
+    )
+    parser.add_argument(
+        "--debug-max-chars",
+        type=int,
+        default=_DEFAULT_DEBUG_MAX_CHARS,
+        help=f"Max characters to print when debugging (default: {_DEFAULT_DEBUG_MAX_CHARS})",
+    )
     return parser
 
 
@@ -117,6 +150,9 @@ async def try_sample_once(
     eval_config,
     extra_fields: dict,
     response_to_hint: Callable[[str], any],
+    *,
+    debug_sample_id: str | None,
+    debug_max_chars: int,
     extract_fn: Callable[[str], str] | None = None,
     rationalize: bool = False,
 ) -> dict | None:
@@ -130,6 +166,11 @@ async def try_sample_once(
 
         extracted = extract(response)
         correct = await eval_config.grade_answer(extracted, target)
+
+        if debug_sample_id is not None and sample_id == debug_sample_id:
+            verdict = "ACCEPTED" if correct else "REJECTED"
+            logger.info(f"[debug] {verdict} {sample_id}[{sample_idx}] extracted={extracted!r} target={target!r}")
+            logger.info(f"[debug] response (first {debug_max_chars} chars):\n{response[:debug_max_chars]}")
 
         if correct:
             hint = response_to_hint(response)
@@ -177,6 +218,9 @@ async def run_sampling_loop(
     extract_fn: Callable[[str], str] | None,
     rationalize: bool,
     pbar: tqdm,
+    *,
+    debug_sample_id: str | None,
+    debug_max_chars: int,
 ):
     """Run sampling with queue-based retries."""
     file_lock = asyncio.Lock()
@@ -210,6 +254,8 @@ async def run_sampling_loop(
             eval_config=eval_config,
             extra_fields=task["extra_fields"],
             response_to_hint=response_to_hint,
+            debug_sample_id=debug_sample_id,
+            debug_max_chars=debug_max_chars,
             extract_fn=extract_fn,
             rationalize=rationalize,
         )
@@ -255,6 +301,8 @@ async def run_sampling_loop(
                     eval_config=eval_config,
                     extra_fields=task["extra_fields"],
                     response_to_hint=response_to_hint,
+                    debug_sample_id=debug_sample_id,
+                    debug_max_chars=debug_max_chars,
                     extract_fn=extract_fn,
                     rationalize=rationalize,
                 )
@@ -320,7 +368,8 @@ async def collect_samples(
     total_samples_needed = 0
 
     for sample in all_samples:
-        existing_count = solved_counts.get(sample.id, 0)
+        sample_id = str(sample.id)
+        existing_count = solved_counts.get(sample_id, 0)
         n_needed = args.n_per_question - existing_count
 
         if n_needed > 0:
@@ -338,14 +387,22 @@ async def collect_samples(
                 extra_fields = eval_config.extract_sample_fields(sample)
 
             tasks.append({
-                "sample_id": sample.id,
+                "sample_id": sample_id,
                 "question": sample.input,
                 "prompt": prompt,
-                "target": sample.target,
+                "target": str(sample.target),
                 "extra_fields": extra_fields,
                 "start_idx": existing_count,
                 "n_needed": n_needed,
             })
+
+    debug_sample_id = tasks[0]["sample_id"] if (args.debug_first_problem and tasks) else None
+    if debug_sample_id is not None:
+        t0 = tasks[0]
+        logger.info(f"[debug] printing debug for sample_id={debug_sample_id!r}")
+        logger.info(f"[debug] target: {t0['target']!r}")
+        logger.info(f"[debug] question (first {args.debug_max_chars} chars):\n{t0['question'][:args.debug_max_chars]}")
+        logger.info(f"[debug] prompt (first {args.debug_max_chars} chars):\n{t0['prompt'][:args.debug_max_chars]}")
 
     logger.info(f"Processing {total_samples_needed} samples across {len(tasks)} problems")
     logger.info(f"Target: {args.n_per_question} sample(s) per question")
@@ -372,6 +429,8 @@ async def collect_samples(
         extract_fn=extract_fn,
         rationalize=args.rationalize,
         pbar=pbar,
+        debug_sample_id=debug_sample_id,
+        debug_max_chars=args.debug_max_chars,
     )
 
     pbar.close()
