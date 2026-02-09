@@ -329,10 +329,12 @@ def main() -> None:
                 "Examples:",
                 "  python suze_experiments/20260202/experiments.py --list",
                 "  python suze_experiments/20260202/experiments.py -e joint_scaling_gpqa_solution_intext_masked",
+                "  python suze_experiments/20260202/experiments.py --all",
             ]
         ),
     )
     parser.add_argument("--experiment", "-e", choices=list(EXPERIMENTS.keys()), help="Experiment to run")
+    parser.add_argument("--all", "-all", action="store_true", help="Run all experiments")
     parser.add_argument("--list", "-l", action="store_true", help="List available experiments")
     args = parser.parse_args()
 
@@ -340,6 +342,15 @@ def main() -> None:
         print("Available experiments:")
         for name in EXPERIMENTS.keys():
             print(f"  - {name}")
+        return
+
+    if args.all and args.experiment:
+        parser.error("Please specify only one of --all or --experiment / -e")
+
+    if args.all:
+        for name, experiment_fn in EXPERIMENTS.items():
+            print(f"Running experiment: {name}")
+            experiment_fn()
         return
 
     if not args.experiment:
