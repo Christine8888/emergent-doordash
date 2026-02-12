@@ -29,7 +29,9 @@ def format_prompt(sample: Sample) -> str:
 
     Question already has choices formatted, just add instructions.
     """
-    return DEFAULT_INSTRUCTIONS + "\n\n" + sample.input
+    from hints.sample_utils import sample_input_to_str
+
+    return DEFAULT_INSTRUCTIONS + "\n\n" + sample_input_to_str(sample.input)
 
 
 def extract_sample_fields(sample: Sample) -> dict:

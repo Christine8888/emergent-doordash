@@ -26,7 +26,7 @@ DEFAULT_EVALS = [
     "math_level_5",
 ]
 
-DEFAULT_OUTPUT_ROOT = Path(__file__).resolve().parent.parent / "data" / "hints"
+DEFAULT_OUTPUT_ROOT = Path(__file__).resolve().parent.parent / "data"
 
 
 def _parse_csv(arg: str) -> list[str]:
@@ -72,6 +72,15 @@ def main() -> None:
         default=None,
         help="For math/math_level_5 only: dataset split (train/test/validation).",
     )
+    parser.add_argument(
+        "--debug-first-problem",
+        action="store_true",
+        help="Print the first problem's prompt, target, and graded solution logs.",
+    )
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Only process the first N problems (for debugging)")
+    parser.add_argument("--verbose", action="store_true",
+                        help="Log every API request, response, and grading result")
     args = parser.parse_args()
 
     evals = _parse_csv(args.evals)
@@ -103,6 +112,12 @@ def main() -> None:
 
         if args.math_split is not None and eval_name in ("math", "math_level_5"):
             common_cli += ["--split", args.math_split]
+        if args.debug_first_problem:
+            common_cli += ["--debug-first-problem"]
+        if args.limit is not None:
+            common_cli += ["--limit", str(args.limit)]
+        if args.verbose:
+            common_cli += ["--verbose"]
 
         if args.hint_type in ("cot", "all"):
             out = output_root / "cot" / f"{eval_name}.jsonl"
@@ -121,8 +136,18 @@ if __name__ == "__main__":
 
 
 """
-python suze_experiments/20260209/generate_hint_data.py --hint_type solution
+python suze_experiments/20260209/generate_hint_data.py --hint_type solution --max_retries 5
 
-python suze_experiments/20260209/generate_hint_data.py --evals mmlu_5_shot_cot --hint_type solution --debug-first-problem
+python suze_experiments/20260209/generate_hint_data.py --evals hellaswag --hint_type solution --debug-first-problem --limit 10 --verbose --max_retries 5
 
+
+
+so far working:
+- mmlu_5_shot_cot
+- hellaswag
+- piqa
+- math_level_5
+- bbh
+- arc_challenge
+- winogrande
 """

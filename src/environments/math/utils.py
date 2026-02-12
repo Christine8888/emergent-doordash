@@ -269,7 +269,9 @@ def record_to_sample_prefill(record: dict[str, Any]) -> Sample:
 def sample_to_fewshot(sample: Sample) -> str:
     # Based on https://arxiv.org/pdf/2206.14858 - Appendix D.2
     # Tags are capitalized to match the format of the user prompt
-    prob_str = f"""PROBLEM:\n{sample.input}"""
+    from hints.sample_utils import sample_input_to_str
+
+    prob_str = f"""PROBLEM:\n{sample_input_to_str(sample.input)}"""
     soln = sample.metadata["solution"] if sample.metadata is not None else None
     assert soln is not None, (
         "Solution not found in sample, make sure to include it in the 'sample.metadata' dict."

@@ -93,6 +93,16 @@ def _validate_answer_letter(letter: str, num_choices: int) -> bool:
     return letter in allowed_options
 
 
+def _strip_parens(s: str) -> str:
+    """Strip surrounding parentheses: (a) -> a, a) -> a."""
+    s = s.strip()
+    if s.startswith("(") and s.endswith(")"):
+        s = s[1:-1].strip()
+    elif s.endswith(")") and "(" not in s:
+        s = s[:-1].strip()
+    return s
+
+
 async def grade_answer(extracted_letter: str, target: str) -> bool:
     """Grade GPQA answer by comparing extracted letter to target.
 
@@ -106,4 +116,4 @@ async def grade_answer(extracted_letter: str, target: str) -> bool:
     if not extracted_letter:
         return False
 
-    return extracted_letter.upper() == target.upper()
+    return _strip_parens(extracted_letter).upper() == _strip_parens(target).upper()

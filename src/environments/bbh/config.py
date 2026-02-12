@@ -11,6 +11,22 @@ DEFAULT_INSTRUCTIONS = (
 )
 
 
+def _normalize_bbh_answer(answer: str) -> str:
+    """Normalize a BBH answer for comparison.
+
+    Handles both MCQ answers like (b), B), b and free-text answers.
+    Strips surrounding parentheses, trailing ), and lowercases.
+    """
+    s = answer.strip()
+    # Strip surrounding parentheses: (b) -> b
+    if len(s) >= 2 and s.startswith("(") and s.endswith(")"):
+        s = s[1:-1].strip()
+    # Strip trailing ) without leading (: B) -> B
+    elif len(s) >= 2 and s.endswith(")") and "(" not in s:
+        s = s[:-1].strip()
+    return s.lower()
+
+
 def get_dataset():
     """Load BBH dataset via inspect-evals Task."""
     from inspect_evals.bbh import bbh
@@ -37,13 +53,21 @@ def extract_answer(response: str) -> str:
 
 
 async def grade_answer(extracted_answer: str, target: str) -> bool:
-    """Conservative grading: strip and compare to target."""
-    return extracted_answer.strip() == str(target).strip()
+    """Grade by normalizing both sides (case-insensitive, strip parens)."""
+    if not extracted_answer:
+        return False
+    return _normalize_bbh_answer(extracted_answer) == _normalize_bbh_answer(str(target))
 
 
 def format_prompt(sample: Sample) -> str:
-    """Format prompt with generic free-form instructions."""
-    return DEFAULT_INSTRUCTIONS + sample.input
+    """Format prompt with generic free-form instructions (including choices if present)."""
+    from hints.sample_utils import sample_input_to_str, format_choices_for_prompt
+
+    input_text = sample_input_to_str(sample.input)
+    choices_str = format_choices_for_prompt(getattr(sample, "choices", None))
+    if choices_str:
+        input_text = input_text + "\n\n" + choices_str
+    return DEFAULT_INSTRUCTIONS + input_text
 
 
 def extract_sample_fields(sample: Sample) -> dict:
