@@ -28,9 +28,11 @@ def format_prompt(sample: Sample) -> str:
     """Format ARC question.
 
     The prompt is already fully constructed in sample.input,
-    so we just return it directly.
+    so we just return it (with sample_input_to_str for list support).
     """
-    return sample.input
+    from hints.sample_utils import sample_input_to_str
+
+    return sample_input_to_str(sample.input)
 
 
 def extract_sample_fields(sample: Sample) -> dict:

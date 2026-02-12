@@ -27,9 +27,11 @@ async def grade_answer(extracted_answer: str, target: str) -> bool:
 
 def format_prompt(sample: Sample) -> str:
     """Format MATH prompt using solver template."""
+    from hints.sample_utils import sample_input_to_str
+
     current_task = DEFAULT_EXAMPLE_TEMPLATE.format(
-        question=sample.input,
-        solution=""
+        question=sample_input_to_str(sample.input),
+        solution="",
     )
     return DEFAULT_INSTRUCTIONS + "\n\n" + current_task
 

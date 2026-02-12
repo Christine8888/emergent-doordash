@@ -10,7 +10,14 @@ Usage:
     python sample_cot.py --eval aime --output-file results.jsonl
     python sample_cot.py --eval math --output-file results.jsonl --split train
 """
+import sys
 import asyncio
+from pathlib import Path
+
+_SRC_DIR = Path(__file__).resolve().parent.parent
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 from hints.sample_utils import collect_samples, create_base_parser
 
 

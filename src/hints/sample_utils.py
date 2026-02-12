@@ -1,5 +1,6 @@
 """Shared utilities for sampling scripts."""
 
+import sys
 import asyncio
 import json
 from argparse import ArgumentParser
@@ -8,18 +9,76 @@ from typing import Callable
 from inspect_ai.model import get_model, ChatMessageUser, GenerateConfig
 from tqdm.asyncio import tqdm
 
+_SRC_DIR = Path(__file__).resolve().parent.parent
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
+
 from evals.example import Example
 from utils.setup import setup_env, setup_logging
 
 setup_env()
 logger = setup_logging()
 
+CHOICE_LABELS = "abcdefghijklmnopqrstuvwxyz"
+
+
+def sample_input_to_str(input_val) -> str:
+    """Convert sample.input to string; handles both str and list-of-messages (e.g. mmlu_5_shot_cot)."""
+    if isinstance(input_val, str):
+        return input_val
+    if isinstance(input_val, list):
+        parts = []
+        for msg in input_val:
+            if hasattr(msg, "content") and msg.content:
+                parts.append(str(msg.content))
+        return "\n\n".join(parts)
+    return str(input_val)
+
+
+def format_choices_for_prompt(choices: list[str] | None) -> str:
+    """Format multiple-choice options as (a) ..., (b) ..., etc. Returns empty string if no choices."""
+    if not choices:
+        return ""
+    lines = []
+    for i, choice in enumerate(choices):
+        if i < len(CHOICE_LABELS):
+            lines.append(f"({CHOICE_LABELS[i]}) {choice}")
+    return "\n".join(lines)
+
+
+def append_choices_to_messages(messages: list, choices: list[str] | None) -> list:
+    """Return copy of messages with choices appended to the last user message."""
+    choices_str = format_choices_for_prompt(choices)
+    if not choices_str:
+        return messages
+    result = list(messages)
+    for i in range(len(result) - 1, -1, -1):
+        if hasattr(result[i], "role") and result[i].role == "user":
+            result[i] = ChatMessageUser(content=result[i].content + "\n\n" + choices_str)
+            break
+    return result
+
 
 def create_base_parser(description: str) -> ArgumentParser:
     """Create argument parser with common arguments for sampling scripts."""
     parser = ArgumentParser(description=description)
     parser.add_argument("--eval", type=str, required=True,
-                        choices=["gpqa", "aime", "math", "hle", "arc"],
+                        choices=[
+                            # Internal environments (existing)
+                            "gpqa",
+                            "aime",
+                            "math",
+                            "math_level_5",
+                            "hle",
+                            "arc",
+                            # External baselines (new)
+                            "hellaswag",
+                            "piqa",
+                            "mmlu_5_shot_cot",
+                            "bbh",
+                            "arc_challenge",
+                            "winogrande",
+                        ],
                         help="Eval name")
     parser.add_argument("--output-file", type=str, required=True,
                         help="Output JSONL file path")
@@ -40,6 +99,15 @@ def create_base_parser(description: str) -> ArgumentParser:
                         help="Add answer hint to prompt (rationalize mode)")
     parser.add_argument("--prompt-suffix", type=str, default=None,
                         help="Additional text to append to prompt")
+    parser.add_argument(
+        "--debug-first-problem",
+        action="store_true",
+        help="Print one representative problem's prompt/target and per-attempt accept/reject logs",
+    )
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Only process the first N problems (for debugging)")
+    parser.add_argument("--verbose", action="store_true",
+                        help="Log every API request, response, and grading result")
     return parser
 
 
@@ -83,24 +151,52 @@ def log_sample_statistics(solved_counts: dict[str, int], n_total_problems: int):
     logger.info(f"  Total samples: {sum(solved_counts.values())}")
 
 
+def _to_model_input(model_input: list | str):
+    """Convert to format expected by model.generate: list of messages."""
+    if isinstance(model_input, list):
+        return model_input
+    return [ChatMessageUser(content=model_input)]
+
+
 async def sample_solution(
-    prompt: str,
+    model_input: list | str,
     model_id: str,
     temperature: float,
     max_tokens: int,
     max_connections: int,
+    *,
+    sample_id: str = "",
+    verbose: bool = False,
+    semaphore: asyncio.Semaphore | None = None,
 ) -> str:
-    """Sample a single solution from the model."""
-    messages = [ChatMessageUser(content=prompt)]
+    """Sample a single solution from the model.
+
+    model_input: Either a list of ChatMessage (same format as baseline) or a prompt string.
+    semaphore: Optional semaphore to limit concurrent API calls.
+    """
+    messages = _to_model_input(model_input)
     config = GenerateConfig(
         temperature=temperature,
         max_tokens=max_tokens,
         max_connections=max_connections
     )
 
-    async with get_model(model_id, config=config) as model:
-        response = await model.generate(input=messages)
+    # Gate on semaphore so at most max_concurrent requests are in-flight
+    if semaphore is not None:
+        await semaphore.acquire()
 
+    try:
+        if verbose:
+            logger.info(f"  [{sample_id}] sending request to {model_id}...")
+        async with get_model(model_id, config=config) as model:
+            response = await model.generate(input=messages)
+    finally:
+        if semaphore is not None:
+            semaphore.release()
+
+    if verbose:
+        n_tokens = response.usage.output_tokens if response.usage else "?"
+        logger.info(f"  [{sample_id}] received {n_tokens} output tokens")
     return response.completion
 
 
@@ -108,59 +204,69 @@ async def try_sample_once(
     sample_id: str,
     question: str,
     prompt: str,
+    model_input: list | str,
     target: str,
     model_id: str,
     temperature: float,
     max_tokens: int,
     max_connections: int,
     sample_idx: int,
+    attempt: int,
     eval_config,
     extra_fields: dict,
     response_to_hint: Callable[[str], any],
+    *,
+    debug_sample_id: str | None,
     extract_fn: Callable[[str], str] | None = None,
     rationalize: bool = False,
+    verbose: bool = False,
+    semaphore: asyncio.Semaphore | None = None,
 ) -> dict | None:
     """Try sampling once. Returns result dict if successful, None if failed."""
     extract = extract_fn if extract_fn is not None else eval_config.extract_answer
 
-    try:
-        response = await sample_solution(
-            prompt, model_id, temperature, max_tokens, max_connections
-        )
+    response = await sample_solution(
+        model_input, model_id, temperature, max_tokens, max_connections,
+        sample_id=sample_id,
+        verbose=verbose,
+        semaphore=semaphore,
+    )
 
-        extracted = extract(response)
-        correct = await eval_config.grade_answer(extracted, target)
+    extracted = extract(response)
+    correct = await eval_config.grade_answer(extracted, target)
 
-        if correct:
-            hint = response_to_hint(response)
+    if verbose:
+        verdict = "CORRECT" if correct else "INCORRECT"
+        logger.info(f"  [{sample_id}][attempt {attempt}] {verdict} | extracted={extracted!r} target={target!r}")
 
-            if not hint or not hint.strip():
-                logger.warning(f"  {sample_id}: Answer correct but hint extraction failed")
-                return None
+    if debug_sample_id is not None and sample_id == debug_sample_id:
+        logger.info(f"[debug] response:\n{response}")
 
-            metadata = {"model": model_id}
-            if rationalize:
-                metadata["rationalize"] = True
+    if correct:
+        hint = response_to_hint(response)
 
-            example = Example(
-                id=sample_id,
-                question=question,
-                target=target,
-                response=response,
-                hint=hint,
-                sample_idx=sample_idx,
-                prompt=prompt,
-                metadata=metadata,
-            )
-            result = example.to_dict()
-            result.update(extra_fields)
-            return result
-        else:
-            logger.info(f"  {sample_id}: ANSWER: {extracted} | TARGET: {target}")
+        if not hint or not hint.strip():
+            logger.warning(f"  {sample_id}: Answer correct but hint extraction failed. Response (first 500 chars):\n{response[:500]}")
             return None
 
-    except Exception as e:
-        logger.error(f"  {sample_id}: {e}")
+        metadata = {"model": model_id}
+        if rationalize:
+            metadata["rationalize"] = True
+
+        example = Example(
+            id=sample_id,
+            question=question,
+            target=target,
+            response=response,
+            hint=hint,
+            sample_idx=sample_idx,
+            prompt=prompt,
+            metadata=metadata,
+        )
+        result = example.to_dict()
+        result.update(extra_fields)
+        return result
+    else:
         return None
 
 
@@ -177,9 +283,13 @@ async def run_sampling_loop(
     extract_fn: Callable[[str], str] | None,
     rationalize: bool,
     pbar: tqdm,
+    *,
+    debug_sample_id: str | None,
+    verbose: bool = False,
 ):
     """Run sampling with queue-based retries."""
     file_lock = asyncio.Lock()
+    semaphore = asyncio.Semaphore(max_connections)
 
     # Track state per problem: {sample_id: {"attempts": int, "collected": int, "next_idx": int, "n_target": int}}
     problem_state = {}
@@ -197,21 +307,27 @@ async def run_sampling_loop(
 
     for task in initial_tasks:
         state = problem_state[task["sample_id"]]
+        attempt_num = state["attempts"]
         coro = try_sample_once(
             sample_id=task["sample_id"],
             question=task["question"],
             prompt=task["prompt"],
+            model_input=task["model_input"],
             target=task["target"],
             model_id=model_id,
             temperature=temperature,
             max_tokens=max_tokens,
             max_connections=max_connections,
             sample_idx=state["next_idx"],
+            attempt=attempt_num,
             eval_config=eval_config,
             extra_fields=task["extra_fields"],
             response_to_hint=response_to_hint,
+            debug_sample_id=debug_sample_id,
             extract_fn=extract_fn,
             rationalize=rationalize,
+            verbose=verbose,
+            semaphore=semaphore,
         )
         t = asyncio.create_task(coro)
         pending.add(t)
@@ -242,21 +358,27 @@ async def run_sampling_loop(
 
             if needs_more and can_retry:
                 # Queue another attempt
+                attempt_num = state["attempts"]
                 coro = try_sample_once(
                     sample_id=task["sample_id"],
                     question=task["question"],
                     prompt=task["prompt"],
+                    model_input=task["model_input"],
                     target=task["target"],
                     model_id=model_id,
                     temperature=temperature,
                     max_tokens=max_tokens,
                     max_connections=max_connections,
                     sample_idx=state["next_idx"],
+                    attempt=attempt_num,
                     eval_config=eval_config,
                     extra_fields=task["extra_fields"],
                     response_to_hint=response_to_hint,
+                    debug_sample_id=debug_sample_id,
                     extract_fn=extract_fn,
                     rationalize=rationalize,
+                    verbose=verbose,
+                    semaphore=semaphore,
                 )
                 new_t = asyncio.create_task(coro)
                 pending.add(new_t)
@@ -302,6 +424,10 @@ async def collect_samples(
     dataset = eval_config.get_dataset(**dataset_kwargs)
     all_samples = list(dataset)
 
+    if args.limit is not None:
+        all_samples = all_samples[:args.limit]
+        logger.info(f"Limiting to first {args.limit} problems")
+
     logger.info(f"Loaded {len(all_samples)} problems")
 
     # Setup output
@@ -313,39 +439,76 @@ async def collect_samples(
     log_sample_statistics(solved_counts, len(all_samples))
 
     # Use provided format_fn or fall back to eval_config.format_prompt
-    format_prompt = format_fn if format_fn is not None else eval_config.format_prompt
+    format_prompt_fn = format_fn if format_fn is not None else eval_config.format_prompt
 
     # Create task dicts for problems that need more samples
     tasks = []
     total_samples_needed = 0
 
     for sample in all_samples:
-        existing_count = solved_counts.get(sample.id, 0)
+        sample_id = str(sample.id)
+        existing_count = solved_counts.get(sample_id, 0)
         n_needed = args.n_per_question - existing_count
 
         if n_needed > 0:
             total_samples_needed += n_needed
 
-            prompt = format_prompt(sample)
+            fmt_result = format_prompt_fn(sample)
+            if isinstance(fmt_result, tuple):
+                model_input, prompt = fmt_result
+            else:
+                prompt = fmt_result
+                # Match baseline: use raw message list when eval provides it (e.g. mmlu_5_shot_cot)
+                if hasattr(eval_config, "get_model_input"):
+                    raw = eval_config.get_model_input(sample)
+                    model_input = raw if raw is not None else prompt
+                else:
+                    model_input = prompt
+
             if args.prompt_suffix:
-                prompt = prompt + "\n\n" + args.prompt_suffix
+                suffix = "\n\n" + args.prompt_suffix
+                prompt = prompt + suffix
+                if isinstance(model_input, str):
+                    model_input = model_input + suffix
+                else:
+                    model_input = list(model_input) + [ChatMessageUser(content=args.prompt_suffix)]
             if args.rationalize:
                 rationalize_hint = f"HINT: The answer is {sample.target}. Please still produce a fully natural chain of thought and solution that does not reveal the answer early, but that reaches this answer after actually properly solving the problem in full detail. Do not mention this hint anywhere in your response."
                 prompt = prompt + "\n\n" + rationalize_hint
+                if isinstance(model_input, str):
+                    model_input = model_input + "\n\n" + rationalize_hint
+                else:
+                    model_input = list(model_input) + [ChatMessageUser(content=rationalize_hint)]
 
             extra_fields = {}
             if hasattr(eval_config, "extract_sample_fields"):
                 extra_fields = eval_config.extract_sample_fields(sample)
 
+            # Include choices in the question text for display/storage
+            question_text = sample_input_to_str(sample.input)
+            choices = getattr(sample, "choices", None)
+            choices_str = format_choices_for_prompt(choices)
+            if choices_str:
+                question_text = question_text + "\n\n" + choices_str
+
             tasks.append({
-                "sample_id": sample.id,
-                "question": sample.input,
+                "sample_id": sample_id,
+                "question": question_text,
                 "prompt": prompt,
-                "target": sample.target,
+                "model_input": model_input,
+                "target": str(sample.target),
                 "extra_fields": extra_fields,
                 "start_idx": existing_count,
                 "n_needed": n_needed,
             })
+
+    debug_sample_id = tasks[0]["sample_id"] if (args.debug_first_problem and tasks) else None
+    if debug_sample_id is not None:
+        t0 = tasks[0]
+        logger.info(f"[debug] printing debug for sample_id={debug_sample_id!r}")
+        logger.info(f"[debug] target: {t0['target']!r}")
+        logger.info(f"[debug] question:\n{t0['question']}")
+        logger.info(f"[debug] prompt:\n{t0['prompt']}")
 
     logger.info(f"Processing {total_samples_needed} samples across {len(tasks)} problems")
     logger.info(f"Target: {args.n_per_question} sample(s) per question")
@@ -372,6 +535,8 @@ async def collect_samples(
         extract_fn=extract_fn,
         rationalize=args.rationalize,
         pbar=pbar,
+        debug_sample_id=debug_sample_id,
+        verbose=getattr(args, "verbose", False),
     )
 
     pbar.close()

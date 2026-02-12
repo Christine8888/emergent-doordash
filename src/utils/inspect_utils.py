@@ -12,6 +12,13 @@ def extract_scores_from_log(log: EvalLog) -> Dict[str, Any]:
     Returns:
         Dictionary containing extracted results including metadata
     """
+    if log.results is None:
+        # Eval failed before producing results - extract error info
+        error_msg = f"Eval failed: status={log.status}"
+        if log.error:
+            error_msg += f", error={log.error.message}"
+        raise RuntimeError(error_msg)
+
     results = {
         "model": log.eval.model,
         "total_samples": log.results.total_samples,

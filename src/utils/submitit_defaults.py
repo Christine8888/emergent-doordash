@@ -1,6 +1,24 @@
 """Global submitit configuration defaults."""
 
+import getpass
 from dataclasses import dataclass, field, replace
+
+# User-specific setup scripts
+_SETUP_SCRIPTS = {
+    "cye": "/sphinx/u/cye/emergent-doordash/scripts/setup_env.sh",
+    "suzeva": "/afs/cs.stanford.edu/u/suzeva/emergent-doordash/scripts/setup_env_suze.sh",
+}
+
+def _get_setup_commands() -> list:
+    """Get setup commands for current user."""
+    user = getpass.getuser()
+    if user not in _SETUP_SCRIPTS:
+        raise RuntimeError(
+            f"Unknown user '{user}' for submitit setup script. "
+            f"Add your script path to _SETUP_SCRIPTS in {__file__}."
+        )
+    script = _SETUP_SCRIPTS[user]
+    return [f"source {script}"]
 
 
 @dataclass
@@ -32,9 +50,7 @@ class SubmitConfig:
 
     # Submitit config
     submitit_folder: str = "./submitit_logs"
-    setup_commands: list = field(default_factory=lambda: [
-        "source /sphinx/u/cye/emergent-doordash/scripts/setup_env.sh",
-    ])
+    setup_commands: list = field(default_factory=_get_setup_commands)
 
     def override(self, **kwargs) -> "SubmitConfig":
         """Create new config with overrides."""

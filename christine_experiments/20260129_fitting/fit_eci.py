@@ -9,6 +9,7 @@ Two modes:
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 # Project root (works on any machine)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -50,6 +51,9 @@ EVAL_TO_ECI = {
     # "gpqa": "GPQA diamond",
 }
 
+# All user models are expected to have scores for all of these benchmarks.
+REQUIRED_ECI_BENCHMARKS = sorted(set(EVAL_TO_ECI.values()))
+
 # For full mode only: anchor models for rescaling
 ANCHOR1 = ("claude-3-5-sonnet-20240620", 130.0)
 ANCHOR2 = ("gpt-5-2025-08-07_medium", 150.0)
@@ -57,9 +61,43 @@ ANCHOR2 = ("gpt-5-2025-08-07_medium", 150.0)
 # For full mode only: benchmarks to exclude
 EXCLUDE_BENCHMARKS = ["OTIS Mock AIME 2024-2025"]
 
+
+def _raise_if_missing_required_scores(
+    scores: pd.DataFrame,
+    required_benchmarks: list[str],
+    *,
+    only_models: list[str] | None = None,
+    label: str,
+) -> None:
+    """Raise if any model is missing any required benchmark score."""
+    required = set(required_benchmarks)
+    models = sorted(set(scores["model"].unique())) if only_models is None else sorted(set(only_models))
+
+    missing_by_model: dict[str, list[str]] = {}
+    for model in models:
+        have = set(scores.loc[scores["model"] == model, "benchmark"].unique())
+        missing = sorted(required - have)
+        if missing:
+            missing_by_model[model] = missing
+
+    if not missing_by_model:
+        return
+
+    lines = [
+        f"{label}: missing required benchmark scores for {len(missing_by_model)} model(s).",
+        f"Required benchmarks ({len(required_benchmarks)}): {required_benchmarks}",
+        "",
+    ]
+    for model in sorted(missing_by_model.keys()):
+        missing = missing_by_model[model]
+        lines.append(f"- {model}: missing {len(missing)} -> {missing}")
+    raise ValueError("\n".join(lines))
+
+
 # %%
 # Load Epoch's pre-computed ECI scores for comparison
-epoch_eci = load_epoch_eci()
+epoch_eci = load_epoch_eci() # this loads existing eci scores
+print(epoch_eci)
 print(f"Loaded {len(epoch_eci)} Epoch ECI scores for comparison")
 
 # %%
@@ -68,7 +106,7 @@ print("\nLoading baseline results...")
 user_rows = []
 
 for eval_name, eci_benchmark in EVAL_TO_ECI.items():
-    df = load_baseline(str(BASELINE_FOLDER), eval_name)
+    df = load_baseline(str(BASELINE_FOLDER), eval_name) # loads benchmark scores for baselines: no hinting, just model performance on a specific benchmark
     if df.empty:
         print(f"  {eval_name}: no results")
         continue
@@ -89,6 +127,14 @@ user_models = list(user_scores["model"].unique())
 print(f"\nTotal user scores: {len(user_scores)}")
 print(f"User models: {len(user_models)}")
 
+# Enforce completeness: every user model must have every required ECI benchmark score.
+_raise_if_missing_required_scores(
+    user_scores,
+    REQUIRED_ECI_BENCHMARKS,
+    only_models=user_models,
+    label="User baseline results",
+)
+
 # %%
 # Fit ECI based on mode
 print(f"\n{'='*70}")
@@ -100,7 +146,10 @@ if MODE == "simple":
     print("\nUsing Epoch's pre-fitted benchmark parameters (D, α)")
     print("Only estimating model capabilities (C)")
 
-    eci_scores = estimate_eci_from_epoch_params(user_scores, min_benchmarks=3)
+    eci_scores = estimate_eci_from_epoch_params(
+        user_scores,
+        min_benchmarks=len(REQUIRED_ECI_BENCHMARKS),
+    )
 
     print(f"\nEstimated ECI for {len(eci_scores)} models")
 
@@ -118,12 +167,20 @@ elif MODE == "full":
     combined = combined.drop_duplicates(subset=["model", "benchmark"], keep="last")
     print(f"Combined: {len(combined)} scores, {combined['model'].nunique()} models")
 
+    # Enforce completeness on all models used for fitting.
+    required_for_fit = sorted(set(REQUIRED_ECI_BENCHMARKS) - set(EXCLUDE_BENCHMARKS))
+    _raise_if_missing_required_scores(
+        combined,
+        required_for_fit,
+        label="Combined Epoch + user data (for fitting)",
+    )
+
     # Fit
     result = fit_eci(
         combined,
         anchor_benchmark="Winogrande",
         reg_strength=0.1,
-        min_benchmarks=3,
+        min_benchmarks=len(required_for_fit),
         exclude_benchmarks=EXCLUDE_BENCHMARKS,
     )
     print(f"RMSE: {result['rmse']:.4f}")
