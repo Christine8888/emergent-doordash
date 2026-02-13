@@ -39,6 +39,7 @@ EVAL_TO_ECI = {
     "bbh": "BBH",
     "arc_challenge": "ARC AI2",  # Epoch only uses Challenge score
     "winogrande": "Winogrande",  # 0-shot, 8192 tokens
+    "math_level_5": "MATH level 5",
 }
 
 REQUIRED_BENCHMARKS = list(EVAL_TO_ECI.values())
@@ -161,9 +162,11 @@ def _plot_explained_variance(evr: np.ndarray, outfile: Path, *, top_n: int) -> N
 
 
 def main() -> None:
+    # python suze_experiments/20260212/pca.py
     from src.modelx import load_baseline
 
     rows: list[dict[str, object]] = []
+    counts_by_benchmark: dict[str, int] = {}
     for eval_name, benchmark_name in EVAL_TO_ECI.items():
         df = load_baseline(str(BASELINE_FOLDER), eval_name)
         if df.empty:
@@ -172,25 +175,42 @@ def main() -> None:
         if "accuracy" not in df.columns:
             raise ValueError(f"Baseline DataFrame for '{eval_name}' is missing required 'accuracy' column")
 
+        models_with_score: set[str] = set()
         for _, r in df.iterrows():
             acc = r.get("accuracy")
             if pd.notna(acc):
+                model_name = str(r["model"])
+                models_with_score.add(model_name)
                 rows.append(
                     {
-                        "model": str(r["model"]),
+                        "model": model_name,
                         "benchmark": str(benchmark_name),
                         "score": float(acc),
                     }
                 )
+        counts_by_benchmark[str(benchmark_name)] = len(models_with_score)
 
     scores = pd.DataFrame(rows)
     if scores.empty:
         raise ValueError("No baseline scores loaded (unexpected).")
 
     pivot = scores.pivot_table(index="model", columns="benchmark", values="score", aggfunc="mean")
+
+    print("\n=== PCA inputs (ECI component benchmarks) ===")
+    print(f"Baseline folder: {BASELINE_FOLDER}")
+    print(f"Required benchmarks ({len(REQUIRED_BENCHMARKS)}): {REQUIRED_BENCHMARKS}")
+    print("\nModels with scores per benchmark (from baselines):")
+    for bench in REQUIRED_BENCHMARKS:
+        print(f"- {bench}: {counts_by_benchmark.get(bench, 0)} models")
+
     _raise_if_missing_required_scores(pivot, REQUIRED_BENCHMARKS)
 
     pivot = pivot[REQUIRED_BENCHMARKS].sort_index()
+    models_used = pivot.index.tolist()
+    print(f"\nModels used for PCA ({len(models_used)}):")
+    for m in models_used:
+        print(f"- {m}")
+
     x = pivot.to_numpy(dtype=float)
     xz, _, _ = _zscore_columns(x)
 
