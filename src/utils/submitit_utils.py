@@ -235,18 +235,78 @@ def _output_json_is_complete(path: str) -> bool:
     return isinstance(total, int) and isinstance(completed, int) and total > 0 and completed == total
 
 
+def _get_running_job_configs(submitit_folder: str) -> set[tuple]:
+    """Get set of (model_name, fewshot, hint_fraction) for currently running/pending jobs.
+    
+    Checks SLURM queue to find actually running/pending jobs, then gets their configs.
+    """
+    import glob
+    import subprocess
+    from pathlib import Path
+    
+    running_configs = set()
+    
+    # Get list of actually running/pending job IDs from SLURM
+    try:
+        result = subprocess.run(
+            ["squeue", "-u", os.environ.get("USER", ""), "-h", "-o", "%i"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            active_job_ids = set(result.stdout.strip().split())
+        else:
+            logger.warning("Failed to get SLURM queue, will not skip running jobs")
+            return running_configs
+    except Exception as e:
+        logger.warning(f"Failed to check SLURM queue: {e}, will not skip running jobs")
+        return running_configs
+    
+    # For each active job, try to get its configuration
+    for job_id in active_job_ids:
+        submitted_file = os.path.join(submitit_folder, f"{job_id}_submitted.pkl")
+        if os.path.exists(submitted_file):
+            try:
+                import pickle
+                with open(submitted_file, "rb") as f:
+                    job_info = pickle.load(f)
+                    # Extract configuration from job kwargs
+                    if hasattr(job_info, 'kwargs'):
+                        kwargs = job_info.kwargs
+                        model_path = kwargs.get('model_path', '')
+                        model_name = os.path.basename(model_path)
+                        fewshot = kwargs.get('fewshot')
+                        hint_fraction = kwargs.get('hint_fraction')
+                        if model_name and fewshot is not None and hint_fraction is not None:
+                            running_configs.add((model_name, fewshot, hint_fraction))
+            except Exception:
+                # If we can't read the pickle, skip it
+                pass
+    
+    return running_configs
+
+
 def launch_experiment(
     experiment_class, models: list[ModelSpec], hint_fractions: list[float],
     fewshots: list[int] = [0], epochs: int = 1, results_dir: str = "./results",
     config: SubmitConfig | None = None, skip_existing: bool = True,
     wait: bool = True, poll_interval: int = 300, max_retries: int = 3,
-    debug: bool = False,
+    debug: bool = False, max_jobs: int | None = None,
 ):
-    """Launch experiment grid with retry logic."""
+    """Launch experiment grid with retry logic.
+    
+    Args:
+        max_jobs: Maximum number of jobs to submit (default: None = no limit)
+        skip_existing: Skip jobs with existing output files or currently running (default: True)
+    """
     config = config or DEFAULT_CONFIG
     executor = submitit.AutoExecutor(folder=config.submitit_folder)
     jobs = []
     job_meta = {}
+    
+    # Get currently running/pending jobs to avoid duplicates
+    running_configs = _get_running_job_configs(config.submitit_folder) if skip_existing else set()
+    if running_configs:
+        logger.info(f"Found {len(running_configs)} jobs already running/pending, will skip those")
 
     for model in models:
         model_name = os.path.basename(model.path)
@@ -261,10 +321,22 @@ def launch_experiment(
         for fewshot in fewshots:
             for hint_fraction in hint_fractions:
                 if skip_existing:
+                    # Check if output file already exists
                     output = experiment_class.get_output_filename(
                         results_dir=results_dir, model_name=model_name, fewshot=fewshot, hint_fraction=hint_fraction)
                     if os.path.exists(output):
                         continue
+                    
+                    # Check if job is already running/pending
+                    config_tuple = (model_name, fewshot, hint_fraction)
+                    if config_tuple in running_configs:
+                        logger.info(f"Skipping {model_name}, fewshot={fewshot}, hint={hint_fraction} (already running)")
+                        continue
+
+                # Check if we've reached the max_jobs limit
+                if max_jobs is not None and len(jobs) >= max_jobs:
+                    logger.warning(f"Reached max_jobs limit of {max_jobs}, stopping submission")
+                    break
 
                 kwargs = dict(
                     experiment_class=experiment_class, model_path=model.path,
@@ -275,6 +347,14 @@ def launch_experiment(
                 jobs.append(job)
                 job_meta[str(job.job_id)] = {'config': job_config, 'name': job_name, 'fn': run_single_experiment, 'kwargs': kwargs}
                 logger.info(f"submitted {job.job_id}: {model_name}, fewshot={fewshot}, hint={hint_fraction}")
+            
+            # Break from fewshot loop if max_jobs reached
+            if max_jobs is not None and len(jobs) >= max_jobs:
+                break
+        
+        # Break from model loop if max_jobs reached
+        if max_jobs is not None and len(jobs) >= max_jobs:
+            break
 
     logger.info(f"submitted {len(jobs)} jobs")
     if not jobs or not wait:
