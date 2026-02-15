@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 # Explicit node lists by GPU capability
-SMALL_MODEL_NODES = "sphinx[1-11],miso[1-5],jagupard[32-39]"  # A100/H100/H200 + A6000 - for ≤4B
+SMALL_MODEL_NODES = "sphinx[1-11],miso[1-5]" #,jagupard[32-39]"  # A100/H100/H200 + A6000 - for ≤4B
 LARGE_MODEL_NODES = "sphinx[1-11],miso[1-5]"  # A100/H100/H200 only - for 8B-14B
 H200_NODES = "sphinx[10-11],miso[1-5]"  # H200 only - for 32B+ with TP=1
 

@@ -37,7 +37,7 @@ class SubmitConfig:
     gpus_per_job: int | None = None
     cpus_per_task: int = 4
     mem_gb: int = 64
-    time_hours: int = 48
+    time_hours: int = 60
 
     # vLLM config
     max_model_len: int = 32768

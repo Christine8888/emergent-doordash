@@ -15,6 +15,7 @@ from evals.prefill import PrefillConfig
 from evals.solvers import instructions, intext, prefill, generate
 from utils.submitit_utils import launch_experiment
 from utils.model_config import QWEN3_MODELS, QWEN25_MODELS, GEMMA_MODELS, LLAMA_MODELS
+from utils.submitit_defaults import DEFAULT_CONFIG
 from utils.setup import setup_logging
 
 HF_TOKEN_PATH = "/afs/cs.stanford.edu/u/suzeva/hf.tok"
@@ -29,7 +30,13 @@ with open(HF_TOKEN_PATH, "r") as f:
 logger = setup_logging()
 
 
-def make_experiment(hint_type: str, solver_type: str, mode: str = "sequential"):
+def make_experiment(
+    hint_type: str,
+    solver_type: str,
+    mode: str = "sequential",
+    *,
+    max_tokens: int = 8000,
+):
     _name = f"{hint_type}_{solver_type}_{mode}"
     _data_path = f"{BASE_DIR}/{hint_type}/gpqa.jsonl"
 
@@ -52,20 +59,23 @@ def make_experiment(hint_type: str, solver_type: str, mode: str = "sequential"):
             solver = [
                 instructions(DEFAULT_INSTRUCTIONS),
                 hint_solver,
-                generate(max_tokens=8000, timeout=self.timeout),
+                generate(max_tokens=max_tokens, timeout=self.timeout),
             ]
             return gpqa_diamond(sample_ids=sample_ids, solver=solver)
 
     return _Experiment
 
-EXPERIMENTS = {
+EXPERIMENT_SPECS: dict[str, tuple[str, str, str]] = {
+    # name -> (hint_type, solver_type, mode)
     # "cot_intext_sequential": make_experiment("cot", "intext", "sequential"),
     # "cot_intext_masked": make_experiment("cot", "intext", "masked"),
     # "solution_intext_sequential": make_experiment("solution", "intext", "sequential"),
-    "solution_intext_masked": make_experiment("solution", "intext", "masked"),
+    "solution_intext_masked": ("solution", "intext", "masked"),
     # "cot_prefill_sequential": make_experiment("cot", "prefill", "sequential"),
     # "solution_prefill_sequential": make_experiment("solution", "prefill", "sequential"),
 }
+
+EXPERIMENTS = {name: make_experiment(*spec) for name, spec in EXPERIMENT_SPECS.items()}
 
 HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 HINT_FRACTIONS += [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
@@ -135,15 +145,27 @@ def plan_runs(experiment_names: list[str], results_dir: str):
     print(f"TOTAL: existing={total_existing} missing={total_missing} (models_counted={len(MODELS)})")
 
 
-def run_experiment(exp_name: str, epochs: int, results_dir: str, debug: bool = False, max_jobs: int | None = None):
+def run_experiment(
+    exp_name: str,
+    epochs: int,
+    results_dir: str,
+    debug: bool = False,
+    max_jobs: int | None = None,
+    *,
+    max_connections: int = 16,
+    max_tokens: int = 8000,
+):
     """Run a single experiment with full retry logic."""
     logger.info(f"Starting {exp_name}...")
+    hint_type, solver_type, mode = EXPERIMENT_SPECS[exp_name]
+    experiment_cls = make_experiment(hint_type, solver_type, mode, max_tokens=max_tokens)
     launch_experiment(
-        experiment_class=EXPERIMENTS[exp_name],
+        experiment_class=experiment_cls,
         models=MODELS,
         hint_fractions=HINT_FRACTIONS,
         epochs=epochs,
         results_dir=results_dir,
+        config=DEFAULT_CONFIG.override(max_connections=max_connections),
         wait=True,
         poll_interval=300,
         max_retries=3,
@@ -163,6 +185,8 @@ if __name__ == "__main__":
     parser.add_argument("--plan", action="store_true", help="Print existing vs missing outputs under results_dir, then exit")
     parser.add_argument("--debug", action="store_true", help="Enable Inspect HTTP debug logging")
     parser.add_argument("--max_jobs", type=int, default=None, help="Maximum number of jobs to submit (default: no limit)")
+    parser.add_argument("--max_connections", type=int, default=16, help="Inspect max concurrent connections per job (default: 16)")
+    parser.add_argument("--max_tokens", type=int, default=8000, help="Max tokens per generation (default: 8000)")
     args = parser.parse_args()
 
     experiments_to_run = list(EXPERIMENTS.keys()) if args.experiment == "all" else [args.experiment]
@@ -172,7 +196,16 @@ if __name__ == "__main__":
     else:
         with ThreadPoolExecutor(max_workers=len(experiments_to_run)) as executor:
             futures = [
-                executor.submit(run_experiment, exp_name, args.epochs, args.results_dir, args.debug, args.max_jobs)
+                executor.submit(
+                    run_experiment,
+                    exp_name,
+                    args.epochs,
+                    args.results_dir,
+                    args.debug,
+                    args.max_jobs,
+                    max_connections=args.max_connections,
+                    max_tokens=args.max_tokens,
+                )
                 for exp_name in experiments_to_run
             ]
             for future in futures:
