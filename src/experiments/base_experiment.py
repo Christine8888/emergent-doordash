@@ -2,6 +2,11 @@
 
 import os
 import logging
+import sys
+import time
+import contextlib
+import re
+from collections import deque
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional
@@ -15,6 +20,107 @@ from experiments.runner import setup_vllm_env
 import json
 
 logger = setup_logging()
+
+
+class _TimestampStepsStream:
+    """Wrap a text stream and prefix Inspect progress 'Steps:' lines with a timestamp + ETA."""
+
+    _steps_re = re.compile(r"^Steps:\s*(\d+)\s*/\s*(\d+)\b")
+    _samples_segment_re = re.compile(r"\s*\|\s*Samples:\s*\d+\s*/\s*\d+\s*")
+
+    def __init__(self, stream, *, line_prefix: str = "Steps:"):
+        self._stream = stream
+        self._line_prefix = line_prefix
+        self._buf = ""
+        self._t_first = None
+        self._history = deque(maxlen=40)  # (t, steps)
+
+    def write(self, s: str):
+        self._buf += s
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            if line.startswith(self._line_prefix):
+                line = self._format_steps_line(line)
+            self._stream.write(line + "\n")
+        return len(s)
+
+    def flush(self):
+        if self._buf:
+            line = self._buf
+            self._buf = ""
+            if line.startswith(self._line_prefix):
+                line = self._format_steps_line(line)
+            self._stream.write(line)
+        self._stream.flush()
+
+    def _format_steps_line(self, line: str) -> str:
+        """Prefix timestamp and append ETA based on a rolling-window rate."""
+        ts = time.strftime("%m/%d %H:%M:%S")
+
+        # "Samples: x/y" is redundant with Steps for our evals; strip it.
+        line = self._samples_segment_re.sub("", line)
+
+        m = self._steps_re.match(line)
+        if not m:
+            return f"[{ts}] {line}"
+
+        try:
+            steps = int(m.group(1))
+            total = int(m.group(2))
+            now = time.time()
+
+            if self._t_first is None:
+                self._t_first = now
+            self._history.append((now, steps))
+
+            remaining = max(total - steps, 0)
+
+            # Prefer a window that's at least 120s old; fall back to oldest point.
+            t_old, s_old = None, None
+            for t_i, s_i in self._history:
+                if now - t_i >= 120:
+                    t_old, s_old = t_i, s_i
+                    break
+            if t_old is None:
+                t_old, s_old = self._history[0]
+
+            dt = max(now - t_old, 1e-6)
+            dsteps = max(steps - s_old, 0)
+            rate = (dsteps / dt) if dsteps > 0 else None  # steps/sec
+
+            elapsed_seconds = int(now - (self._t_first or now))
+            elapsed_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_seconds))
+
+            # Don't show ETA until we have enough progress to make it meaningful.
+            if steps < 50 or rate is None or rate <= 0:
+                return f"[{ts}] {line} | elapsed: {elapsed_str} | ETA: ?"
+
+            eta_seconds = int(remaining / rate) if remaining > 0 else 0
+            eta_str = time.strftime("%H:%M:%S", time.gmtime(eta_seconds))
+            return f"[{ts}] {line} | elapsed: {elapsed_str} | ETA: {eta_str}"
+        except Exception:
+            return f"[{ts}] {line}"
+
+    def __getattr__(self, name: str):
+        return getattr(self._stream, name)
+
+
+@contextlib.contextmanager
+def _timestamp_steps_stdout(enabled: bool = True):
+    """Prefix Inspect progress lines (Steps: ...) with wallclock timestamps."""
+    if not enabled:
+        yield
+        return
+    old_stdout = sys.stdout
+    try:
+        sys.stdout = _TimestampStepsStream(old_stdout)
+        yield
+    finally:
+        try:
+            sys.stdout.flush()
+        except Exception:
+            pass
+        sys.stdout = old_stdout
 
 
 def init_inspect_debug(debug: bool = False, log_file: str | None = None):
@@ -167,25 +273,26 @@ class Experiment(ABC):
         # Run evaluation - Inspect logs go in same dir as results JSON
         output_dir = Path(output_file).parent
 
-        eval_log = eval(
-            task,
-            model=f"vllm/{self.model_name}",
-            log_dir=str(output_dir),
-            epochs=epochs,
-            limit=limit,
-            max_connections=self.max_connections,
-            max_retries=10,  # HTTP-level retries (prevents infinite retry loops)
-            display="plain",
-            fail_on_error=False,
-            retry_on_error=10,  # sample-level retries
-            metadata={
-                "timeout": self.timeout,
-                "hint_fraction": hint_fraction,
-                "fewshot": fewshot,
-                "data_path": self.data_path,
-                "solver_name": self.name,
-            }
-        )
+        with _timestamp_steps_stdout(enabled=True):
+            eval_log = eval(
+                task,
+                model=f"vllm/{self.model_name}",
+                log_dir=str(output_dir),
+                epochs=epochs,
+                limit=limit,
+                max_connections=self.max_connections,
+                max_retries=10,  # HTTP-level retries (prevents infinite retry loops)
+                display="plain",
+                fail_on_error=False,
+                retry_on_error=10,  # sample-level retries
+                metadata={
+                    "timeout": self.timeout,
+                    "hint_fraction": hint_fraction,
+                    "fewshot": fewshot,
+                    "data_path": self.data_path,
+                    "solver_name": self.name,
+                },
+            )
 
         # Extract results
         results = extract_scores_from_log(eval_log[0])

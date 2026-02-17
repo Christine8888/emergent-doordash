@@ -29,7 +29,7 @@ class ModelConfig:
     model_type: ModelType
     dtype: str = "bfloat16"
     temperature: float = 1.0
-    max_tokens: Optional[int] = 8000
+    max_tokens: Optional[int] = 8192
     chat: bool = False
     system_prompt: str = "You are a helpful assistant."
     gen_batch_size: int = 128

@@ -10,6 +10,7 @@ Or:
 import logging
 import os
 import random
+import time
 from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, GenerateConfig
 from inspect_ai.solver import Generate, Solver, solver
 from inspect_ai.solver import TaskState
@@ -19,6 +20,58 @@ from evals.fewshot import FewShotConfig, format_fewshot_examples
 from utils.model_config import get_start_prefill, get_generation_defaults
 
 logger = logging.getLogger(__name__)
+
+_LENGTH_WARN_COUNT = 0
+
+
+def _is_length_stop(output) -> bool:
+    """Best-effort detection of max_tokens truncation across model providers."""
+    if output is None:
+        return False
+
+    # Common direct attributes.
+    for attr in ("finish_reason", "stop_reason", "reason"):
+        val = getattr(output, attr, None)
+        if isinstance(val, str) and val.lower() in ("length", "max_tokens", "token_limit"):
+            return True
+
+    # OpenAI-style: output.choices[0].finish_reason
+    choices = getattr(output, "choices", None)
+    if isinstance(choices, list) and choices:
+        fr = getattr(choices[0], "finish_reason", None)
+        if isinstance(fr, str) and fr.lower() == "length":
+            return True
+
+        # Sometimes nested under message / metadata.
+        msg = getattr(choices[0], "message", None)
+        md = getattr(msg, "metadata", None)
+        if isinstance(md, dict):
+            fr2 = md.get("finish_reason") or md.get("stop_reason")
+            if isinstance(fr2, str) and fr2.lower() == "length":
+                return True
+
+    # Metadata dict.
+    md = getattr(output, "metadata", None)
+    if isinstance(md, dict):
+        fr = md.get("finish_reason") or md.get("stop_reason")
+        if isinstance(fr, str) and fr.lower() == "length":
+            return True
+
+    return False
+
+
+def _warn_length_stop(state: TaskState, max_tokens: int | None):
+    global _LENGTH_WARN_COUNT
+    _LENGTH_WARN_COUNT += 1
+    ts = time.strftime("%m/%d %H:%M:%S")
+    sid = getattr(state, "sample_id", None)
+    epoch = getattr(state, "epoch", None)
+    # Print to stdout so it appears alongside Inspect progress lines.
+    print(
+        f"[{ts}] WARNING: generation hit max_tokens (max_tokens={max_tokens}) "
+        f"sample_id={sid!r} epoch={epoch!r} (count={_LENGTH_WARN_COUNT})",
+        flush=True,
+    )
 
 
 @solver
@@ -245,6 +298,14 @@ def generate(
 
         # Generate
         state = await gen(state, config=gen_config)
+
+        # Best-effort warning if generation appears to have been truncated by max_tokens.
+        try:
+            if max_tokens is not None and _is_length_stop(getattr(state, "output", None)):
+                _warn_length_stop(state, max_tokens=max_tokens)
+        except Exception:
+            # Never let warning logic break eval execution.
+            pass
 
         return state
 

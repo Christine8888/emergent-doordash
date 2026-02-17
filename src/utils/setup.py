@@ -30,6 +30,27 @@ def setup_inspect_logging(level: str = "warning", log_file: str | None = None):
         os.environ["INSPECT_PY_LOGGER_LEVEL"] = level
 
 
+def setup_openai_retry_debug_logging(enabled: bool = True):
+    """Enable more verbose logging for openai-python retries.
+
+    This helps explain lines like:
+      "Retrying request to /chat/completions in X seconds"
+
+    Notes:
+    - This does not change retry behaviour; it only increases visibility.
+    - We intentionally avoid enabling very noisy `httpx`/`httpcore` debug logs.
+    """
+    if not enabled:
+        return
+
+    # openai-python uses module logger names like "openai._base_client"
+    for name in ("openai._base_client", "openai._client", "openai._exceptions", "openai"):
+        logging.getLogger(name).setLevel(logging.DEBUG)
+
+    # Some versions also respect this env var for richer logs.
+    os.environ.setdefault("OPENAI_LOG", "debug")
+
+
 class FlushingStreamHandler(logging.StreamHandler):
     def emit(self, record):
         super().emit(record)
