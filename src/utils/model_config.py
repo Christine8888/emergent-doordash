@@ -58,6 +58,7 @@ class ModelSpec:
     tp: int = 1
     partitions: str = SMALL_MODEL_PARTITIONS
     nodelist: str = SMALL_MODEL_NODES
+    account: str | None = None
 
 
 # Qwen3 models

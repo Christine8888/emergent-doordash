@@ -494,6 +494,28 @@ def compute_rms(
     return float(np.sqrt(np.mean((y_actual - y_pred) ** 2)))
 
 
+def compute_rms_individual(
+    individual_by_hint: dict[float, dict],
+    df: pd.DataFrame,
+    eci_map: dict[str, float],
+    models: set[str] | None = None,
+) -> float:
+    """Compute RMSE for per-hint individual sigmoid fits against a given set of models."""
+    eval_df = df if models is None else df[df["model"].isin(models)]
+    if len(eval_df) == 0:
+        return float("nan")
+    preds, actuals = [], []
+    for _, row in eval_df.iterrows():
+        hint = row["hint"]
+        if hint not in individual_by_hint:
+            continue
+        preds.append(individual_by_hint[hint]["predict"](eci_map[row["model"]]))
+        actuals.append(row["accuracy"])
+    if not preds:
+        return float("nan")
+    return float(np.sqrt(np.mean((np.array(actuals) - np.array(preds)) ** 2)))
+
+
 def run_model_sweep(
     df: pd.DataFrame,
     eci_map: dict[str, float],
@@ -534,10 +556,32 @@ def run_model_sweep(
         rms_test = compute_rms(joint_result, df, eci_map, test_models) if test_models else float("nan")
         rms_all = compute_rms(joint_result, df, eci_map, None)
 
-        midpoint_errors = compute_midpoint_errors(joint_result, individual_by_hint_all, eval_hints, hint_transform)
-        row: dict[str, float] = {"n_models": float(n), "rms_train": rms_train, "rms_test": rms_test, "rms_all": rms_all}
+        individual_by_hint_train = fit_individual_sigmoids_by_hint(df, eci_map, fit_models=train_models, lower=lower_asymptote)
+        rms_indiv_train = compute_rms_individual(individual_by_hint_train, df, eci_map, train_models)
+        rms_indiv_test = compute_rms_individual(individual_by_hint_train, df, eci_map, test_models) if test_models else float("nan")
+        rms_indiv_all = compute_rms_individual(individual_by_hint_train, df, eci_map, None)
+
+        # Midpoint errors vs ground truth (individual fit on all data).
+        # Joint midpoint error: |joint_midpoint - indiv_all_midpoint|
+        midpoint_errors_joint = compute_midpoint_errors(joint_result, individual_by_hint_all, eval_hints, hint_transform)
+        # Individual-train midpoint error: |indiv_train_midpoint - indiv_all_midpoint|
+        midpoint_errors_indiv = {}
         for h in eval_hints:
-            row[f"midpoint_h_{h:.1f}"] = float(midpoint_errors.get(h, float("nan")))
+            if h in individual_by_hint_train and h in individual_by_hint_all:
+                midpoint_errors_indiv[h] = abs(individual_by_hint_train[h]["midpoint"] - individual_by_hint_all[h]["midpoint"])
+        row: dict[str, float] = {
+            "n_models": float(n),
+            "rms_train": rms_train, "rms_test": rms_test, "rms_all": rms_all,
+            "rms_indiv_train": rms_indiv_train, "rms_indiv_test": rms_indiv_test, "rms_indiv_all": rms_indiv_all,
+            "delta_rms_train": rms_train - rms_indiv_train,
+            "delta_rms_test": rms_test - rms_indiv_test,
+            "delta_rms_all": rms_all - rms_indiv_all,
+        }
+        for h in eval_hints:
+            row[f"midpoint_h_{h:.1f}"] = float(midpoint_errors_joint.get(h, float("nan")))
+            me_joint = midpoint_errors_joint.get(h, float("nan"))
+            me_indiv = midpoint_errors_indiv.get(h, float("nan"))
+            row[f"delta_midpoint_h_{h:.1f}"] = me_joint - me_indiv
         rows.append(row)
 
     out = pd.DataFrame(rows)
@@ -734,9 +778,9 @@ def plot_model_sweep(
     eval_hints: list[float],
     output_dir: Path,
 ) -> Path:
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-    ax = axes[0]
+    ax = axes[0, 0]
     ax.plot(sweep_df["n_models"], sweep_df["rms_train"], "o-", label="train", color="blue")
     ax.plot(sweep_df["n_models"], sweep_df["rms_test"], "s-", label="test", color="red")
     ax.plot(sweep_df["n_models"], sweep_df["rms_all"], "^-", label="all", color="green")
@@ -746,7 +790,18 @@ def plot_model_sweep(
     ax.legend()
     ax.grid(True, alpha=0.3)
 
-    ax = axes[1]
+    ax = axes[0, 1]
+    ax.plot(sweep_df["n_models"], sweep_df["delta_rms_train"], "o-", label="train", color="blue")
+    ax.plot(sweep_df["n_models"], sweep_df["delta_rms_test"], "s-", label="test", color="red")
+    ax.plot(sweep_df["n_models"], sweep_df["delta_rms_all"], "^-", label="all", color="green")
+    ax.axhline(0, color="black", linestyle="--", alpha=0.5)
+    ax.set_xlabel("number of train models")
+    ax.set_ylabel("delta RMS (joint - individual)")
+    ax.set_title("delta RMS vs number of train models\n(negative = joint wins)")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    ax = axes[1, 0]
     cmap = plt.cm.viridis
     colors = {h: cmap(i / max(len(eval_hints) - 1, 1)) for i, h in enumerate(eval_hints)}
     for h in eval_hints:
@@ -755,8 +810,20 @@ def plot_model_sweep(
             ax.plot(sweep_df["n_models"], sweep_df[col], "o-", label=f"h={h:.1f}", color=colors[h])
     ax.set_xlabel("number of train models")
     ax.set_ylabel("midpoint error (eci units)")
-    ax.set_title("midpoint error vs number of train models")
-    ax.legend()
+    ax.set_title("midpoint error per hint vs number of train models")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+
+    ax = axes[1, 1]
+    for h in eval_hints:
+        col = f"delta_midpoint_h_{h:.1f}"
+        if col in sweep_df.columns:
+            ax.plot(sweep_df["n_models"], sweep_df[col], "o-", label=f"h={h:.1f}", color=colors[h])
+    ax.axhline(0, color="black", linestyle="--", alpha=0.5)
+    ax.set_xlabel("number of train models")
+    ax.set_ylabel("delta midpoint error (eci units)")
+    ax.set_title("delta midpoint error vs number of train models\n(negative = joint wins)")
+    ax.legend(fontsize=8)
     ax.grid(True, alpha=0.3)
 
     fig.suptitle(f"{label} (fitting joint scaling)", fontsize=12)
@@ -904,6 +971,13 @@ def run_joint_scaling_plots(
 
     individual_by_hint_all = fit_individual_sigmoids_by_hint(df, eci_map, fit_models=None, lower=lower_asymptote)
     individual_by_hint_train = fit_individual_sigmoids_by_hint(df, eci_map, fit_models=train_set, lower=lower_asymptote)
+
+    rms_indiv_train = compute_rms_individual(individual_by_hint_train, df, eci_map, train_set)
+    rms_indiv_test = compute_rms_individual(individual_by_hint_train, df, eci_map, test_set) if test_set else float("nan")
+    rms_indiv_all = compute_rms_individual(individual_by_hint_train, df, eci_map, None)
+    delta_rms_train = rms_train - rms_indiv_train
+    delta_rms_test = rms_test - rms_indiv_test
+    delta_rms_all = rms_all - rms_indiv_all
     # Keep per-model curves in raw hint space so the x-axis remains "hint fraction".
     individual_by_model = fit_individual_sigmoids_by_model(df, hint_identity, fit_models=None, lower=lower_asymptote)
 
@@ -991,6 +1065,12 @@ def run_joint_scaling_plots(
         "rms_train": rms_train,
         "rms_test": rms_test,
         "rms_all": rms_all,
+        "rms_indiv_train": rms_indiv_train,
+        "rms_indiv_test": rms_indiv_test,
+        "rms_indiv_all": rms_indiv_all,
+        "delta_rms_train": delta_rms_train,
+        "delta_rms_test": delta_rms_test,
+        "delta_rms_all": delta_rms_all,
         "mean_midpoint_error_all": mean_midpoint_error_all,
         "mean_midpoint_error_train": mean_midpoint_error_train,
         "mean_midpoint_error_test": mean_midpoint_error_test,

@@ -250,11 +250,10 @@ def launch_experiment(
 
     for model in models:
         model_name = os.path.basename(model.path)
-        job_config = config.override(
-            gpus_per_job=model.tp,
-            partition=model.partitions,
-            nodelist=model.nodelist,
-        )
+        overrides = dict(gpus_per_job=model.tp, partition=model.partitions, nodelist=model.nodelist)
+        if model.account:
+            overrides["account"] = model.account
+        job_config = config.override(**overrides)
         job_name = f"{config.job_name_prefix}_{model_name}"
         _configure_executor(executor, job_config, job_name)
 
