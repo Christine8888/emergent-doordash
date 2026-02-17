@@ -20,6 +20,7 @@ class _TimestampStepsStream:
     """Wrap a text stream and prefix Inspect progress 'Steps:' lines with a timestamp + ETA."""
 
     _steps_re = re.compile(r"^Steps:\s*(\d+)\s*/\s*(\d+)\b")
+    _samples_segment_re = re.compile(r"\s*\|\s*Samples:\s*\d+\s*/\s*\d+\s*")
 
     def __init__(self, stream, *, line_prefix: str = "Steps:"):
         self._stream = stream
@@ -51,6 +52,9 @@ class _TimestampStepsStream:
     def _format_steps_line(self, line: str) -> str:
         """Prefix timestamp and append ETA based on observed step rate."""
         ts = time.strftime("%m/%d %H:%M:%S")
+
+        # "Samples: x/y" is redundant with Steps for our evals; strip it.
+        line = self._samples_segment_re.sub("", line)
 
         m = self._steps_re.match(line)
         if not m:
