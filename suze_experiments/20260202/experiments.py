@@ -11,7 +11,7 @@ import argparse
 import datetime as _dt
 import sys
 from pathlib import Path
-from plot_helpers import run_joint_scaling_plots
+from plot_helpers import run_joint_scaling_plots, compare_capability_approaches
 
 # ------------------------------ constants ------------------------------
 
@@ -306,6 +306,50 @@ def joint_scaling_learned_hint_fixed_endpoints_sequential_solution() -> None:
     )
 
 
+def compare_eci_vs_pcs_gpqa_solution_intext_masked() -> None:
+    # python experiments.py -e compare_eci_vs_pcs_gpqa_solution_intext_masked
+    _ensure_project_root_on_path()
+
+    run_name = "compare_eci_vs_pc2_pc3_gpqa_solution_intext_masked" + "_feb_15"
+    run_dir = make_run_dir(run_name=run_name)
+
+    compare_capability_approaches(
+        base_folder=PROJECT_ROOT / "christine_experiments/20251113/results",
+        baseline_folder=PROJECT_ROOT / "christine_experiments/20251113/baseline",
+        eci_file=PROJECT_ROOT / "christine_experiments/20260129_fitting/eci_model_capabilities.csv",
+        eval_name="gpqa",
+        solver="solution_intext_masked",
+        condition="0shot",
+        label="GPQA solution intext masked",
+        all_models=[
+            "Qwen2.5-1.5B-Instruct",
+            "Qwen2.5-3B-Instruct",
+            "Qwen2.5-7B-Instruct",
+            "Qwen2.5-14B-Instruct",
+            "Qwen2.5-32B-Instruct",
+            "Qwen3-0.6B",
+            "Qwen3-1.7B",
+            "Qwen3-4B",
+            "Qwen3-8B",
+            "Qwen3-14B",
+            "Qwen3-32B",
+            "Llama-3.1-8B-Instruct",
+            "Llama-3.1-70B-Instruct",
+            "gemma-3-4b-it",
+            "gemma-3-12b-it",
+            "gemma-3-27b-it",
+        ],
+        num_holdout_models=0,
+        hint_fractions=[round(i / 20.0, 2) for i in range(21)],
+        eval_hints_for_sweep=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+        include_cross=True,
+        lower_asymptote=0.2,
+        hint_transform="identity",
+        output_dir=run_dir,
+        pc_ns=[2, 3],
+    )
+
+
 
 EXPERIMENTS = {
     "joint_scaling_gpqa_train_on_all": joint_scaling_gpqa_train_on_all,
@@ -314,6 +358,7 @@ EXPERIMENTS = {
     "joint_scaling_learned_hint_free_endpoints": joint_scaling_learned_hint_free_endpoints,
     "joint_scaling_learned_hint_fixed_endpoints_train_on_some": joint_scaling_learned_hint_fixed_endpoints_train_on_some,
     "joint_scaling_learned_hint_fixed_endpoints_sequential_solution": joint_scaling_learned_hint_fixed_endpoints_sequential_solution,
+    "compare_eci_vs_pcs_gpqa_solution_intext_masked": compare_eci_vs_pcs_gpqa_solution_intext_masked,
 }
 
 

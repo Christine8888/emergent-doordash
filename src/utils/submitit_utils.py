@@ -182,10 +182,11 @@ def run_single_experiment(
     debug: bool = False,
 ) -> dict:
     """Run single experiment inside submitit job."""
-    from utils.setup import setup_logging, setup_inspect_logging
+    from utils.setup import setup_logging, setup_inspect_logging, setup_openai_retry_debug_logging
     setup_logging()
     if debug:
         setup_inspect_logging(level="http")
+        setup_openai_retry_debug_logging(enabled=True)
 
     model_name = os.path.basename(model_path)
     n_gpus = int(os.environ.get('SLURM_GPUS_ON_NODE', tensor_parallel_size))

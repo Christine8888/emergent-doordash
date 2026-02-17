@@ -1,230 +1,168 @@
-"""
-PCA over the benchmark *components* that make up ECI.
+"""Wrapper script for PCA + PC-capability scaling (moved to 20260202).
 
-This script:
-- loads baseline scores for the ECI component benchmarks (fit_eci.py:43-52)
-- requires every model to have every component score (raises if missing)
-- z-scores benchmark columns, runs PCA, and visualizes:
-  - principal component weights (heatmap)
-  - explained variance ratio (bar plot)
+This script originally lived entirely under `suze_experiments/20260212/`.
+All PCA + PC-capability joint-scaling functionality has been moved into the
+`suze_experiments/20260202/` experiment framework (to share the plotting +
+metrics pipeline with the ECI-based experiments).
+
+This file remains as a convenience wrapper so existing commands keep working.
 """
 
 from __future__ import annotations
 
+import argparse
+import json
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 
-
-# =========================
-# Constants / configuration
-# =========================
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.append(str(PROJECT_ROOT))
-
-BASELINE_FOLDER = PROJECT_ROOT / "christine_experiments/20251113/baseline"
 OUTDIR = PROJECT_ROOT / "suze_experiments/20260212"
 
-# Mapping from baseline eval names to ECI benchmark names (fit_eci.py:43-52)
-EVAL_TO_ECI = {
-    "hellaswag": "HellaSwag",
-    "piqa": "PIQA",
-    "mmlu_5_shot_cot": "MMLU",
-    "bbh": "BBH",
-    "arc_challenge": "ARC AI2",  # Epoch only uses Challenge score
-    "winogrande": "Winogrande",  # 0-shot, 8192 tokens
-    "math_level_5": "MATH level 5",
-}
+DEFAULT_BASELINE_FOLDER = PROJECT_ROOT / "christine_experiments/20251113/baseline"
+DEFAULT_RESULTS_BASE_FOLDER = PROJECT_ROOT / "christine_experiments/20251113/results"
+DEFAULT_ECI_FILE = PROJECT_ROOT / "christine_experiments/20260129_fitting/eci_model_capabilities.csv"
 
-REQUIRED_BENCHMARKS = list(EVAL_TO_ECI.values())
-
-N_COMPONENTS = 5
-TOP_N_FOR_BRACE = 3
-
-HEATMAP_FIGSIZE = (10, 5)
-VAR_FIGSIZE = (5, 4)
-
-HEATMAP_OUTFILE = OUTDIR / "pca_component_weights.png"
-VAR_OUTFILE = OUTDIR / "pca_explained_variance.png"
+DEFAULT_HINT_FRACTIONS = [round(i / 20.0, 2) for i in range(21)]
+DEFAULT_EVAL_HINTS_FOR_SWEEP = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
 
 
-@dataclass(frozen=True)
-class PCAResult:
-    components: np.ndarray  # shape: (n_components, n_features)
-    explained_variance_ratio: np.ndarray  # shape: (n_components,)
+def _ensure_import_paths() -> None:
+    # Allow importing src.* and 20260202 helpers.
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))
+    exp_20260202 = PROJECT_ROOT / "suze_experiments/20260202"
+    if str(exp_20260202) not in sys.path:
+        sys.path.insert(0, str(exp_20260202))
 
 
-def _raise_if_missing_required_scores(pivot: pd.DataFrame, required_benchmarks: list[str]) -> None:
-    """Raise if any model is missing any required benchmark score."""
-    missing_mask = pivot[required_benchmarks].isna()
-    if not missing_mask.any().any():
-        return
-
-    missing_by_model: dict[str, list[str]] = {}
-    for model, row in missing_mask.iterrows():
-        missing_cols = [col for col, is_missing in row.items() if bool(is_missing)]
-        if missing_cols:
-            missing_by_model[str(model)] = missing_cols
-
-    lines = [
-        f"Missing required benchmark scores for {len(missing_by_model)} model(s).",
-        f"Required benchmarks ({len(required_benchmarks)}): {required_benchmarks}",
-        "",
-    ]
-    for model in sorted(missing_by_model.keys()):
-        lines.append(f"- {model}: missing {missing_by_model[model]}")
-    raise ValueError("\n".join(lines))
-
-
-def _zscore_columns(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    mean = x.mean(axis=0, keepdims=True)
-    std = x.std(axis=0, ddof=1, keepdims=True)
-    if np.any(std == 0):
-        zero_cols = np.where(std.flatten() == 0)[0].tolist()
-        raise ValueError(f"Cannot z-score: zero-variance columns at indices {zero_cols}")
-    return (x - mean) / std, mean.flatten(), std.flatten()
-
-
-def _pca_via_svd(x: np.ndarray, n_components: int) -> PCAResult:
-    """PCA on already-centered data via SVD; returns components + explained variance ratio."""
-    # x: (n_samples, n_features)
-    u, s, vt = np.linalg.svd(x, full_matrices=False)
-    n_components = min(n_components, vt.shape[0])
-
-    # Explained variance matches sklearn:
-    # explained_variance_ = (S**2) / (n_samples - 1)
-    n_samples = x.shape[0]
-    explained_variance = (s**2) / (n_samples - 1)
-    explained_variance_ratio = explained_variance / explained_variance.sum()
-
-    components = vt[:n_components]
-    explained_variance_ratio = explained_variance_ratio[:n_components]
-
-    # Deterministic sign convention: make the largest-|weight| entry positive per PC.
-    for i in range(components.shape[0]):
-        j = int(np.argmax(np.abs(components[i])))
-        if components[i, j] < 0:
-            components[i] *= -1
-
-    return PCAResult(components=components, explained_variance_ratio=explained_variance_ratio)
-
-
-def _plot_weights_heatmap(weights: np.ndarray, benchmark_names: list[str], outfile: Path) -> None:
-    sns.set_style("white")
-
-    fig, ax = plt.subplots(figsize=HEATMAP_FIGSIZE)
-    sns.heatmap(
-        weights,
-        annot=True,
-        fmt=".2f",
-        cmap="coolwarm",
-        center=0.0,
-        ax=ax,
-        xticklabels=benchmark_names,
-        yticklabels=[f"PC-{i}" for i in range(1, weights.shape[0] + 1)],
-    )
-    ax.set_title("Principal component weights")
-    ax.tick_params(axis="x", labelrotation=30)
-    fig.tight_layout()
-    fig.savefig(outfile, dpi=300)
-    plt.close(fig)
-
-
-def _plot_explained_variance(evr: np.ndarray, outfile: Path, *, top_n: int) -> None:
-    fig, ax = plt.subplots(1, 1, figsize=VAR_FIGSIZE)
-    xs = np.arange(1, len(evr) + 1)
-    ax.bar(xs, evr)
-    ax.set_xticks(xs)
-    ax.set_xlabel("PC")
-    ax.set_ylabel("Explained variance ratio")
-    ax.set_title("PCA Explained Variance")
-
-    top_n = min(int(top_n), len(evr))
-    if top_n > 0:
-        sum_top_n = float(evr[:top_n].sum())
-        brace_height = float(evr[:top_n].max()) + 0.05
-
-        # Simple bracket (matches style in the reference notebook closely enough)
-        x0 = 1 - 0.4
-        x1 = top_n + 0.4
-        ax.plot([x0, x0, x1, x1], [brace_height - 0.02, brace_height, brace_height, brace_height - 0.02], color="gray")
-        ax.text((x0 + x1) / 2, brace_height + 0.02, f"{sum_top_n:.3f}", ha="center", va="bottom")
-
-    fig.tight_layout()
-    fig.savefig(outfile, dpi=300)
-    plt.close(fig)
+def _parse_csv_floats(s: str) -> list[float]:
+    parts = [p.strip() for p in str(s).split(",") if p.strip() != ""]
+    return [float(p) for p in parts]
 
 
 def main() -> None:
-    # python suze_experiments/20260212/pca.py
-    from src.modelx import load_baseline
+    _ensure_import_paths()
 
-    rows: list[dict[str, object]] = []
-    counts_by_benchmark: dict[str, int] = {}
-    for eval_name, benchmark_name in EVAL_TO_ECI.items():
-        df = load_baseline(str(BASELINE_FOLDER), eval_name)
-        if df.empty:
-            raise ValueError(f"No baseline results found for eval '{eval_name}' in {BASELINE_FOLDER}")
+    parser = argparse.ArgumentParser(description="PCA + PC-based joint scaling (wrapper)")
+    parser.add_argument("--mode", choices=["pca", "joint_scaling"], default="pca")
 
-        if "accuracy" not in df.columns:
-            raise ValueError(f"Baseline DataFrame for '{eval_name}' is missing required 'accuracy' column")
+    # PCA args
+    parser.add_argument("--baseline-folder", type=str, default=str(DEFAULT_BASELINE_FOLDER))
+    parser.add_argument("--n-components", type=int, default=5)
 
-        models_with_score: set[str] = set()
-        for _, r in df.iterrows():
-            acc = r.get("accuracy")
-            if pd.notna(acc):
-                model_name = str(r["model"])
-                models_with_score.add(model_name)
-                rows.append(
-                    {
-                        "model": model_name,
-                        "benchmark": str(benchmark_name),
-                        "score": float(acc),
-                    }
-                )
-        counts_by_benchmark[str(benchmark_name)] = len(models_with_score)
+    # Joint scaling args
+    parser.add_argument("--results-base-folder", type=str, default=str(DEFAULT_RESULTS_BASE_FOLDER))
+    parser.add_argument("--eci-file", type=str, default=str(DEFAULT_ECI_FILE))
+    parser.add_argument("--eval-name", type=str, default="gpqa")
+    parser.add_argument("--solver", type=str, default="solution_intext_masked")
+    parser.add_argument("--condition", type=str, default="0shot")
+    parser.add_argument("--output-dir", type=str, default=str(OUTDIR / "results" / "pc_joint_scaling"))
+    parser.add_argument("--models", type=str, default="", help="Comma-separated model list (optional)")
+    parser.add_argument("--hint-fractions", type=str, default=",".join([str(x) for x in DEFAULT_HINT_FRACTIONS]))
+    parser.add_argument("--eval-hints-for-sweep", type=str, default=",".join([str(x) for x in DEFAULT_EVAL_HINTS_FOR_SWEEP]))
+    parser.add_argument("--include-cross", action="store_true")
+    parser.add_argument("--lower-asymptote", type=float, default=None)
+    parser.add_argument("--hint-transform", type=str, default="identity")
+    parser.add_argument("--n-pcs", type=int, default=3)
+    parser.add_argument("--num-holdout-models", type=int, default=0)
 
-    scores = pd.DataFrame(rows)
-    if scores.empty:
-        raise ValueError("No baseline scores loaded (unexpected).")
+    # Alpha controls (optional)
+    parser.add_argument("--alpha", type=str, default="fit", help="'fit' or comma-separated vector (len n_pcs)")
+    parser.add_argument("--alpha-scales", type=str, default="", help="Optional comma-separated scales to multiply a base alpha direction")
 
-    pivot = scores.pivot_table(index="model", columns="benchmark", values="score", aggfunc="mean")
+    args = parser.parse_args()
 
-    print("\n=== PCA inputs (ECI component benchmarks) ===")
-    print(f"Baseline folder: {BASELINE_FOLDER}")
-    print(f"Required benchmarks ({len(REQUIRED_BENCHMARKS)}): {REQUIRED_BENCHMARKS}")
-    print("\nModels with scores per benchmark (from baselines):")
-    for bench in REQUIRED_BENCHMARKS:
-        print(f"- {bench}: {counts_by_benchmark.get(bench, 0)} models")
+    baseline_folder = Path(args.baseline_folder)
 
-    _raise_if_missing_required_scores(pivot, REQUIRED_BENCHMARKS)
+    if args.mode == "pca":
+        from pca_helpers import compute_pc_scores, plot_component_weights_heatmap, plot_explained_variance
 
-    pivot = pivot[REQUIRED_BENCHMARKS].sort_index()
-    models_used = pivot.index.tolist()
-    print(f"\nModels used for PCA ({len(models_used)}):")
-    for m in models_used:
-        print(f"- {m}")
+        _pivot, pca, _pc_scores_map = compute_pc_scores(baseline_folder=baseline_folder, n_components=int(args.n_components))
+        OUTDIR.mkdir(parents=True, exist_ok=True)
+        plot_component_weights_heatmap(pca=pca, outfile=OUTDIR / "pca_component_weights.png")
+        plot_explained_variance(pca=pca, outfile=OUTDIR / "pca_explained_variance.png")
+        return
 
-    x = pivot.to_numpy(dtype=float)
-    xz, _, _ = _zscore_columns(x)
+    # joint scaling
+    from plot_helpers import run_joint_scaling_plots_pc
 
-    n_components = min(int(N_COMPONENTS), xz.shape[1], xz.shape[0])
-    res = _pca_via_svd(xz, n_components=n_components)
+    results_base_folder = Path(args.results_base_folder)
+    eci_file = Path(args.eci_file) if args.eci_file else None
+    output_dir = Path(args.output_dir)
 
-    OUTDIR.mkdir(parents=True, exist_ok=True)
-    _plot_weights_heatmap(res.components, REQUIRED_BENCHMARKS, HEATMAP_OUTFILE)
-    _plot_explained_variance(res.explained_variance_ratio, VAR_OUTFILE, top_n=TOP_N_FOR_BRACE)
+    models = [m.strip() for m in args.models.split(",") if m.strip()] if str(args.models).strip() else []
+    hint_fractions = _parse_csv_floats(args.hint_fractions)
+    eval_hints_for_sweep = _parse_csv_floats(args.eval_hints_for_sweep)
 
-    print(f"Saved heatmap: {HEATMAP_OUTFILE}")
-    print(f"Saved explained variance plot: {VAR_OUTFILE}")
-    print("Explained variance ratio:", res.explained_variance_ratio.tolist())
+    alpha_fixed: np.ndarray | None
+    if str(args.alpha).strip().lower() == "fit":
+        alpha_fixed = None
+    else:
+        alpha_fixed = np.asarray(_parse_csv_floats(args.alpha), dtype=float)
+
+    alpha_scales = _parse_csv_floats(args.alpha_scales) if str(args.alpha_scales).strip() else None
+
+    # If no explicit models list, fall back to the same default list used in 20260202 experiments.
+    if not models:
+        models = [
+            "Qwen2.5-1.5B-Instruct",
+            "Qwen2.5-3B-Instruct",
+            "Qwen2.5-7B-Instruct",
+            "Qwen2.5-14B-Instruct",
+            "Qwen2.5-32B-Instruct",
+            "Qwen3-0.6B",
+            "Qwen3-1.7B",
+            "Qwen3-4B",
+            "Qwen3-8B",
+            "Qwen3-14B",
+            "Qwen3-32B",
+            "Llama-3.1-8B-Instruct",
+            "Llama-3.1-70B-Instruct",
+            "gemma-3-4b-it",
+            "gemma-3-12b-it",
+            "gemma-3-27b-it",
+        ]
+
+    def run_one(out: Path, alpha: np.ndarray | None) -> dict[str, object]:
+        return run_joint_scaling_plots_pc(
+            base_folder=results_base_folder,
+            baseline_folder=baseline_folder,
+            eci_file=eci_file,
+            eval_name=str(args.eval_name),
+            solver=str(args.solver),
+            condition=str(args.condition),
+            label=f"{args.eval_name} ({args.solver}/{args.condition})",
+            all_models=models,
+            num_holdout_models=int(args.num_holdout_models),
+            hint_fractions=hint_fractions,
+            eval_hints_for_sweep=eval_hints_for_sweep,
+            include_cross=bool(args.include_cross),
+            lower_asymptote=(float(args.lower_asymptote) if args.lower_asymptote is not None else None),
+            hint_transform=str(args.hint_transform),
+            n_pcs=int(args.n_pcs),
+            output_dir=out,
+            alpha_fixed=alpha,
+        )
+
+    if alpha_scales:
+        # Determine a base alpha direction (either from provided alpha, or by fitting once).
+        base_metrics = run_one(output_dir / "alpha_base", alpha_fixed)
+        base_alpha = np.asarray(base_metrics["alpha"], dtype=float)
+
+        rows: list[dict[str, object]] = []
+        for s in alpha_scales:
+            scaled = float(s) * base_alpha
+            m = run_one(output_dir / f"alpha_scale_{s:g}", scaled)
+            rows.append({"alpha_scale": float(s), "rms_all": float(m["rms_all"]), "mse_all": float(m["mse_all"])})
+        (output_dir / "alpha_scale_sweep.json").write_text(json.dumps(rows, indent=2, sort_keys=True) + "\n")
+        return
+
+    run_one(output_dir, alpha_fixed)
 
 
 if __name__ == "__main__":
     main()
+

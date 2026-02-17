@@ -1004,3 +1004,1139 @@ def run_joint_scaling_plots(
     write_json(output_dir / "metrics.json", metrics)
     return metrics
 
+
+# =============================================================================
+# PC-capability variant (capability = alpha·PC)
+# =============================================================================
+
+
+def load_and_prepare_results_df_with_capability(
+    *,
+    base_folder: Path,
+    eval_name: str,
+    solver: str,
+    condition: str,
+    all_models: list[str],
+    hint_fractions: list[float],
+    capability_map: dict[str, float],
+    train_models: set[str],
+    eci_map: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    """Load results and attach scalar capability (and optionally ECI) columns."""
+    from src.modelx import load_results
+
+    print("\nLoading results...")
+    df = load_results(
+        base_folder=str(base_folder),
+        eval_name=eval_name,
+        solver=solver,
+        condition=condition,
+    )
+    df = df[df["model"].isin(all_models) & df["hint"].isin(hint_fractions)]
+    print(f"Loaded {len(df)} rows for {df['model'].nunique()} models")
+
+    df = df.copy()
+    df["capability"] = df["model"].map(capability_map)
+    missing = df[df["capability"].isna()]["model"].unique()
+    if len(missing) > 0:
+        print(f"WARNING: Missing capability for {len(missing)} models: {missing.tolist()}")
+        df = df.dropna(subset=["capability"])
+
+    if eci_map is not None:
+        df["eci"] = df["model"].map(eci_map)
+
+    df["split"] = df["model"].apply(lambda m: "train" if m in train_models else "test")
+    return df
+
+
+def _predict_from_capability(
+    *,
+    capability: float,
+    hint: float,
+    beta: float,
+    gamma: float | None,
+    delta: float,
+    include_cross: bool,
+    hint_transform: Callable[[float], float],
+    lower: float | None,
+) -> float:
+    L = float(lower) if lower is not None else 0.0
+    U_minus_L = 1.0 - L
+    h_t = float(hint_transform(float(hint)))
+    x = float(capability)
+    if include_cross and gamma is not None:
+        z = x + float(beta) * h_t + float(gamma) * x * h_t + float(delta)
+    else:
+        z = x + float(beta) * h_t + float(delta)
+    return float(L + U_minus_L * (1.0 / (1.0 + math.exp(-z))))
+
+
+def compute_rms_capability_fit(
+    *,
+    beta: float,
+    gamma: float | None,
+    delta: float,
+    include_cross: bool,
+    hint_transform: Callable[[float], float],
+    lower: float | None,
+    df: pd.DataFrame,
+    models: set[str] | None,
+) -> float:
+    eval_df = df if models is None else df[df["model"].isin(models)]
+    if len(eval_df) == 0:
+        return float("nan")
+    y_pred = np.array(
+        [
+            _predict_from_capability(
+                capability=float(cap),
+                hint=float(h),
+                beta=beta,
+                gamma=gamma,
+                delta=delta,
+                include_cross=include_cross,
+                hint_transform=hint_transform,
+                lower=lower,
+            )
+            for cap, h in zip(eval_df["capability"], eval_df["hint"])
+        ],
+        dtype=float,
+    )
+    y_actual = eval_df["accuracy"].astype(float).to_numpy()
+    return float(np.sqrt(np.mean((y_actual - y_pred) ** 2)))
+
+
+def fit_individual_sigmoids_by_hint_capability(
+    df: pd.DataFrame,
+    *,
+    fit_models: set[str] | None = None,
+    lower: float | None = None,
+) -> dict[float, dict]:
+    """Fit σ(m*capability + b) per hint."""
+    from src.modelx.fitting import fit_sigmoid, format_equation
+
+    results: dict[float, dict] = {}
+    for hint in sorted(df["hint"].unique()):
+        hint_df = df[df["hint"] == hint]
+        if fit_models is not None:
+            hint_df = hint_df[hint_df["model"].isin(fit_models)]
+        if len(hint_df) < 3:
+            continue
+
+        x = hint_df["capability"].astype(float).to_numpy()
+        y = hint_df["accuracy"].astype(float).to_numpy()
+        if np.allclose(y, y[0]):
+            continue
+
+        res = fit_sigmoid(x, y, use_log=False, lower=lower)
+        if lower is not None:
+            _L, _U, m, b = res["params"]
+        else:
+            m, b = res["params"]
+        midpoint = float(-b / m) if abs(float(m)) > 1e-12 else float("nan")
+
+        results[float(hint)] = {
+            "params": res["params"],
+            "midpoint": midpoint,
+            "predict": res["predict"],
+            "equation": format_equation(res),
+        }
+    return results
+
+
+def fit_individual_sigmoids_by_model_hint_space(
+    df: pd.DataFrame,
+    *,
+    fit_models: set[str] | None = None,
+    lower: float | None = None,
+) -> dict[str, dict]:
+    """Fit σ(m*h + b) per model (x-axis is raw hint fraction)."""
+    from src.modelx.fitting import fit_sigmoid, format_equation
+
+    models_to_fit = sorted(fit_models) if fit_models is not None else sorted(df["model"].unique().tolist())
+    out: dict[str, dict] = {}
+    for model in models_to_fit:
+        model_df = df[df["model"] == model].sort_values("hint")
+        if len(model_df) < 3:
+            continue
+
+        x = model_df["hint"].astype(float).to_numpy()
+        y = model_df["accuracy"].astype(float).to_numpy()
+        if np.allclose(y, y[0]):
+            continue
+
+        res = fit_sigmoid(x, y, use_log=False, lower=lower)
+        out[str(model)] = {
+            "params": res["params"],
+            "predict": res["predict"],
+            "equation": format_equation(res),
+        }
+    return out
+
+
+def compute_midpoint_errors_capability(
+    *,
+    beta: float,
+    gamma: float | None,
+    delta: float,
+    include_cross: bool,
+    individual_fits: dict[float, dict],
+    hints: list[float],
+    hint_transform: Callable[[float], float] = lambda h: h,
+) -> dict[float, float]:
+    """Compute |cap_midpoint(joint,h) - cap_midpoint(individual,h)| per hint."""
+    errors: dict[float, float] = {}
+    for hint in hints:
+        hint = float(hint)
+        if hint not in individual_fits:
+            continue
+        indiv_mid = float(individual_fits[hint]["midpoint"])
+        h_t = float(hint_transform(hint))
+
+        if include_cross and gamma is not None:
+            denom = 1.0 + float(gamma) * h_t
+            if abs(denom) <= 1e-8:
+                continue
+            joint_mid = (-float(beta) * h_t - float(delta)) / denom
+        else:
+            joint_mid = -float(beta) * h_t - float(delta)
+
+        errors[hint] = float(abs(joint_mid - indiv_mid))
+    return errors
+
+
+def plot_accuracy_vs_capability_by_hint(
+    *,
+    df: pd.DataFrame,
+    beta: float,
+    gamma: float | None,
+    delta: float,
+    include_cross: bool,
+    hint_transform: Callable[[float], float],
+    lower: float | None,
+    label: str,
+    title_equation: str,
+    output_dir: Path,
+    x_label: str = "capability",
+    out_name: str = "accuracy_vs_pc_capability_by_hint.png",
+) -> Path:
+    fig, ax = plt.subplots(figsize=(12, 7))
+    hints = sorted(df["hint"].unique())
+    cmap = plt.cm.viridis
+    colors = {h: cmap(i / max(len(hints) - 1, 1)) for i, h in enumerate(hints)}
+
+    x_min = float(df["capability"].min())
+    x_max = float(df["capability"].max())
+    x_range = np.linspace(x_min - 0.5, x_max + 0.5, 120)
+
+    for hint in hints:
+        hint_df = df[df["hint"] == hint].sort_values("capability")
+        train_df = hint_df[hint_df["split"] == "train"]
+        ax.scatter(train_df["capability"], train_df["accuracy"], color=colors[hint], label=f"h={hint:.2f}", alpha=0.8, s=60, marker="o")
+
+        test_df = hint_df[hint_df["split"] == "test"]
+        if len(test_df) > 0:
+            ax.scatter(test_df["capability"], test_df["accuracy"], color=colors[hint], alpha=0.8, s=60, marker="s", edgecolors="black")
+
+        y_fit = [
+            _predict_from_capability(
+                capability=float(x),
+                hint=float(hint),
+                beta=beta,
+                gamma=gamma,
+                delta=delta,
+                include_cross=include_cross,
+                hint_transform=hint_transform,
+                lower=lower,
+            )
+            for x in x_range
+        ]
+        ax.plot(x_range, y_fit, "-", color=colors[hint], alpha=0.5, linewidth=2)
+
+    ax.set_xlabel(x_label, fontsize=12)
+    ax.set_ylabel("accuracy", fontsize=12)
+    ax.set_title(f"{label}\n{title_equation}", fontsize=14)
+    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=10)
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    out_path = output_dir / out_name
+    save_figure(fig, out_path)
+    return out_path
+
+
+def plot_individual_fits_by_hint_capability(
+    *,
+    df: pd.DataFrame,
+    beta: float,
+    gamma: float | None,
+    delta: float,
+    include_cross: bool,
+    hint_transform: Callable[[float], float],
+    lower: float | None,
+    individual_by_hint_all: dict[float, dict],
+    individual_by_hint_train: dict[float, dict],
+    label: str,
+    title_equation: str,
+    output_dir: Path,
+    x_label: str = "capability",
+    out_name: str = "individual_fits_by_hint.png",
+) -> Path:
+    hints = sorted(df["hint"].unique())
+    cmap = plt.cm.viridis
+    colors = {h: cmap(i / max(len(hints) - 1, 1)) for i, h in enumerate(hints)}
+
+    x_min = float(df["capability"].min())
+    x_max = float(df["capability"].max())
+    x_range = np.linspace(x_min - 0.5, x_max + 0.5, 120)
+
+    n_rows, n_cols = 3, 7
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.5 * n_cols, 3 * n_rows))
+    axes = axes.flatten()
+
+    for i, hint in enumerate(hints):
+        ax = axes[i]
+        hint_df = df[df["hint"] == hint].sort_values("capability")
+        train_df = hint_df[hint_df["split"] == "train"]
+        ax.scatter(train_df["capability"], train_df["accuracy"], color=colors[hint], alpha=0.8, s=40)
+
+        test_df = hint_df[hint_df["split"] == "test"]
+        if len(test_df) > 0:
+            ax.scatter(test_df["capability"], test_df["accuracy"], color=colors[hint], alpha=0.8, s=40, marker="s", edgecolors="black")
+
+        y_joint = [
+            _predict_from_capability(
+                capability=float(x),
+                hint=float(hint),
+                beta=beta,
+                gamma=gamma,
+                delta=delta,
+                include_cross=include_cross,
+                hint_transform=hint_transform,
+                lower=lower,
+            )
+            for x in x_range
+        ]
+        ax.plot(x_range, y_joint, "--", color="gray", linewidth=2, label="joint (train)")
+
+        if hint in individual_by_hint_train:
+            y_indiv_train = [float(individual_by_hint_train[hint]["predict"](x)) for x in x_range]
+            ax.plot(x_range, y_indiv_train, "-", color="orange", linewidth=2, label="indiv (train)")
+
+        if hint in individual_by_hint_all:
+            y_indiv_all = [float(individual_by_hint_all[hint]["predict"](x)) for x in x_range]
+            ax.plot(x_range, y_indiv_all, "-", color=colors[hint], linewidth=2, label="indiv (all)")
+            ax.axvline(float(individual_by_hint_all[hint]["midpoint"]), color=colors[hint], linestyle=":", alpha=0.5)
+
+        ax.set_title(f"h = {hint:.2f}", fontsize=11)
+        ax.set_xlabel(x_label)
+        ax.set_ylabel("accuracy")
+        ax.grid(True, alpha=0.3)
+        ax.set_ylim(-0.05, 1.05)
+        if i == 0:
+            ax.legend(fontsize=6)
+
+    for i in range(len(hints), len(axes)):
+        axes[i].set_visible(False)
+
+    fig.suptitle(f"{label} - Individual fits per hint\nJoint: {title_equation}", fontsize=12)
+    plt.tight_layout()
+
+    out_path = output_dir / out_name
+    save_figure(fig, out_path)
+    return out_path
+
+
+def plot_accuracy_vs_hint_by_model_capability(
+    *,
+    df: pd.DataFrame,
+    capability_map: dict[str, float],
+    beta: float,
+    gamma: float | None,
+    delta: float,
+    include_cross: bool,
+    hint_transform: Callable[[float], float],
+    lower: float | None,
+    individual_by_model: dict[str, dict],
+    label: str,
+    title_equation: str,
+    output_dir: Path,
+    out_name: str = "accuracy_vs_hint_by_model.png",
+) -> Path:
+    models_sorted = sorted(df["model"].unique(), key=lambda m: capability_map.get(m, 0.0))
+    n_models = len(models_sorted)
+    n_cols = 4
+    n_rows = (n_models + n_cols - 1) // n_cols
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.5 * n_rows))
+    axes = axes.flatten()
+
+    hint_range = np.linspace(0, 1, 120)
+    model_cmap = plt.cm.coolwarm
+    model_colors = {m: model_cmap(i / max(n_models - 1, 1)) for i, m in enumerate(models_sorted)}
+
+    for i, model in enumerate(models_sorted):
+        ax = axes[i]
+        model_df = df[df["model"] == model].sort_values("hint")
+        cap = float(capability_map.get(model, float("nan")))
+
+        ax.scatter(model_df["hint"], model_df["accuracy"], color=model_colors[model], alpha=0.8, s=40)
+
+        y_joint = [
+            _predict_from_capability(
+                capability=cap,
+                hint=float(h),
+                beta=beta,
+                gamma=gamma,
+                delta=delta,
+                include_cross=include_cross,
+                hint_transform=hint_transform,
+                lower=lower,
+            )
+            for h in hint_range
+        ]
+        ax.plot(hint_range, y_joint, "--", color="gray", linewidth=2, label="joint fit")
+
+        if model in individual_by_model:
+            y_indiv = [float(individual_by_model[model]["predict"](h)) for h in hint_range]
+            ax.plot(hint_range, y_indiv, "-", color=model_colors[model], linewidth=2, label="individual fit")
+
+        ax.set_title(f"{model}\ncap={cap:.2f}", fontsize=8)
+        ax.set_xlabel("hint")
+        ax.set_ylabel("accuracy")
+        ax.grid(True, alpha=0.3)
+        ax.set_ylim(-0.05, 1.05)
+        ax.set_xlim(-0.05, 1.05)
+        if i == 0:
+            ax.legend(fontsize=8)
+
+    for i in range(n_models, len(axes)):
+        axes[i].set_visible(False)
+
+    fig.suptitle(f"{label} - Accuracy vs Hint per model\nJoint: {title_equation}", fontsize=12)
+    plt.tight_layout()
+
+    out_path = output_dir / out_name
+    save_figure(fig, out_path)
+    return out_path
+
+
+def run_model_sweep_capability(
+    *,
+    df: pd.DataFrame,
+    pc_scores_map: dict[str, np.ndarray],
+    models_sorted: list[str],
+    hint_fractions: list[float],
+    hint_transform: Callable[[float], float],
+    include_cross: bool,
+    lower_asymptote: float | None,
+    n_pcs: int,
+    alpha_fixed: np.ndarray | None,
+    eval_hints: list[float] | None = None,
+) -> pd.DataFrame:
+    """Sweep number of train models (sorted by capability) and compute RMS + midpoint errors."""
+    if eval_hints is None:
+        eval_hints = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+
+    from pc_joint_helpers import fit_joint_sigmoid_over_pcs
+
+    individual_by_hint_all = fit_individual_sigmoids_by_hint_capability(df, fit_models=None, lower=lower_asymptote)
+
+    rows: list[dict[str, float]] = []
+    for n in range(5, len(models_sorted) + 1):
+        train_models = set(models_sorted[:n])
+        test_models = set(models_sorted[n:])
+
+        fit = fit_joint_sigmoid_over_pcs(
+            df=df,
+            pc_scores_map=pc_scores_map,
+            n_pcs=int(n_pcs),
+            fit_models=train_models,
+            include_cross=include_cross,
+            hint_transform=hint_transform,
+            lower=lower_asymptote,
+            alpha_fixed=alpha_fixed,
+        )
+
+        # Attach the capability for this alpha to compute per-hint individual fits and midpoint errors.
+        cap_map = {m: float(np.dot(fit.alpha[: int(n_pcs)], pc_scores_map[m][: int(n_pcs)])) for m in models_sorted}
+        df_tmp = df.copy()
+        df_tmp["capability"] = df_tmp["model"].map(cap_map).astype(float)
+
+        rms_train = compute_rms_capability_fit(
+            beta=fit.beta,
+            gamma=fit.gamma,
+            delta=fit.delta,
+            include_cross=fit.include_cross,
+            hint_transform=hint_transform,
+            lower=lower_asymptote,
+            df=df_tmp,
+            models=train_models,
+        )
+        rms_test = compute_rms_capability_fit(
+            beta=fit.beta,
+            gamma=fit.gamma,
+            delta=fit.delta,
+            include_cross=fit.include_cross,
+            hint_transform=hint_transform,
+            lower=lower_asymptote,
+            df=df_tmp,
+            models=test_models,
+        ) if test_models else float("nan")
+        rms_all = compute_rms_capability_fit(
+            beta=fit.beta,
+            gamma=fit.gamma,
+            delta=fit.delta,
+            include_cross=fit.include_cross,
+            hint_transform=hint_transform,
+            lower=lower_asymptote,
+            df=df_tmp,
+            models=None,
+        )
+
+        midpoint_errors = compute_midpoint_errors_capability(
+            beta=fit.beta,
+            gamma=fit.gamma,
+            delta=fit.delta,
+            include_cross=fit.include_cross,
+            individual_fits=individual_by_hint_all,
+            hints=eval_hints,
+            hint_transform=hint_transform,
+        )
+
+        row: dict[str, float] = {"n_models": float(n), "rms_train": rms_train, "rms_test": rms_test, "rms_all": rms_all}
+        for h in eval_hints:
+            row[f"midpoint_h_{h:.1f}"] = float(midpoint_errors.get(float(h), float("nan")))
+        rows.append(row)
+
+    out = pd.DataFrame(rows)
+    out["n_models"] = out["n_models"].astype(int)
+    return out
+
+
+def plot_model_sweep_capability(
+    *,
+    sweep_df: pd.DataFrame,
+    label: str,
+    eval_hints: list[float],
+    output_dir: Path,
+) -> Path:
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    ax = axes[0]
+    ax.plot(sweep_df["n_models"], sweep_df["rms_train"], "o-", label="train", color="blue")
+    ax.plot(sweep_df["n_models"], sweep_df["rms_test"], "s-", label="test", color="red")
+    ax.plot(sweep_df["n_models"], sweep_df["rms_all"], "^-", label="all", color="green")
+    ax.set_xlabel("number of train models")
+    ax.set_ylabel("rms")
+    ax.set_title("RMS vs number of train models")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    ax = axes[1]
+    cmap = plt.cm.viridis
+    colors = {h: cmap(i / max(len(eval_hints) - 1, 1)) for i, h in enumerate(eval_hints)}
+    for h in eval_hints:
+        col = f"midpoint_h_{h:.1f}"
+        if col in sweep_df.columns:
+            ax.plot(sweep_df["n_models"], sweep_df[col], "o-", label=f"h={h:.1f}", color=colors[h])
+    ax.set_xlabel("number of train models")
+    ax.set_ylabel("midpoint error (capability units)")
+    ax.set_title("midpoint error vs number of train models")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    fig.suptitle(f"{label} (fitting joint scaling)", fontsize=12)
+    plt.tight_layout()
+
+    out_path = output_dir / "model_sweep.png"
+    save_figure(fig, out_path)
+    return out_path
+
+
+def run_joint_scaling_plots_pc(
+    *,
+    base_folder: Path,
+    baseline_folder: Path,
+    eval_name: str,
+    solver: str,
+    condition: str,
+    label: str,
+    all_models: list[str],
+    num_holdout_models: int,
+    hint_fractions: list[float],
+    eval_hints_for_sweep: list[float],
+    include_cross: bool,
+    lower_asymptote: float | None,
+    hint_transform: str | Callable[[float], float],
+    n_pcs: int,
+    output_dir: Path,
+    eci_file: Path | None = None,
+    alpha_fixed: np.ndarray | None = None,
+    pca_n_components: int | None = None,
+) -> dict[str, object]:
+    """Run the joint scaling analysis using capability=alpha·PC and write artifacts to `output_dir`."""
+    from pca_helpers import compute_pc_scores, plot_component_weights_heatmap, plot_explained_variance
+    from pc_joint_helpers import fit_joint_sigmoid_over_pcs
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    plots_dir = output_dir
+
+    # Resolve hint transform (reuse the existing ones from this module)
+    if isinstance(hint_transform, str):
+        hint_transform_name = hint_transform
+        if hint_transform_name not in HINT_TRANSFORMS:
+            raise ValueError(f"Unknown hint_transform={hint_transform_name!r}. Choose one of {sorted(HINT_TRANSFORMS.keys())}")
+        hint_transform_fn = HINT_TRANSFORMS[hint_transform_name]
+    else:
+        hint_transform_fn = hint_transform
+        hint_transform_name = getattr(hint_transform_fn, "__name__", "custom")
+
+    # PCA + PC scores
+    n_components = int(pca_n_components) if pca_n_components is not None else max(int(n_pcs), 5)
+    _pivot, pca, pc_scores_map = compute_pc_scores(baseline_folder=baseline_folder, n_components=n_components)
+    plot_component_weights_heatmap(pca=pca, outfile=plots_dir / "pca_component_weights.png")
+    plot_explained_variance(pca=pca, outfile=plots_dir / "pca_explained_variance.png")
+
+    # Optional ECI map for split consistency / proxy metrics
+    eci_map: dict[str, float] | None
+    if eci_file is not None:
+        eci_map = load_eci_map(eci_file)
+    else:
+        eci_map = None
+
+    # Train/test split: by ECI if available, else by preliminary capability ordering
+    if num_holdout_models < 0 or num_holdout_models > len(all_models):
+        raise ValueError(f"num_holdout_models must be in [0, {len(all_models)}], got {num_holdout_models}")
+
+    if eci_map is not None:
+        models_sorted = sorted(all_models, key=lambda m: eci_map.get(m, float("-inf")))
+    else:
+        # Temporary ordering by PC-1 score (monotone in many cases); updated after fit.
+        models_sorted = sorted(all_models, key=lambda m: float(pc_scores_map.get(m, np.zeros(1))[0]) if m in pc_scores_map else float("-inf"))
+
+    holdout_set = set(models_sorted[-num_holdout_models:]) if num_holdout_models > 0 else set()
+    train_set = set(models_sorted[:-num_holdout_models]) if num_holdout_models > 0 else set(all_models)
+
+    # Fit alpha (unless fixed), beta/gamma/delta on train set
+    df_raw = load_and_prepare_results_df_with_capability(
+        base_folder=base_folder,
+        eval_name=eval_name,
+        solver=solver,
+        condition=condition,
+        all_models=all_models,
+        hint_fractions=hint_fractions,
+        capability_map={m: 0.0 for m in all_models},  # placeholder, overwritten below
+        train_models=train_set,
+        eci_map=eci_map,
+    )
+    # Overwrite placeholder capability using fitted alpha
+    fit = fit_joint_sigmoid_over_pcs(
+        df=df_raw,
+        pc_scores_map=pc_scores_map,
+        n_pcs=int(n_pcs),
+        fit_models=train_set,
+        include_cross=include_cross,
+        hint_transform=hint_transform_fn,
+        lower=lower_asymptote,
+        alpha_fixed=alpha_fixed,
+    )
+
+    capability_map = {m: float(np.dot(fit.alpha[: int(n_pcs)], pc_scores_map[m][: int(n_pcs)])) for m in all_models if m in pc_scores_map}
+
+    df = load_and_prepare_results_df_with_capability(
+        base_folder=base_folder,
+        eval_name=eval_name,
+        solver=solver,
+        condition=condition,
+        all_models=all_models,
+        hint_fractions=hint_fractions,
+        capability_map=capability_map,
+        train_models=train_set,
+        eci_map=eci_map,
+    )
+
+    # RMS
+    rms_train = compute_rms_capability_fit(
+        beta=fit.beta,
+        gamma=fit.gamma,
+        delta=fit.delta,
+        include_cross=fit.include_cross,
+        hint_transform=hint_transform_fn,
+        lower=lower_asymptote,
+        df=df,
+        models=train_set,
+    )
+    rms_test = compute_rms_capability_fit(
+        beta=fit.beta,
+        gamma=fit.gamma,
+        delta=fit.delta,
+        include_cross=fit.include_cross,
+        hint_transform=hint_transform_fn,
+        lower=lower_asymptote,
+        df=df,
+        models=holdout_set,
+    ) if holdout_set else float("nan")
+    rms_all = compute_rms_capability_fit(
+        beta=fit.beta,
+        gamma=fit.gamma,
+        delta=fit.delta,
+        include_cross=fit.include_cross,
+        hint_transform=hint_transform_fn,
+        lower=lower_asymptote,
+        df=df,
+        models=None,
+    )
+
+    # Individual fits and midpoint errors (capability units)
+    individual_by_hint_all = fit_individual_sigmoids_by_hint_capability(df, fit_models=None, lower=lower_asymptote)
+    individual_by_hint_train = fit_individual_sigmoids_by_hint_capability(df, fit_models=train_set, lower=lower_asymptote)
+    individual_by_model = fit_individual_sigmoids_by_model_hint_space(df, fit_models=None, lower=lower_asymptote)
+
+    midpoint_errors_all = compute_midpoint_errors_capability(
+        beta=fit.beta,
+        gamma=fit.gamma,
+        delta=fit.delta,
+        include_cross=fit.include_cross,
+        individual_fits=individual_by_hint_all,
+        hints=hint_fractions,
+        hint_transform=hint_transform_fn,
+    )
+    midpoint_errors_train = compute_midpoint_errors_capability(
+        beta=fit.beta,
+        gamma=fit.gamma,
+        delta=fit.delta,
+        include_cross=fit.include_cross,
+        individual_fits=individual_by_hint_train,
+        hints=hint_fractions,
+        hint_transform=hint_transform_fn,
+    )
+    mean_midpoint_error_all = float(np.mean(list(midpoint_errors_all.values()))) if midpoint_errors_all else float("nan")
+    mean_midpoint_error_train = float(np.mean(list(midpoint_errors_train.values()))) if midpoint_errors_train else float("nan")
+
+    # Title equation string (human-readable, used in plot titles)
+    alpha_str = ", ".join([f"{a:.3f}" for a in fit.alpha[: int(n_pcs)].tolist()])
+    if include_cross and fit.gamma is not None:
+        eq = f"σ(α·PC + β·h + γ·(α·PC)h + δ), α=[{alpha_str}], β={fit.beta:.3f}, γ={fit.gamma:.3f}, δ={fit.delta:.3f}"
+    else:
+        eq = f"σ(α·PC + β·h + δ), α=[{alpha_str}], β={fit.beta:.3f}, δ={fit.delta:.3f}"
+    if lower_asymptote is not None:
+        eq = f"{lower_asymptote:.2f} + {1-lower_asymptote:.2f}·" + eq
+
+    plot_accuracy_vs_capability_by_hint(
+        df=df,
+        beta=fit.beta,
+        gamma=fit.gamma,
+        delta=fit.delta,
+        include_cross=fit.include_cross,
+        hint_transform=hint_transform_fn,
+        lower=lower_asymptote,
+        label=label,
+        title_equation=eq,
+        output_dir=plots_dir,
+        x_label="pc_capability",
+        out_name="accuracy_vs_pc_capability_by_hint.png",
+    )
+    plot_individual_fits_by_hint_capability(
+        df=df,
+        beta=fit.beta,
+        gamma=fit.gamma,
+        delta=fit.delta,
+        include_cross=fit.include_cross,
+        hint_transform=hint_transform_fn,
+        lower=lower_asymptote,
+        individual_by_hint_all=individual_by_hint_all,
+        individual_by_hint_train=individual_by_hint_train,
+        label=label,
+        title_equation=eq,
+        output_dir=plots_dir,
+        x_label="pc_capability",
+    )
+    plot_accuracy_vs_hint_by_model_capability(
+        df=df,
+        capability_map=capability_map,
+        beta=fit.beta,
+        gamma=fit.gamma,
+        delta=fit.delta,
+        include_cross=fit.include_cross,
+        hint_transform=hint_transform_fn,
+        lower=lower_asymptote,
+        individual_by_model=individual_by_model,
+        label=label,
+        title_equation=eq,
+        output_dir=plots_dir,
+    )
+
+    # Model sweep (capability ordering)
+    models_sorted_by_cap = sorted(df["model"].unique().tolist(), key=lambda m: capability_map.get(m, float("-inf")))
+    sweep_df = run_model_sweep_capability(
+        df=df,
+        pc_scores_map=pc_scores_map,
+        models_sorted=models_sorted_by_cap,
+        hint_fractions=hint_fractions,
+        hint_transform=hint_transform_fn,
+        include_cross=include_cross,
+        lower_asymptote=lower_asymptote,
+        n_pcs=int(n_pcs),
+        alpha_fixed=(np.asarray(alpha_fixed, dtype=float) if alpha_fixed is not None else None),
+        eval_hints=eval_hints_for_sweep,
+    )
+    plot_model_sweep_capability(sweep_df=sweep_df, label=label, eval_hints=eval_hints_for_sweep, output_dir=plots_dir)
+
+    config_resolved: dict[str, object] = {
+        "output_dir": str(output_dir),
+        "base_folder": str(base_folder),
+        "baseline_folder": str(baseline_folder),
+        "eci_file": str(eci_file) if eci_file is not None else None,
+        "eval_name": eval_name,
+        "solver": solver,
+        "condition": condition,
+        "label": label,
+        "all_models": all_models,
+        "num_holdout_models": int(num_holdout_models),
+        "train_models": sorted(train_set, key=lambda m: (eci_map.get(m, float("-inf")) if eci_map is not None else capability_map.get(m, float("-inf")))),
+        "holdout_models": sorted(holdout_set, key=lambda m: (eci_map.get(m, float("-inf")) if eci_map is not None else capability_map.get(m, float("-inf")))),
+        "hint_fractions": hint_fractions,
+        "eval_hints_for_sweep": eval_hints_for_sweep,
+        "include_cross": bool(include_cross),
+        "lower_asymptote": lower_asymptote,
+        "hint_transform": hint_transform_name,
+        "n_pcs": int(n_pcs),
+        "alpha_fixed": (alpha_fixed.tolist() if alpha_fixed is not None else None),
+    }
+
+    metrics: dict[str, object] = {
+        "include_cross": bool(include_cross),
+        "lower_asymptote": lower_asymptote,
+        "rms_train": float(rms_train),
+        "rms_test": float(rms_test),
+        "rms_all": float(rms_all),
+        "mse_train": float(rms_train) ** 2,
+        "mse_test": float(rms_test) ** 2 if not math.isnan(float(rms_test)) else float("nan"),
+        "mse_all": float(rms_all) ** 2,
+        "mean_midpoint_error_all": mean_midpoint_error_all,
+        "mean_midpoint_error_train": mean_midpoint_error_train,
+        "n_train_models": int(len(train_set)),
+        "n_test_models": int(len(holdout_set)),
+        "alpha": [float(x) for x in fit.alpha[: int(n_pcs)].tolist()],
+        "beta": float(fit.beta),
+        "gamma": float(fit.gamma) if fit.gamma is not None else None,
+        "delta": float(fit.delta),
+        "equation_text": eq,
+        "explained_variance_ratio": [float(x) for x in np.asarray(pca.explained_variance_ratio, dtype=float).tolist()],
+        "config": config_resolved,
+    }
+
+    write_json(output_dir / "config_resolved.json", config_resolved)
+    write_json(output_dir / "metrics.json", metrics)
+    sweep_df.to_csv(output_dir / "model_sweep.csv", index=False)
+    return metrics
+
+
+def _fit_affine_capability_to_eci(
+    *,
+    capability_map: dict[str, float],
+    eci_map: dict[str, float],
+    models: set[str],
+) -> tuple[float, float]:
+    """Fit eci ≈ a*capability + b via least squares on the provided model set."""
+    xs: list[float] = []
+    ys: list[float] = []
+    for m in models:
+        if m in capability_map and m in eci_map:
+            x = capability_map[m]
+            y = eci_map[m]
+            if x is None or y is None:
+                continue
+            if isinstance(x, float) and np.isnan(x):
+                continue
+            if isinstance(y, float) and np.isnan(y):
+                continue
+            xs.append(float(x))
+            ys.append(float(y))
+    if len(xs) < 2:
+        raise ValueError(f"Need at least 2 models to calibrate capability->ECI, got {len(xs)}")
+    X = np.stack([np.asarray(xs, dtype=float), np.ones(len(xs), dtype=float)], axis=1)  # (N,2)
+    y = np.asarray(ys, dtype=float)
+    a, b = np.linalg.lstsq(X, y, rcond=None)[0].tolist()
+    return float(a), float(b)
+
+
+def _joint_midpoint_capability(
+    *,
+    hint: float,
+    beta: float,
+    gamma: float | None,
+    delta: float,
+    include_cross: bool,
+    hint_transform: Callable[[float], float],
+) -> float | None:
+    """Midpoint in capability units (x where z=0)."""
+    h_t = float(hint_transform(float(hint)))
+    if include_cross and gamma is not None:
+        denom = 1.0 + float(gamma) * h_t
+        if abs(denom) <= 1e-8:
+            return None
+        return float((-float(beta) * h_t - float(delta)) / denom)
+    return float(-float(beta) * h_t - float(delta))
+
+
+def _mean_abs_midpoint_error_proxy_eci_units(
+    *,
+    hints: list[float],
+    eci_midpoints: dict[float, float],
+    beta: float,
+    gamma: float | None,
+    delta: float,
+    include_cross: bool,
+    hint_transform: Callable[[float], float],
+    a: float,
+    b: float,
+) -> float:
+    errs: list[float] = []
+    for h in hints:
+        h = float(h)
+        if h not in eci_midpoints:
+            continue
+        cap_mid = _joint_midpoint_capability(
+            hint=h,
+            beta=beta,
+            gamma=gamma,
+            delta=delta,
+            include_cross=include_cross,
+            hint_transform=hint_transform,
+        )
+        if cap_mid is None:
+            continue
+        eci_pred = float(a * cap_mid + b)
+        errs.append(abs(eci_pred - float(eci_midpoints[h])))
+    return float(np.mean(errs)) if errs else float("nan")
+
+
+def compare_capability_approaches(
+    *,
+    base_folder: Path,
+    baseline_folder: Path,
+    eci_file: Path,
+    eval_name: str,
+    solver: str,
+    condition: str,
+    label: str,
+    all_models: list[str],
+    num_holdout_models: int,
+    hint_fractions: list[float],
+    eval_hints_for_sweep: list[float],
+    include_cross: bool,
+    lower_asymptote: float | None,
+    hint_transform: str | Callable[[float], float],
+    output_dir: Path,
+    pc_ns: list[int] = [2, 3],
+) -> dict[str, object]:
+    """Run ECI vs PC2 vs PC3 and write a comparison report + per-method artifacts."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # ---- Run ECI baseline method (writes its own artifacts) ----
+    eci_out = output_dir / "eci"
+    eci_metrics = run_joint_scaling_plots(
+        base_folder=base_folder,
+        eci_file=eci_file,
+        eval_name=eval_name,
+        solver=solver,
+        condition=condition,
+        label=f"{label} (ECI)",
+        all_models=all_models,
+        num_holdout_models=num_holdout_models,
+        hint_fractions=hint_fractions,
+        eval_hints_for_sweep=eval_hints_for_sweep,
+        include_cross=include_cross,
+        lower_asymptote=lower_asymptote,
+        hint_transform=hint_transform,
+        output_dir=eci_out,
+    )
+
+    # ---- Ground truth midpoints in ECI units (current pipeline definition) ----
+    if isinstance(hint_transform, str):
+        hint_transform_fn = HINT_TRANSFORMS[hint_transform]
+    else:
+        hint_transform_fn = hint_transform
+
+    eci_map = load_eci_map(eci_file)
+    models_sorted_by_eci = sorted(all_models, key=lambda m: eci_map.get(m, float("-inf")))
+    holdout_set = set(models_sorted_by_eci[-num_holdout_models:]) if num_holdout_models > 0 else set()
+    train_set = set(models_sorted_by_eci[:-num_holdout_models]) if num_holdout_models > 0 else set(all_models)
+
+    df_eci = load_and_prepare_results_df(
+        base_folder=base_folder,
+        eval_name=eval_name,
+        solver=solver,
+        condition=condition,
+        all_models=all_models,
+        hint_fractions=hint_fractions,
+        eci_map=eci_map,
+        train_models=train_set,
+    )
+    indiv_eci_all = fit_individual_sigmoids_by_hint(df_eci, eci_map, fit_models=None, lower=lower_asymptote)
+    indiv_eci_train = fit_individual_sigmoids_by_hint(df_eci, eci_map, fit_models=train_set, lower=lower_asymptote)
+    indiv_eci_test = fit_individual_sigmoids_by_hint(df_eci, eci_map, fit_models=holdout_set, lower=lower_asymptote) if holdout_set else {}
+
+    eci_mid_all = {float(h): float(v["midpoint"]) for h, v in indiv_eci_all.items()}
+    eci_mid_train = {float(h): float(v["midpoint"]) for h, v in indiv_eci_train.items()}
+    eci_mid_test = {float(h): float(v["midpoint"]) for h, v in indiv_eci_test.items()}
+
+    # ---- Run PC methods ----
+    pc_results: list[dict[str, object]] = []
+    for n in pc_ns:
+        pc_out = output_dir / f"pc{int(n)}"
+        pc_metrics = run_joint_scaling_plots_pc(
+            base_folder=base_folder,
+            baseline_folder=baseline_folder,
+            eci_file=eci_file,
+            eval_name=eval_name,
+            solver=solver,
+            condition=condition,
+            label=f"{label} (PC{int(n)})",
+            all_models=all_models,
+            num_holdout_models=num_holdout_models,
+            hint_fractions=hint_fractions,
+            eval_hints_for_sweep=eval_hints_for_sweep,
+            include_cross=include_cross,
+            lower_asymptote=lower_asymptote,
+            hint_transform=hint_transform,
+            n_pcs=int(n),
+            output_dir=pc_out,
+        )
+
+        # Proxy midpoint error in ECI units via affine calibration (capability -> ECI)
+        alpha = np.asarray(pc_metrics["alpha"], dtype=float)
+        # Recompute capability map from saved alpha (consistent with pca_helpers + saved run).
+        from pca_helpers import compute_pc_scores
+
+        _pivot, _pca, pc_scores_map = compute_pc_scores(baseline_folder=baseline_folder, n_components=max(int(n), 5))
+        capability_map = {m: float(np.dot(alpha[: int(n)], pc_scores_map[m][: int(n)])) for m in all_models if m in pc_scores_map}
+
+        a, b = _fit_affine_capability_to_eci(capability_map=capability_map, eci_map=eci_map, models=train_set)
+
+        proxy_all = _mean_abs_midpoint_error_proxy_eci_units(
+            hints=hint_fractions,
+            eci_midpoints=eci_mid_all,
+            beta=float(pc_metrics["beta"]),
+            gamma=(float(pc_metrics["gamma"]) if pc_metrics.get("gamma") is not None else None),
+            delta=float(pc_metrics["delta"]),
+            include_cross=bool(pc_metrics["include_cross"]),
+            hint_transform=hint_transform_fn,
+            a=a,
+            b=b,
+        )
+        proxy_train = _mean_abs_midpoint_error_proxy_eci_units(
+            hints=hint_fractions,
+            eci_midpoints=eci_mid_train,
+            beta=float(pc_metrics["beta"]),
+            gamma=(float(pc_metrics["gamma"]) if pc_metrics.get("gamma") is not None else None),
+            delta=float(pc_metrics["delta"]),
+            include_cross=bool(pc_metrics["include_cross"]),
+            hint_transform=hint_transform_fn,
+            a=a,
+            b=b,
+        )
+        proxy_test = _mean_abs_midpoint_error_proxy_eci_units(
+            hints=hint_fractions,
+            eci_midpoints=eci_mid_test,
+            beta=float(pc_metrics["beta"]),
+            gamma=(float(pc_metrics["gamma"]) if pc_metrics.get("gamma") is not None else None),
+            delta=float(pc_metrics["delta"]),
+            include_cross=bool(pc_metrics["include_cross"]),
+            hint_transform=hint_transform_fn,
+            a=a,
+            b=b,
+        )
+
+        pc_results.append(
+            {
+                "method": f"PC{int(n)}",
+                "output_dir": str(pc_out),
+                "rms_train": float(pc_metrics["rms_train"]),
+                "rms_test": float(pc_metrics["rms_test"]),
+                "rms_all": float(pc_metrics["rms_all"]),
+                "mse_train": float(pc_metrics["mse_train"]),
+                "mse_test": float(pc_metrics["mse_test"]),
+                "mse_all": float(pc_metrics["mse_all"]),
+                "mean_midpoint_error_all_native": float(pc_metrics["mean_midpoint_error_all"]),
+                "mean_midpoint_error_train_native": float(pc_metrics["mean_midpoint_error_train"]),
+                "mean_midpoint_error_proxy_eci_units_all": float(proxy_all),
+                "mean_midpoint_error_proxy_eci_units_train": float(proxy_train),
+                "mean_midpoint_error_proxy_eci_units_test": float(proxy_test),
+                "capability_to_eci_affine": {"a": float(a), "b": float(b)},
+            }
+        )
+
+    # ---- Build comparison table ----
+    eci_row = {
+        "method": "ECI",
+        "output_dir": str(eci_out),
+        "rms_train": float(eci_metrics["rms_train"]),
+        "rms_test": float(eci_metrics["rms_test"]),
+        "rms_all": float(eci_metrics["rms_all"]),
+        "mse_train": float(eci_metrics["rms_train"]) ** 2,
+        "mse_test": float(eci_metrics["rms_test"]) ** 2 if not math.isnan(float(eci_metrics["rms_test"])) else float("nan"),
+        "mse_all": float(eci_metrics["rms_all"]) ** 2,
+        "mean_midpoint_error_all_native": float(eci_metrics["mean_midpoint_error_all"]),
+        "mean_midpoint_error_train_native": float(eci_metrics["mean_midpoint_error_train"]),
+        # For ECI, proxy == native (already in ECI units).
+        "mean_midpoint_error_proxy_eci_units_all": float(eci_metrics["mean_midpoint_error_all"]),
+        "mean_midpoint_error_proxy_eci_units_train": float(eci_metrics["mean_midpoint_error_train"]),
+        "mean_midpoint_error_proxy_eci_units_test": float(eci_metrics["mean_midpoint_error_test"]),
+    }
+    rows = [eci_row, *pc_results]
+    comp_df = pd.DataFrame(rows)
+    comp_df.to_csv(output_dir / "comparison.csv", index=False)
+    write_json(output_dir / "comparison.json", rows)
+
+    # ---- Summary plot ----
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    methods = comp_df["method"].tolist()
+
+    ax = axes[0]
+    ax.bar(methods, comp_df["mse_all"].tolist())
+    ax.set_title("MSE (all points)")
+    ax.set_ylabel("MSE")
+    ax.grid(True, axis="y", alpha=0.3)
+
+    ax = axes[1]
+    ax.bar(methods, comp_df["mean_midpoint_error_proxy_eci_units_all"].tolist())
+    ax.set_title("Midpoint error proxy (ECI units, all)")
+    ax.set_ylabel("mean |Δ midpoint|")
+    ax.grid(True, axis="y", alpha=0.3)
+
+    fig.suptitle(f"{label}: ECI vs PC methods", fontsize=12)
+    plt.tight_layout()
+    save_figure(fig, output_dir / "comparison_summary.png")
+
+    result: dict[str, object] = {
+        "output_dir": str(output_dir),
+        "eci_dir": str(eci_out),
+        "pc_dirs": {r["method"]: r["output_dir"] for r in pc_results},
+        "comparison_csv": str(output_dir / "comparison.csv"),
+        "comparison_json": str(output_dir / "comparison.json"),
+        "comparison_summary_plot": str(output_dir / "comparison_summary.png"),
+    }
+    write_json(output_dir / "config_resolved.json", {
+        "base_folder": str(base_folder),
+        "baseline_folder": str(baseline_folder),
+        "eci_file": str(eci_file),
+        "eval_name": eval_name,
+        "solver": solver,
+        "condition": condition,
+        "label": label,
+        "all_models": all_models,
+        "num_holdout_models": int(num_holdout_models),
+        "hint_fractions": hint_fractions,
+        "eval_hints_for_sweep": eval_hints_for_sweep,
+        "include_cross": bool(include_cross),
+        "lower_asymptote": lower_asymptote,
+        "hint_transform": (hint_transform if isinstance(hint_transform, str) else getattr(hint_transform, "__name__", "custom")),
+        "pc_ns": [int(n) for n in pc_ns],
+        "output_dir": str(output_dir),
+    })
+    write_json(output_dir / "metrics.json", result)
+    return result
+

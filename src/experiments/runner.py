@@ -7,6 +7,7 @@ import sys
 import time
 import contextlib
 import re
+from collections import deque
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -26,10 +27,8 @@ class _TimestampStepsStream:
         self._stream = stream
         self._line_prefix = line_prefix
         self._buf = ""
-        self._t0 = time.time()
-        self._last_t = None
-        self._last_steps = None
-        self._ema_rate = None  # steps/sec
+        self._t_first = None
+        self._history = deque(maxlen=40)  # (t, steps)
 
     def write(self, s: str):
         self._buf += s
@@ -50,7 +49,7 @@ class _TimestampStepsStream:
         self._stream.flush()
 
     def _format_steps_line(self, line: str) -> str:
-        """Prefix timestamp and append ETA based on observed step rate."""
+        """Prefix timestamp and append ETA based on a rolling-window rate."""
         ts = time.strftime("%m/%d %H:%M:%S")
 
         # "Samples: x/y" is redundant with Steps for our evals; strip it.
@@ -65,32 +64,35 @@ class _TimestampStepsStream:
             total = int(m.group(2))
             now = time.time()
 
-            if self._last_t is not None and self._last_steps is not None and steps >= self._last_steps:
-                dt = max(now - self._last_t, 1e-6)
-                dsteps = steps - self._last_steps
-                inst_rate = dsteps / dt if dsteps > 0 else 0.0
-                # Exponential moving average for stability
-                alpha = 0.2
-                if self._ema_rate is None:
-                    self._ema_rate = inst_rate
-                else:
-                    self._ema_rate = (alpha * inst_rate) + ((1 - alpha) * self._ema_rate)
-
-            self._last_t = now
-            self._last_steps = steps
+            if self._t_first is None:
+                self._t_first = now
+            self._history.append((now, steps))
 
             remaining = max(total - steps, 0)
-            rate = self._ema_rate if self._ema_rate and self._ema_rate > 0 else None
 
-            if rate is None:
-                return f"[{ts}] {line} | ETA: ?"
+            # Build a stable rate from a longer window.
+            # Prefer a window that's at least 120s old; fall back to oldest point.
+            t_old, s_old = None, None
+            for t_i, s_i in self._history:
+                if now - t_i >= 120:
+                    t_old, s_old = t_i, s_i
+                    break
+            if t_old is None:
+                t_old, s_old = self._history[0]
+
+            dt = max(now - t_old, 1e-6)
+            dsteps = max(steps - s_old, 0)
+            rate = (dsteps / dt) if dsteps > 0 else None  # steps/sec
+
+            elapsed_seconds = int(now - (self._t_first or now))
+            elapsed_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_seconds))
+
+            # Don't show ETA until we have enough progress to make it meaningful.
+            if steps < 50 or rate is None or rate <= 0:
+                return f"[{ts}] {line} | elapsed: {elapsed_str} | ETA: ?"
 
             eta_seconds = int(remaining / rate) if remaining > 0 else 0
             eta_str = time.strftime("%H:%M:%S", time.gmtime(eta_seconds))
-
-            elapsed_seconds = int(now - self._t0)
-            elapsed_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_seconds))
-
             return f"[{ts}] {line} | elapsed: {elapsed_str} | ETA: {eta_str}"
         except Exception:
             return f"[{ts}] {line}"

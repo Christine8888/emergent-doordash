@@ -224,13 +224,12 @@ python suze_experiments/20260213/aime_experiments.py \
   --results_dir christine_experiments/20251113/results \
   --max_jobs 1
 
-
-
-NOTE TO SELF: these jobs might fail if they get scheduled on jag/miso bc my setup only works for 
-
-
-these are all running fine, check on them later
-
+debug job is 14512631. Second one is 14512830
+python suze_experiments/20260213/aime_experiments.py \
+  --experiment all \
+  --epochs 10 \
+  --results_dir christine_experiments/20251113/results \
+  --max_jobs 1 --debug
 
 
 
