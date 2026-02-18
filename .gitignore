@@ -1,4 +1,4 @@
-# Christine's stuff
+
 *.env
 *.slurm
 *.tok
@@ -28,9 +28,10 @@ wandb/*
 !aime_cot.json
 !aime_hints.json
 
-# Christine stuff
 submitit_logs/
 !christine_experiments/**/*.jsonl
 !suze_experiments/data/**/*.jsonl
 !christine_experiments/**/*.json
 christine_experiments/20251010_data/openthoughts_sonnet45.jsonl
+
+*.ckpt.json
