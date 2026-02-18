@@ -130,12 +130,36 @@ def _output_path(
     return output_dir / filename
 
 
+def _ckpt_path(output_path: Path) -> Path:
+    """Return the .ckpt.json path corresponding to an output .json path."""
+    return output_path.with_suffix(".ckpt.json")
+
+
+def _read_ckpt_progress(ckpt_path: Path) -> tuple[int, int] | None:
+    """Return (completed_instances, total_instances) from a checkpoint file, or None if unreadable."""
+    if not ckpt_path.exists():
+        return None
+    try:
+        import json
+        with open(ckpt_path) as f:
+            data = json.load(f)
+        completed = data.get("completed_samples")
+        total = data.get("total_samples")
+        if isinstance(completed, int) and isinstance(total, int) and total > 0:
+            return completed, total
+    except Exception:
+        pass
+    return None
+
+
 def plan_runs(
     experiment_names: list[str],
     results_dir: str,
 ):
+    total_jobs = 0
     total_existing = 0
     total_missing = 0
+    total_progress_jobs = 0.0  # each done job = 1.0, each in-progress job = fraction done
 
     for exp_name in experiment_names:
         exp_cls = EXPERIMENTS[exp_name]
@@ -147,9 +171,13 @@ def plan_runs(
             missing_hint_fractions: list[float] = []
             existing_for_model = 0
             missing_for_model = 0
+            inprog_completed = 0
+            inprog_total = 0
+            inprog_count = 0
 
             for fewshot in FEWSHOTS:
                 for hint_fraction in HINT_FRACTIONS:
+                    total_jobs += 1
                     out = _output_path(
                         experiment_class=exp_cls,
                         results_dir=results_dir,
@@ -160,10 +188,17 @@ def plan_runs(
                     if out.exists():
                         exp_existing += 1
                         existing_for_model += 1
+                        total_progress_jobs += 1.0
                     else:
                         exp_missing += 1
                         missing_for_model += 1
                         missing_hint_fractions.append(hint_fraction)
+                        progress = _read_ckpt_progress(_ckpt_path(out))
+                        if progress is not None:
+                            inprog_count += 1
+                            inprog_completed += progress[0]
+                            inprog_total += progress[1]
+                            total_progress_jobs += progress[0] / progress[1]
 
             if missing_for_model:
                 missing_hint_fractions = sorted(set(missing_hint_fractions))
@@ -171,9 +206,14 @@ def plan_runs(
                     missing_display = "ALL"
                 else:
                     missing_display = str(missing_hint_fractions)
+                inprog_str = ""
+                if inprog_count:
+                    pct = 100 * inprog_completed / inprog_total if inprog_total else 0
+                    inprog_str = f" | in_progress={inprog_count} ({pct:.0f}% each avg)"
                 print(
                     f"{exp_name} / {model_name}: "
-                    f"existing={existing_for_model} missing={missing_for_model} "
+                    f"done={existing_for_model} missing={missing_for_model}"
+                    f"{inprog_str} | "
                     f"missing_hint_fractions={missing_display}"
                 )
 
@@ -181,7 +221,12 @@ def plan_runs(
         total_missing += exp_missing
         print(f"{exp_name}: existing={exp_existing} missing={exp_missing} (models_counted={len(MODELS)})")
 
-    print(f"TOTAL: existing={total_existing} missing={total_missing} (models_counted={len(MODELS)})")
+    overall_pct = 100 * total_progress_jobs / total_jobs if total_jobs else 0
+    print(
+        f"TOTAL: {total_progress_jobs:.1f} / {total_jobs} jobs completed "
+        f"({overall_pct:.1f}%) | done={total_existing} missing={total_missing} "
+        f"(models_counted={len(MODELS)})"
+    )
 
 
 def run_experiment(
@@ -278,7 +323,7 @@ python suze_experiments/20260213/aime_experiments.py \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results --plan
 
-TOTAL: existing=150 missing=186 (models_counted=16)
+TOTAL: existing=150 missing=186 | in_progress: 40630/121160 instances (34%) (models_counted=16)
 
 TESTING
 python suze_experiments/20260213/aime_experiments.py \
