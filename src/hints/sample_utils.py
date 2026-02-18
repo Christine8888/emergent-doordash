@@ -71,10 +71,11 @@ def create_base_parser(description: str) -> ArgumentParser:
                             "math_level_5",
                             "hle",
                             "arc",
-                            # External baselines (new)
+                            # External baselines
                             "hellaswag",
                             "piqa",
                             "mmlu_5_shot_cot",
+                            "mmlu_0_shot",
                             "bbh",
                             "arc_challenge",
                             "winogrande",

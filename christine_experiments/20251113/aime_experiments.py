@@ -6,7 +6,7 @@ from evals.prefill import PrefillConfig
 from evals.solvers import instructions, intext, prefill, generate
 from utils.submitit_utils import launch_experiment
 from dataclasses import replace
-from utils.model_config import QWEN3_MODELS, QWEN25_MODELS, LARGE_MODEL_PARTITIONS
+from utils.model_config import QWEN3_MODELS, QWEN25_MODELS, GEMMA_MODELS, LLAMA_MODELS, LARGE_MODEL_PARTITIONS
 from utils.setup import setup_logging
 
 logger = setup_logging()
@@ -37,7 +37,7 @@ def make_experiment(hint_type: str, solver_type: str, mode: str = "sequential"):
             solver = [
                 instructions(DEFAULT_INSTRUCTIONS),
                 hint_solver,
-                generate(timeout=self.timeout),
+                generate(max_tokens=8192, timeout=self.timeout),
             ]
             return aime(sample_ids=sample_ids, solver=solver)
 
@@ -63,7 +63,7 @@ def _apply_miso(models):
 
 def run_experiment(exp_name: str, epochs: int, results_dir: str, debug: bool = False, miso: bool = False):
     """Run a single experiment with full retry logic."""
-    models = QWEN3_MODELS + QWEN25_MODELS
+    models = QWEN3_MODELS + QWEN25_MODELS + GEMMA_MODELS + LLAMA_MODELS
     if miso:
         models = _apply_miso(models)
     logger.info(f"Starting {exp_name}...")

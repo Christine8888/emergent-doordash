@@ -91,16 +91,15 @@ def make_experiment(eval_name: str, hint_type: str, solver_type: str, mode: str 
 
 
 EXPERIMENT_COMBOS = [
-    ("cot", "intext", "sequential"),
-    ("cot", "intext", "masked"),
+    # ("cot", "intext", "sequential"),
+    # ("cot", "intext", "masked"),
     ("solution", "intext", "sequential"),
     ("solution", "intext", "masked"),
-    ("cot", "prefill", "sequential"),
+    # ("cot", "prefill", "sequential"),
     ("solution", "prefill", "sequential"),
 ]
 
-HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-HINT_FRACTIONS += [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
+HINT_FRACTIONS = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
 
 
 def _experiment_key(hint_type, solver_type, mode):
@@ -108,18 +107,23 @@ def _experiment_key(hint_type, solver_type, mode):
 
 
 def _get_experiments_for_eval(eval_name, combo_filter=None):
-    """Build experiment classes for an eval, skipping combos with missing data files."""
+    """Build experiment classes for an eval. Errors if any data file is missing."""
     experiments = {}
+    missing = []
     combos = EXPERIMENT_COMBOS if combo_filter is None else [combo_filter]
     for hint_type, solver_type, mode in combos:
         data_path = f"{BASE_DIR}/{hint_type}/{eval_name}.jsonl"
         if not os.path.exists(data_path):
-            logger.warning(f"Skipping {eval_name}/{_experiment_key(hint_type, solver_type, mode)}: "
-                           f"data file not found: {data_path}")
+            missing.append(data_path)
             continue
         key = _experiment_key(hint_type, solver_type, mode)
         experiments[key] = make_experiment(eval_name, hint_type, solver_type, mode)
-    return experiments
+    if missing:
+        raise FileNotFoundError(
+            f"Missing hint data for {eval_name}:\n" +
+            "\n".join(f"  {p}" for p in missing) +
+            "\nRun suze_experiments/20260209/generate_hint_data.py first."
+        )
 
 
 def run_experiment(eval_name, exp_name, exp_class, epochs, results_dir, models, debug=False):
