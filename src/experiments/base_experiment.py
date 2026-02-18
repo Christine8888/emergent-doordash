@@ -411,7 +411,7 @@ class Experiment(ABC):
         # instances to process per chunk.  chunk_size (in samples) is derived as
         # ceil(chunk_instances / epochs) so checkpoint frequency stays consistent
         # regardless of epoch count.  Default: 100 instances per chunk.
-        _DEFAULT_CHUNK_INSTANCES = 100
+        _DEFAULT_CHUNK_INSTANCES = 50
         chunk_instances_env = os.environ.get("EXPERIMENT_CHECKPOINT_CHUNK_INSTANCES")
         try:
             chunk_instances = max(int(chunk_instances_env), 1) if chunk_instances_env is not None else _DEFAULT_CHUNK_INSTANCES

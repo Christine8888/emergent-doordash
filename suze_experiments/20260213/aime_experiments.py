@@ -76,6 +76,8 @@ _CLUSTER_PARTITION = {"sphinx": "sphinx", "miso": "miso", "jag": "jag-standard"}
 _CLUSTER_NODE_PREFIX = {"sphinx": "sphinx", "miso": "miso", "jag": "jagupard"}
 # Low-priority partition names (nlprun uses these as --partition, not --qos).
 _LOW_PRIO_PARTITION = {"sphinx": "sphinx-lo", "miso": "miso-lo", "jag-standard": "jag-lo"}
+# SLURM account to use per cluster (miso partition requires account=miso).
+_CLUSTER_ACCOUNT = {"sphinx": "nlp", "miso": "miso", "jag": "nlp"}
 
 
 def _apply_low_prio(models: list[ModelSpec]) -> list[ModelSpec]:
@@ -194,6 +196,8 @@ def run_experiment(
     experiment_cls = make_experiment(hint_type, solver_type, mode, max_tokens=max_tokens)
     models = _restrict_models_to_cluster(MODELS, cluster) if cluster is not None else MODELS
     config_overrides = dict(max_connections=max_connections)
+    if cluster is not None:
+        config_overrides["account"] = _CLUSTER_ACCOUNT.get(cluster, "nlp")
     models = _apply_low_prio(models) if low_prio else models
     launch_experiment(
         experiment_class=experiment_cls,
@@ -284,7 +288,7 @@ python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 10 \
+  --max_jobs 2 \
   --max_connections 12 \
   --low_prio \
   --cluster sphinx
@@ -298,4 +302,6 @@ python suze_experiments/20260213/aime_experiments.py \
   --max_jobs 8 \
   --max_connections 16 \
   --cluster miso
+
+sacctmgr show assoc user=suzeva format=user,account,partition,qos
 """
