@@ -124,6 +124,7 @@ def _get_experiments_for_eval(eval_name, combo_filter=None):
             "\n".join(f"  {p}" for p in missing) +
             "\nRun suze_experiments/20260209/generate_hint_data.py first."
         )
+    return experiments
 
 
 def run_experiment(eval_name, exp_name, exp_class, epochs, results_dir, models, debug=False):
