@@ -17,11 +17,19 @@ DEFAULT_INSTRUCTIONS = (
 
 
 def get_dataset():
-    """Load Winogrande dataset via inspect-evals Task (0-shot)."""
+    """Load Winogrande dataset via inspect-evals Task (0-shot).
+
+    Assigns index-based IDs since the upstream dataset has id=None for all samples.
+    """
     from inspect_evals.winogrande import winogrande
+    from inspect_ai.dataset import MemoryDataset
 
     task = winogrande(fewshot=0)
-    return task.dataset
+    samples = []
+    for i, s in enumerate(task.dataset):
+        s.id = f"winogrande_{i}"
+        samples.append(s)
+    return MemoryDataset(samples=samples, name="winogrande")
 
 
 def extract_answer(response: str) -> str:

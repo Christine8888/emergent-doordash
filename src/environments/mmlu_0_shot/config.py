@@ -17,11 +17,19 @@ DEFAULT_INSTRUCTIONS = (
 
 
 def get_dataset():
-    """Load MMLU dataset via inspect-evals Task (0-shot, cot=True)."""
+    """Load MMLU dataset via inspect-evals Task (0-shot, cot=True).
+
+    Assigns index-based IDs since the upstream dataset has id=None for all samples.
+    """
     from inspect_evals.mmlu import mmlu_0_shot
+    from inspect_ai.dataset import MemoryDataset
 
     task = mmlu_0_shot(cot=True)
-    return task.dataset
+    samples = []
+    for i, s in enumerate(task.dataset):
+        s.id = f"mmlu_{i}"
+        samples.append(s)
+    return MemoryDataset(samples=samples, name="mmlu_0_shot")
 
 
 def extract_answer(response: str) -> str:

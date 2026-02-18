@@ -17,11 +17,19 @@ DEFAULT_INSTRUCTIONS = (
 
 
 def get_dataset():
-    """Load ARC Challenge dataset via inspect-evals Task."""
+    """Load ARC Challenge dataset via inspect-evals Task.
+
+    Assigns index-based IDs since the upstream dataset has id=None for all samples.
+    """
     from inspect_evals.arc import arc_challenge
+    from inspect_ai.dataset import MemoryDataset
 
     task = arc_challenge()
-    return task.dataset
+    samples = []
+    for i, s in enumerate(task.dataset):
+        s.id = f"arc_challenge_{i}"
+        samples.append(s)
+    return MemoryDataset(samples=samples, name="arc_challenge")
 
 
 def extract_answer(response: str) -> str:
