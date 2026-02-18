@@ -1,8 +1,9 @@
 """Configuration for MATH level 5 sampling script (hint data generation)."""
 
+from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
 
-from environments.math.math import DEFAULT_EXAMPLE_TEMPLATE, DEFAULT_INSTRUCTIONS, get_math_dataset
+from environments.math.math import DEFAULT_EXAMPLE_TEMPLATE, DEFAULT_INSTRUCTIONS, expression_exact_match_sympy, get_math_dataset
 from environments.math.utils import extract_answer as math_extract_answer, grade_math_answer
 
 LEVELS = [5]
@@ -60,4 +61,15 @@ def get_dataset_kwargs(args):
         "split": args.split,
         "shuffle": False,
     }
+
+
+@task
+def math_level_5_task(sample_ids=None, solver=None):
+    dataset = get_dataset()
+    if sample_ids is not None:
+        dataset = dataset.filter(lambda s: s.id in sample_ids)
+    if solver is None:
+        from evals.solvers import instructions, generate
+        solver = [instructions(DEFAULT_INSTRUCTIONS), generate()]
+    return Task(dataset=dataset, solver=solver, scorer=expression_exact_match_sympy())
 

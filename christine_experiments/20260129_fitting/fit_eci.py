@@ -48,7 +48,6 @@ EVAL_TO_ECI = {
     "arc_challenge": "ARC AI2",  # Epoch only uses Challenge score
     "winogrande": "Winogrande",  # 0-shot, 8192 tokens
     # "math_level_5": "MATH level 5",
-    # "gpqa": "GPQA diamond",
 }
 
 # All user models are expected to have scores for all of these benchmarks.

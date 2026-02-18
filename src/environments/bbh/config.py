@@ -2,6 +2,7 @@
 
 import re
 
+from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
 
 DEFAULT_INSTRUCTIONS = (
@@ -73,4 +74,16 @@ def format_prompt(sample: Sample) -> str:
 def extract_sample_fields(sample: Sample) -> dict:
     """Extract additional fields for sample_to_dict."""
     return {}
+
+
+@task
+def bbh_task(sample_ids=None, solver=None):
+    from inspect_evals.bbh.bbh import bbh_scorer
+    dataset = get_dataset()
+    if sample_ids is not None:
+        dataset = dataset.filter(lambda s: s.id in sample_ids)
+    if solver is None:
+        from evals.solvers import instructions, generate
+        solver = [instructions(DEFAULT_INSTRUCTIONS), generate()]
+    return Task(dataset=dataset, solver=solver, scorer=bbh_scorer())
 

@@ -19,7 +19,7 @@ from pathlib import Path
 DEFAULT_EVALS = [
     "hellaswag",
     "piqa",
-    "mmlu_5_shot_cot",
+    "mmlu_0_shot",
     "bbh",
     "arc_challenge",
     "winogrande",

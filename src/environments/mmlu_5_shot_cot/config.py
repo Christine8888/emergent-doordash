@@ -4,7 +4,9 @@ Note: for hint-data generation we use our own prompt instructions; we do not
 attempt to exactly reproduce the inspect-evals few-shot solver formatting.
 """
 
+from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
+from inspect_ai.scorer import choice
 
 from environments.gpqa.utils import extract_answer as mcq_extract_answer
 
@@ -84,4 +86,15 @@ def get_model_input(sample: Sample) -> list | str | None:
 def extract_sample_fields(sample: Sample) -> dict:
     """Extract additional fields for sample_to_dict."""
     return {}
+
+
+@task
+def mmlu_5_shot_cot_task(sample_ids=None, solver=None):
+    dataset = get_dataset()
+    if sample_ids is not None:
+        dataset = dataset.filter(lambda s: s.id in sample_ids)
+    if solver is None:
+        from evals.solvers import instructions, generate
+        solver = [instructions(DEFAULT_INSTRUCTIONS), generate()]
+    return Task(dataset=dataset, solver=solver, scorer=choice())
 

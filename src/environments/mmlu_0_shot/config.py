@@ -1,4 +1,4 @@
-"""Configuration for PIQA sampling script (hint data generation)."""
+"""Configuration for MMLU 0-shot CoT sampling script (hint data generation)."""
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
@@ -6,7 +6,7 @@ from inspect_ai.scorer import choice
 
 from environments.gpqa.utils import extract_answer as mcq_extract_answer
 
-NUM_CHOICES = 2
+NUM_CHOICES = 4
 
 DEFAULT_INSTRUCTIONS = (
     "Answer the following multiple choice question. "
@@ -17,15 +17,15 @@ DEFAULT_INSTRUCTIONS = (
 
 
 def get_dataset():
-    """Load PIQA dataset via inspect-evals Task."""
-    from inspect_evals.piqa import piqa
+    """Load MMLU dataset via inspect-evals Task (0-shot, cot=True)."""
+    from inspect_evals.mmlu import mmlu_0_shot
 
-    task = piqa()
+    task = mmlu_0_shot(cot=True)
     return task.dataset
 
 
 def extract_answer(response: str) -> str:
-    """Extract answer letter from response (A/B)."""
+    """Extract answer letter from response."""
     return mcq_extract_answer(response, num_choices=NUM_CHOICES)
 
 
@@ -76,7 +76,7 @@ def extract_sample_fields(sample: Sample) -> dict:
 
 
 @task
-def piqa_task(sample_ids=None, solver=None):
+def mmlu_0_shot_task(sample_ids=None, solver=None):
     dataset = get_dataset()
     if sample_ids is not None:
         dataset = dataset.filter(lambda s: s.id in sample_ids)
@@ -84,4 +84,3 @@ def piqa_task(sample_ids=None, solver=None):
         from evals.solvers import instructions, generate
         solver = [instructions(DEFAULT_INSTRUCTIONS), generate()]
     return Task(dataset=dataset, solver=solver, scorer=choice())
-
