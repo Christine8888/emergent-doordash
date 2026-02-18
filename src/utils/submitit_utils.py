@@ -195,6 +195,7 @@ def run_single_experiment(
         model_path=model_path, tensor_parallel_size=tensor_parallel_size,
         max_model_len=config.max_model_len, gpu_memory_utilization=config.gpu_memory_utilization, n_gpus=n_gpus,
     ) as server:
+        os.environ["VLLM_MAX_MODEL_LEN"] = str(config.max_model_len)
         experiment = experiment_class(
             model_name=model_name, vllm_port=server.port,
             timeout=config.timeout, max_connections=config.max_connections,

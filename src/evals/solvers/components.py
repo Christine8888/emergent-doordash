@@ -296,6 +296,34 @@ def generate(
             presence_penalty=gen_defaults.get("presence_penalty"),
         )
 
+        # Warn if estimated input tokens exceed 80% of the context window.
+        try:
+            max_model_len_str = os.environ.get("VLLM_MAX_MODEL_LEN")
+            if max_model_len_str:
+                max_model_len = int(max_model_len_str)
+                total_chars = sum(
+                    len(m.content) if isinstance(m.content, str) else
+                    sum(len(c.text) if hasattr(c, "text") else 0 for c in m.content)
+                    for m in state.messages
+                )
+                est_input_tokens = total_chars // 4  # rough estimate (~4 chars/token)
+                threshold = int(0.8 * max_model_len)
+                if est_input_tokens > threshold:
+                    ts = time.strftime("%m/%d %H:%M:%S")
+                    sid = getattr(state, "sample_id", None)
+                    epoch = getattr(state, "epoch", None)
+                    remaining = max_model_len - est_input_tokens
+                    pct = 100 * est_input_tokens / max_model_len
+                    print(
+                        f"[{ts}] WARNING: estimated input ~{est_input_tokens} tokens "
+                        f"({pct:.0f}% of max_model_len={max_model_len}); "
+                        f"only ~{remaining} tokens left for output "
+                        f"sample_id={sid!r} epoch={epoch!r}",
+                        flush=True,
+                    )
+        except Exception:
+            pass
+
         # Generate
         state = await gen(state, config=gen_config)
 

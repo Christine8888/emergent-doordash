@@ -23,9 +23,10 @@ class _TimestampStepsStream:
     _steps_re = re.compile(r"^Steps:\s*(\d+)\s*/\s*(\d+)\b")
     _samples_segment_re = re.compile(r"\s*\|\s*Samples:\s*\d+\s*/\s*\d+\s*")
 
-    def __init__(self, stream, *, line_prefix: str = "Steps:"):
+    def __init__(self, stream, *, line_prefix: str = "Steps:", label: str = ""):
         self._stream = stream
         self._line_prefix = line_prefix
+        self._label = label
         self._buf = ""
         self._t_first = None
         self._history = deque(maxlen=40)  # (t, steps)
@@ -57,7 +58,8 @@ class _TimestampStepsStream:
 
         m = self._steps_re.match(line)
         if not m:
-            return f"[{ts}] {line}"
+            suffix = f" | {self._label}" if self._label else ""
+            return f"[{ts}] {line}{suffix}"
 
         try:
             steps = int(m.group(1))
@@ -89,27 +91,30 @@ class _TimestampStepsStream:
 
             # Don't show ETA until we have enough progress to make it meaningful.
             if steps < 50 or rate is None or rate <= 0:
-                return f"[{ts}] {line} | elapsed: {elapsed_str} | ETA: ?"
+                suffix = f" | {self._label}" if self._label else ""
+                return f"[{ts}] {line} | elapsed: {elapsed_str} | ETA: ?{suffix}"
 
             eta_seconds = int(remaining / rate) if remaining > 0 else 0
             eta_str = time.strftime("%H:%M:%S", time.gmtime(eta_seconds))
-            return f"[{ts}] {line} | elapsed: {elapsed_str} | ETA: {eta_str}"
+            suffix = f" | {self._label}" if self._label else ""
+            return f"[{ts}] {line} | elapsed: {elapsed_str} | ETA: {eta_str}{suffix}"
         except Exception:
-            return f"[{ts}] {line}"
+            suffix = f" | {self._label}" if self._label else ""
+            return f"[{ts}] {line}{suffix}"
 
     def __getattr__(self, name: str):
         return getattr(self._stream, name)
 
 
 @contextlib.contextmanager
-def _timestamp_steps_stdout(enabled: bool = True):
+def _timestamp_steps_stdout(enabled: bool = True, label: str = ""):
     """Prefix Inspect progress lines (Steps: ...) with wallclock timestamps."""
     if not enabled:
         yield
         return
     old_stdout = sys.stdout
     try:
-        sys.stdout = _TimestampStepsStream(old_stdout)
+        sys.stdout = _TimestampStepsStream(old_stdout, label=label)
         yield
     finally:
         try:
@@ -137,6 +142,7 @@ def run_eval(
     metadata: Optional[dict] = None,
     *,
     max_tokens: int,
+    label: str = "",
 ) -> dict:
     """Run an Inspect eval and save results.
 
@@ -171,7 +177,7 @@ def run_eval(
     if limit:
         logger.info(f"  Limit: {limit}")
 
-    with _timestamp_steps_stdout(enabled=True):
+    with _timestamp_steps_stdout(enabled=True, label=label or model_name):
         eval_log = inspect_eval(
             task,
             model=f"vllm/{model_name}",
@@ -265,6 +271,7 @@ def run_eval_with_vllm(
         n_gpus=n_gpus,
     ) as server:
         setup_vllm_env(server.port, model_name)
+        os.environ["VLLM_MAX_MODEL_LEN"] = str(config.max_model_len)
 
         # Create task after env is set (some evals like niah call get_model() at creation)
         task_kwargs = task_kwargs or {}
