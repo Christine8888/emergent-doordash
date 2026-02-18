@@ -1,4 +1,4 @@
-"""Hinted baseline experiments: run external evals at various hint levels."""
+"Hinted baseline experiments: run external evals at various hint levels."""
 
 import os
 import sys
