@@ -138,6 +138,8 @@ def _configure_executor(executor: submitit.AutoExecutor, config: SubmitConfig, n
         params["slurm_qos"] = config.qos
     if config.nodelist:
         params["slurm_nodelist"] = config.nodelist
+    if config.constraint:
+        params["slurm_constraint"] = config.constraint
     executor.update_parameters(**params)
 
 
@@ -195,6 +197,7 @@ def run_single_experiment(
         model_path=model_path, tensor_parallel_size=tensor_parallel_size,
         max_model_len=config.max_model_len, gpu_memory_utilization=config.gpu_memory_utilization, n_gpus=n_gpus,
     ) as server:
+        os.environ["VLLM_MAX_MODEL_LEN"] = str(config.max_model_len)
         experiment = experiment_class(
             model_name=model_name, vllm_port=server.port,
             timeout=config.timeout, max_connections=config.max_connections,
@@ -314,6 +317,8 @@ def launch_experiment(
         overrides = dict(gpus_per_job=model.tp, partition=model.partitions, nodelist=model.nodelist)
         if model.account:
             overrides["account"] = model.account
+        if model.constraint:
+            overrides["constraint"] = model.constraint
         job_config = config.override(**overrides)
         job_name = f"{config.job_name_prefix}_{model_name}"
         _configure_executor(executor, job_config, job_name)
@@ -389,6 +394,7 @@ def launch_baseline(
                 gpus_per_job=model.tp,
                 partition=model.partitions,
                 nodelist=model.nodelist,
+                **({"constraint": model.constraint} if model.constraint else {}),
             )
             job_name = f"baseline_{eval_name}_{model_name}"
             _configure_executor(executor, job_config, job_name)

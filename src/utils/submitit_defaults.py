@@ -38,6 +38,7 @@ class SubmitConfig:
     cpus_per_task: int = 4
     mem_gb: int = 64
     time_hours: int = 60
+    constraint: str | None = None  # SLURM --constraint (e.g. for sc-loprio GPU selection)
 
     # vLLM config
     max_model_len: int = 32768
