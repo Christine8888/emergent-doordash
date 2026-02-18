@@ -14,7 +14,7 @@ from environments.aime.aime import aime, DEFAULT_INSTRUCTIONS
 from evals.prefill import PrefillConfig
 from evals.solvers import instructions, intext, prefill, generate
 from utils.submitit_utils import launch_experiment
-from utils.model_config import QWEN3_MODELS, QWEN25_MODELS, GEMMA_MODELS, LLAMA_MODELS, ModelSpec
+from utils.model_config import QWEN3_MODELS, QWEN25_MODELS, GEMMA_MODELS, LLAMA_MODELS, ModelSpec, SC_LOPRIO_PARTITION
 from utils.submitit_defaults import DEFAULT_CONFIG
 from utils.setup import setup_logging
 
@@ -88,6 +88,12 @@ def _apply_low_prio(models: list[ModelSpec]) -> list[ModelSpec]:
         low_parts = [_LOW_PRIO_PARTITION.get(p, p) for p in model.partitions.split(",")]
         result.append(dc_replace(model, partitions=",".join(low_parts)))
     return result
+
+
+def _apply_sc_loprio(models: list[ModelSpec]) -> list[ModelSpec]:
+    """Route all models to sc-loprio, using SLURM constraints instead of nodelists."""
+    from dataclasses import replace as dc_replace
+    return [dc_replace(m, partitions=SC_LOPRIO_PARTITION, nodelist="") for m in models]
 
 
 def _restrict_models_to_cluster(models: list[ModelSpec], cluster: str) -> list[ModelSpec]:
@@ -189,6 +195,7 @@ def run_experiment(
     max_tokens: int = 8192,
     cluster: str | None = None,
     low_prio: bool = False,
+    sc_loprio: bool = False,
 ):
     """Run a single experiment with full retry logic."""
     logger.info(f"Starting {exp_name}...")
@@ -198,7 +205,10 @@ def run_experiment(
     config_overrides = dict(max_connections=max_connections)
     if cluster is not None:
         config_overrides["account"] = _CLUSTER_ACCOUNT.get(cluster, "nlp")
-    models = _apply_low_prio(models) if low_prio else models
+    if sc_loprio:
+        models = _apply_sc_loprio(models)
+    elif low_prio:
+        models = _apply_low_prio(models)
     launch_experiment(
         experiment_class=experiment_cls,
         models=models,
@@ -229,6 +239,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_tokens", type=int, default=8192, help="Max tokens per generation (default: 8192)")
     parser.add_argument("--cluster", choices=["sphinx", "miso", "jag"], default=None, help="Restrict job scheduling to a specific cluster (default: all clusters)")
     parser.add_argument("--low_prio", action="store_true", help="Submit jobs at low priority QOS (default: standard)")
+    parser.add_argument("--sc_loprio", action="store_true", help="Submit pre-emptible jobs to sc-loprio partition using GPU constraints (overrides --cluster/--low_prio routing)")
     args = parser.parse_args()
 
     experiments_to_run = list(EXPERIMENTS.keys()) if args.experiment == "all" else [args.experiment]
@@ -252,6 +263,7 @@ if __name__ == "__main__":
                     max_tokens=args.max_tokens,
                     cluster=args.cluster,
                     low_prio=args.low_prio,
+                    sc_loprio=args.sc_loprio,
                 )
                 for exp_name in experiments_to_run
             ]
@@ -302,6 +314,15 @@ python suze_experiments/20260213/aime_experiments.py \
   --max_jobs 8 \
   --max_connections 16 \
   --cluster miso
+
+SC-LOPRIO (pre-emptible, any cluster, GPU constraint routing)
+python suze_experiments/20260213/aime_experiments.py \
+  --experiment all \
+  --epochs 10 \
+  --results_dir christine_experiments/20251113/results \
+  --max_jobs 100 \
+  --max_connections 12 \
+  --sc_loprio
 
 sacctmgr show assoc user=suzeva format=user,account,partition,qos
 """
