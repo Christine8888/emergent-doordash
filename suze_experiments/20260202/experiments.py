@@ -307,10 +307,10 @@ def joint_scaling_learned_hint_fixed_endpoints_sequential_solution() -> None:
 
 
 def compare_eci_vs_pcs_gpqa_solution_intext_masked() -> None:
-    # python experiments.py -e compare_eci_vs_pcs_gpqa_solution_intext_masked
+    # python suze_experiments/20260202/experiments.py -e compare_eci_vs_pcs_gpqa_solution_intext_masked
     _ensure_project_root_on_path()
 
-    run_name = "compare_eci_vs_pc2_pc3_gpqa_solution_intext_masked" + "_feb_15"
+    run_name = "compare_eci_vs_pcs" + "_feb_15"
     run_dir = make_run_dir(run_name=run_name)
 
     compare_capability_approaches(
@@ -339,14 +339,15 @@ def compare_eci_vs_pcs_gpqa_solution_intext_masked() -> None:
             "gemma-3-12b-it",
             "gemma-3-27b-it",
         ],
-        num_holdout_models=0,
+        num_holdout_models=9,
         hint_fractions=[round(i / 20.0, 2) for i in range(21)],
         eval_hints_for_sweep=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
         include_cross=True,
         lower_asymptote=0.2,
         hint_transform="identity",
         output_dir=run_dir,
-        pc_ns=[2, 3],
+        pc_ns=[1, 2, 3, 4, 5],
+        sweep_n_models_range=(2, 16),
     )
 
 
@@ -358,7 +359,7 @@ EXPERIMENTS = {
     "joint_scaling_learned_hint_free_endpoints": joint_scaling_learned_hint_free_endpoints,
     "joint_scaling_learned_hint_fixed_endpoints_train_on_some": joint_scaling_learned_hint_fixed_endpoints_train_on_some,
     "joint_scaling_learned_hint_fixed_endpoints_sequential_solution": joint_scaling_learned_hint_fixed_endpoints_sequential_solution,
-    "compare_eci_vs_pcs_gpqa_solution_intext_masked": compare_eci_vs_pcs_gpqa_solution_intext_masked,
+    "compare_eci_vs_pcs_gpqa_solution_intext_masked": compare_eci_vs_pcs_gpqa_solution_intext_masked, # NOT USED
 }
 
 

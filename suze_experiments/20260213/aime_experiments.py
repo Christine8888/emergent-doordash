@@ -323,7 +323,8 @@ python suze_experiments/20260213/aime_experiments.py \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results --plan
 
-TOTAL: existing=150 missing=186 | in_progress: 40630/121160 instances (34%) (models_counted=16)
+TOTAL: 156.8 / 336 jobs completed (46.7%) | done=151 missing=185 (models_counted=16) at feb 18, 23:22
+
 
 TESTING
 python suze_experiments/20260213/aime_experiments.py \
