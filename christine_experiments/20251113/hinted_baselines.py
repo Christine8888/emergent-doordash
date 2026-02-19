@@ -1,4 +1,4 @@
-"""Hinted baseline experiments: run external evals at various hint levels."""
+"Hinted baseline experiments: run external evals at various hint levels."""
 
 import os
 import sys
@@ -96,7 +96,7 @@ EXPERIMENT_COMBOS = [
     ("solution", "intext", "sequential"),
     ("solution", "intext", "masked"),
     # ("cot", "prefill", "sequential"),
-    ("solution", "prefill", "sequential"),
+    # ("solution", "prefill", "sequential"),
 ]
 
 HINT_FRACTIONS = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
