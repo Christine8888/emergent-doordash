@@ -16,6 +16,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+# ------------------------------ shared color palette ------------------------------
+# Ordered list of colors for comparison plots (ECI first, then PC methods).
+# Long enough that no two methods ever share a color; never use modulo indexing.
+_COMPARISON_COLORS: list[str] = [
+    "steelblue",     # ECI joint
+    "darkorange",    # PC1
+    "forestgreen",   # PC1+PC2
+    "crimson",       # PC1+PC2+PC3
+    "mediumpurple",  # PC1+PC2+PC3+PC4
+    "saddlebrown",
+    "teal",
+    "gold",
+]
+_ECI_JOINT_COLOR = _COMPARISON_COLORS[0]
+_PC_METHOD_COLORS = _COMPARISON_COLORS[1:]   # index 0 = PC1, 1 = PC1+PC2, …
+
 # ------------------------------ hint transforms ------------------------------
 
 def hint_identity(h: float) -> float:
@@ -536,7 +552,7 @@ def run_model_sweep(
     from src.modelx.fitting import fit_joint_sigmoid
 
     rows: list[dict[str, float]] = []
-    for n in range(5, len(all_models) + 1):
+    for n in range(2, len(all_models) + 1):
         train_models = set(all_models[:n])
         test_models = set(all_models[n:])
 
@@ -555,6 +571,8 @@ def run_model_sweep(
         rms_train = compute_rms(joint_result, df, eci_map, train_models)
         rms_test = compute_rms(joint_result, df, eci_map, test_models) if test_models else float("nan")
         rms_all = compute_rms(joint_result, df, eci_map, None)
+        rms_h0_all = compute_rms(joint_result, df[df["hint"] == 0.0], eci_map, None)
+        rms_h0_test = compute_rms(joint_result, df[df["hint"] == 0.0], eci_map, test_models) if test_models else float("nan")
 
         individual_by_hint_train = fit_individual_sigmoids_by_hint(df, eci_map, fit_models=train_models, lower=lower_asymptote)
         rms_indiv_train = compute_rms_individual(individual_by_hint_train, df, eci_map, train_models)
@@ -572,6 +590,7 @@ def run_model_sweep(
         row: dict[str, float] = {
             "n_models": float(n),
             "rms_train": rms_train, "rms_test": rms_test, "rms_all": rms_all,
+            "rms_h0_all": rms_h0_all, "rms_h0_test": rms_h0_test,
             "rms_indiv_train": rms_indiv_train, "rms_indiv_test": rms_indiv_test, "rms_indiv_all": rms_indiv_all,
             "delta_rms_train": rms_train - rms_indiv_train,
             "delta_rms_test": rms_test - rms_indiv_test,
@@ -1034,6 +1053,7 @@ def run_joint_scaling_plots(
         eval_hints=eval_hints_for_sweep,
         output_dir=plots_dir,
     )
+    sweep_df.to_csv(output_dir / "model_sweep.csv", index=False)
 
     config_resolved: dict[str, object] = {
         "output_dir": str(output_dir),
@@ -1284,7 +1304,8 @@ def compute_midpoint_errors_capability(
     return errors
 
 
-def plot_accuracy_vs_capability_by_hint(
+def _draw_accuracy_vs_capability_by_hint(
+    ax: plt.Axes,
     *,
     df: pd.DataFrame,
     beta: float,
@@ -1295,11 +1316,10 @@ def plot_accuracy_vs_capability_by_hint(
     lower: float | None,
     label: str,
     title_equation: str,
-    output_dir: Path,
     x_label: str = "capability",
-    out_name: str = "accuracy_vs_pc_capability_by_hint.png",
-) -> Path:
-    fig, ax = plt.subplots(figsize=(12, 7))
+    legend: bool = True,
+) -> None:
+    """Draw accuracy-vs-capability scatter+fit into an existing axes object."""
     hints = sorted(df["hint"].unique())
     cmap = plt.cm.viridis
     colors = {h: cmap(i / max(len(hints) - 1, 1)) for i, h in enumerate(hints)}
@@ -1332,13 +1352,96 @@ def plot_accuracy_vs_capability_by_hint(
         ]
         ax.plot(x_range, y_fit, "-", color=colors[hint], alpha=0.5, linewidth=2)
 
-    ax.set_xlabel(x_label, fontsize=12)
-    ax.set_ylabel("accuracy", fontsize=12)
-    ax.set_title(f"{label}\n{title_equation}", fontsize=14)
-    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=10)
+    ax.set_xlabel(x_label, fontsize=10)
+    ax.set_ylabel("accuracy", fontsize=10)
+    ax.set_title(f"{label}\n{title_equation}", fontsize=10)
+    if legend:
+        ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=7)
     ax.grid(True, alpha=0.3)
-    plt.tight_layout()
 
+
+def plot_accuracy_vs_capability_by_hint(
+    *,
+    df: pd.DataFrame,
+    beta: float,
+    gamma: float | None,
+    delta: float,
+    include_cross: bool,
+    hint_transform: Callable[[float], float],
+    lower: float | None,
+    label: str,
+    title_equation: str,
+    output_dir: Path,
+    x_label: str = "capability",
+    out_name: str = "accuracy_vs_pc_capability_by_hint.png",
+) -> Path:
+    fig, ax = plt.subplots(figsize=(12, 7))
+    _draw_accuracy_vs_capability_by_hint(
+        ax,
+        df=df,
+        beta=beta,
+        gamma=gamma,
+        delta=delta,
+        include_cross=include_cross,
+        hint_transform=hint_transform,
+        lower=lower,
+        label=label,
+        title_equation=title_equation,
+        x_label=x_label,
+        legend=True,
+    )
+    plt.tight_layout()
+    out_path = output_dir / out_name
+    save_figure(fig, out_path)
+    return out_path
+
+
+def plot_all_pc_accuracy_vs_capability(
+    *,
+    pc_panels: list[dict],
+    label: str,
+    output_dir: Path,
+    out_name: str = "comparison_accuracy_vs_capability_by_hint.png",
+) -> Path:
+    """Grid of accuracy-vs-capability plots, one panel per PC method.
+
+    Each entry in `pc_panels` must have:
+      df             – DataFrame with columns capability, hint, accuracy, split
+      beta, gamma, delta, include_cross – fit parameters
+      hint_transform – callable
+      lower          – lower asymptote
+      method_label   – display name (e.g. "PC1", "PC1+PC2")
+      title_equation – equation string for the subplot title
+    """
+    n = len(pc_panels)
+    if n == 0:
+        return output_dir / out_name
+    n_cols = min(n, 2)
+    n_rows = (n + n_cols - 1) // n_cols
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(13 * n_cols, 7 * n_rows))
+    axes_flat = np.array(axes).flatten() if n > 1 else [axes]
+
+    for i, panel in enumerate(pc_panels):
+        _draw_accuracy_vs_capability_by_hint(
+            axes_flat[i],
+            df=panel["df"],
+            beta=float(panel["beta"]),
+            gamma=(float(panel["gamma"]) if panel.get("gamma") is not None else None),
+            delta=float(panel["delta"]),
+            include_cross=bool(panel["include_cross"]),
+            hint_transform=panel["hint_transform"],
+            lower=panel["lower"],
+            label=panel["method_label"],
+            title_equation=panel["title_equation"],
+            x_label="pc_capability",
+            legend=(i == 0),
+        )
+
+    for j in range(n, len(axes_flat)):
+        axes_flat[j].set_visible(False)
+
+    fig.suptitle(f"{label}: accuracy vs PC capability by hint fraction", fontsize=13)
+    plt.tight_layout()
     out_path = output_dir / out_name
     save_figure(fig, out_path)
     return out_path
@@ -1522,7 +1625,7 @@ def run_model_sweep_capability(
     individual_by_hint_all = fit_individual_sigmoids_by_hint_capability(df, fit_models=None, lower=lower_asymptote)
 
     rows: list[dict[str, float]] = []
-    for n in range(5, len(models_sorted) + 1):
+    for n in range(2, len(models_sorted) + 1):
         train_models = set(models_sorted[:n])
         test_models = set(models_sorted[n:])
 
@@ -1572,6 +1675,26 @@ def run_model_sweep_capability(
             df=df_tmp,
             models=None,
         )
+        rms_h0_all = compute_rms_capability_fit(
+            beta=fit.beta,
+            gamma=fit.gamma,
+            delta=fit.delta,
+            include_cross=fit.include_cross,
+            hint_transform=hint_transform,
+            lower=lower_asymptote,
+            df=df_tmp[df_tmp["hint"] == 0.0],
+            models=None,
+        )
+        rms_h0_test = compute_rms_capability_fit(
+            beta=fit.beta,
+            gamma=fit.gamma,
+            delta=fit.delta,
+            include_cross=fit.include_cross,
+            hint_transform=hint_transform,
+            lower=lower_asymptote,
+            df=df_tmp[df_tmp["hint"] == 0.0],
+            models=test_models,
+        ) if test_models else float("nan")
 
         midpoint_errors = compute_midpoint_errors_capability(
             beta=fit.beta,
@@ -1583,7 +1706,7 @@ def run_model_sweep_capability(
             hint_transform=hint_transform,
         )
 
-        row: dict[str, float] = {"n_models": float(n), "rms_train": rms_train, "rms_test": rms_test, "rms_all": rms_all}
+        row: dict[str, float] = {"n_models": float(n), "rms_train": rms_train, "rms_test": rms_test, "rms_all": rms_all, "rms_h0_all": rms_h0_all, "rms_h0_test": rms_h0_test}
         for h in eval_hints:
             row[f"midpoint_h_{h:.1f}"] = float(midpoint_errors.get(float(h), float("nan")))
         rows.append(row)
@@ -1992,6 +2115,216 @@ def _mean_abs_midpoint_error_proxy_eci_units(
     return float(np.mean(errs)) if errs else float("nan")
 
 
+def plot_comparison_fits_by_hint(
+    *,
+    df: pd.DataFrame,
+    eci_map: dict[str, float],
+    indiv_all_by_hint: dict[float, dict],
+    eci_joint_params: list[float],
+    eci_joint_include_cross: bool,
+    eci_joint_lower: float | None,
+    hint_transform: Callable[[float], float],
+    pc_methods: list[dict],
+    eval_hints: list[float],
+    label: str,
+    output_dir: Path,
+    out_name: str = "comparison_fits_by_hint.png",
+) -> Path:
+    """Per-hint grid comparing individual-all, ECI joint, and one line per PC method.
+
+    All curves are plotted on the ECI x-axis.  For ECI joint the curve is a
+    smooth sigmoid.  For each PC method the prediction is evaluated at each
+    model's actual (ECI, capability) pair and the points are connected sorted
+    by ECI, giving an approximate curve that need not be a perfect sigmoid.
+
+    Each entry in `pc_methods` must contain:
+      label, capability_map, beta, gamma, delta, include_cross, lower
+    """
+    hints = sorted(eval_hints)
+    n_hints = len(hints)
+    n_cols = 7
+    n_rows = (n_hints + n_cols - 1) // n_cols
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.8 * n_cols, 3.2 * n_rows))
+    axes_flat = np.array(axes).flatten()
+
+    eci_arr = np.array(sorted(eci_map.values()), dtype=float)
+    eci_range = np.linspace(eci_arr.min() - 5, eci_arr.max() + 5, 120)
+
+    # Fixed colours per method (shared palette, no recycling)
+    indiv_color = "black"
+    eci_joint_color = _ECI_JOINT_COLOR
+
+    # Data scatter colour by hint (same viridis ramp as the rest of the codebase)
+    all_hints = sorted(df["hint"].unique())
+    cmap = plt.cm.viridis
+    scatter_colors = {h: cmap(i / max(len(all_hints) - 1, 1)) for i, h in enumerate(all_hints)}
+
+    L_eci = float(eci_joint_lower) if eci_joint_lower is not None else 0.0
+    params = [float(p) for p in eci_joint_params]
+
+    for idx, hint in enumerate(hints):
+        ax = axes_flat[idx]
+        hint_df = df[df["hint"] == hint].sort_values("eci")
+
+        # Data scatter
+        ax.scatter(
+            hint_df["eci"], hint_df["accuracy"],
+            color=scatter_colors.get(float(hint), "gray"),
+            alpha=0.6, s=25, zorder=3,
+        )
+
+        # Individual all (ground truth sigmoid in ECI space)
+        if float(hint) in indiv_all_by_hint:
+            fit = indiv_all_by_hint[float(hint)]
+            y_indiv = [float(fit["predict"](c)) for c in eci_range]
+            ax.plot(eci_range, y_indiv, "-", color=indiv_color, linewidth=2,
+                    label="indiv (all)", zorder=5)
+            ax.axvline(float(fit["midpoint"]), color=indiv_color,
+                       linestyle=":", alpha=0.35, linewidth=1)
+
+        # ECI joint (smooth sigmoid)
+        h_t = float(hint_transform(float(hint)))
+        if eci_joint_include_cross:
+            α_e, β_e, γ_e, δ_e = params
+            y_eci = [
+                L_eci + (1.0 - L_eci) / (1.0 + math.exp(-(α_e * c + β_e * h_t + γ_e * c * h_t + δ_e)))
+                for c in eci_range
+            ]
+        else:
+            α_e, β_e, δ_e = params
+            y_eci = [
+                L_eci + (1.0 - L_eci) / (1.0 + math.exp(-(α_e * c + β_e * h_t + δ_e)))
+                for c in eci_range
+            ]
+        ax.plot(eci_range, y_eci, "--", color=eci_joint_color, linewidth=2,
+                label="ECI joint", zorder=4)
+
+        # PC methods – evaluate at each model's actual (ECI, capability) pair
+        for j, pc_m in enumerate(pc_methods):
+            cap_map = pc_m["capability_map"]
+            pts: list[tuple[float, float]] = []
+            for m, eci_v in eci_map.items():
+                if m in cap_map:
+                    pred = _predict_from_capability(
+                        capability=float(cap_map[m]),
+                        hint=float(hint),
+                        beta=float(pc_m["beta"]),
+                        gamma=(float(pc_m["gamma"]) if pc_m.get("gamma") is not None else None),
+                        delta=float(pc_m["delta"]),
+                        include_cross=bool(pc_m["include_cross"]),
+                        hint_transform=hint_transform,
+                        lower=pc_m.get("lower"),
+                    )
+                    pts.append((float(eci_v), pred))
+            pts.sort(key=lambda t: t[0])
+            if pts:
+                xs, ys = zip(*pts)
+                color = _PC_METHOD_COLORS[j]
+                ax.plot(xs, ys, "-", color=color, linewidth=1.5,
+                        label=pc_m["label"], alpha=0.85, zorder=4)
+
+        ax.set_title(f"h = {hint:.2f}", fontsize=9)
+        ax.set_xlabel("ECI", fontsize=7)
+        ax.set_ylabel("accuracy", fontsize=7)
+        ax.tick_params(labelsize=6)
+        ax.grid(True, alpha=0.3)
+        ax.set_ylim(-0.05, 1.05)
+        if idx == 0:
+            ax.legend(fontsize=6, loc="upper left")
+
+    for j in range(n_hints, len(axes_flat)):
+        axes_flat[j].set_visible(False)
+
+    fig.suptitle(f"{label}: comparison fits by hint", fontsize=12)
+    plt.tight_layout()
+    out_path = output_dir / out_name
+    save_figure(fig, out_path)
+    return out_path
+
+
+def _pc_label(n: int) -> str:
+    """Human-readable label for a method using n principal components."""
+    return "+".join(f"PC{i + 1}" for i in range(n))
+
+
+def plot_comparison_model_sweep(
+    *,
+    method_sweeps: list[dict],
+    label: str,
+    eval_hints: list[float],
+    output_dir: Path,
+    n_models_range: tuple[int, int] | None = None,
+) -> None:
+    """RMS and midpoint-error comparison vs number of train models.
+
+    Each entry in `method_sweeps` must have:
+      name        – display name for the method
+      sweep_df    – DataFrame with columns n_models, rms_all, midpoint_h_X.X ...
+      a_eci_scale – multiply midpoint columns by this to convert to ECI units
+                    (1.0 for ECI since it is already in ECI units)
+
+    Args:
+      n_models_range: optional (min, max) inclusive range of n_models to plot.
+                      Rows outside this range are dropped from the x-axis.
+                      None means show all rows.
+    """
+    method_colors = _COMPARISON_COLORS
+
+    def _filter(df: pd.DataFrame) -> pd.DataFrame:
+        if n_models_range is None:
+            return df
+        lo, hi = int(n_models_range[0]), int(n_models_range[1])
+        return df[(df["n_models"] >= lo) & (df["n_models"] <= hi)]
+
+    # ---- Figure 1: RMS 2x2 grid ----
+    # Rows: all models / test models only
+    # Cols: all hints / hint=0 only
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+    panels = [
+        (axes[0, 0], "rms_all",     "all models, all hints"),
+        (axes[0, 1], "rms_h0_all",  "all models, hint = 0 only"),
+        (axes[1, 0], "rms_test",    "test models only, all hints"),
+        (axes[1, 1], "rms_h0_test", "test models only, hint = 0 only"),
+    ]
+    for ax, col, subtitle in panels:
+        for i, m in enumerate(method_sweeps):
+            df = _filter(m["sweep_df"])
+            if col in df.columns:
+                ax.plot(df["n_models"], df[col], "o-", label=m["name"], color=method_colors[i])
+        ax.set_xlabel("number of train models")
+        ax.set_ylabel("RMS")
+        ax.set_title(subtitle)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+    fig.suptitle(f"{label}: RMS vs number of train models", fontsize=13)
+    plt.tight_layout()
+    save_figure(fig, output_dir / "comparison_model_sweep_rms.png")
+
+    # ---- Figure 2: midpoint error vs n_train_models ----
+    # ECI midpoints are in ECI units; PC midpoints are in native capability units.
+    # We scale PC midpoints by `a_eci_scale` (slope of affine cap→ECI calibration)
+    # so all lines share ECI units.
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for i, m in enumerate(method_sweeps):
+        df = _filter(m["sweep_df"])
+        a = float(m.get("a_eci_scale", 1.0))
+        mid_cols = [f"midpoint_h_{h:.1f}" for h in eval_hints if f"midpoint_h_{h:.1f}" in df.columns]
+        if not mid_cols:
+            continue
+        mean_mid = df[mid_cols].mean(axis=1) * a
+        ax.plot(df["n_models"], mean_mid, "o-", label=m["name"], color=method_colors[i])
+    ax.set_xlabel("number of train models")
+    ax.set_ylabel("mean midpoint error (ECI units)")
+    ax.set_title(f"{label}: midpoint error vs number of train models")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    save_figure(fig, output_dir / "comparison_model_sweep_midpoint.png")
+
+
 def compare_capability_approaches(
     *,
     base_folder: Path,
@@ -2010,8 +2343,15 @@ def compare_capability_approaches(
     hint_transform: str | Callable[[float], float],
     output_dir: Path,
     pc_ns: list[int] = [2, 3],
+    sweep_n_models_range: tuple[int, int] | None = None,
 ) -> dict[str, object]:
-    """Run ECI vs PC2 vs PC3 and write a comparison report + per-method artifacts."""
+    """Run ECI vs PC2 vs PC3 and write a comparison report + per-method artifacts.
+
+    Args:
+      sweep_n_models_range: optional (min, max) inclusive range of n_train_models
+                            shown on the x-axis of the model-sweep plots.
+                            None means show all values from 5 to len(all_models).
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -2065,8 +2405,10 @@ def compare_capability_approaches(
 
     # ---- Run PC methods ----
     pc_results: list[dict[str, object]] = []
+    pc_panels: list[dict] = []
     for n in pc_ns:
         pc_out = output_dir / f"pc{int(n)}"
+        pc_label = _pc_label(int(n))
         pc_metrics = run_joint_scaling_plots_pc(
             base_folder=base_folder,
             baseline_folder=baseline_folder,
@@ -2074,7 +2416,7 @@ def compare_capability_approaches(
             eval_name=eval_name,
             solver=solver,
             condition=condition,
-            label=f"{label} (PC{int(n)})",
+            label=f"{label} ({pc_label})",
             all_models=all_models,
             num_holdout_models=num_holdout_models,
             hint_fractions=hint_fractions,
@@ -2093,6 +2435,28 @@ def compare_capability_approaches(
 
         _pivot, _pca, pc_scores_map = compute_pc_scores(baseline_folder=baseline_folder, n_components=max(int(n), 5))
         capability_map = {m: float(np.dot(alpha[: int(n)], pc_scores_map[m][: int(n)])) for m in all_models if m in pc_scores_map}
+
+        # Build df with PC capability column for the combined grid plot.
+        df_pc = df_eci.drop(columns=["eci"], errors="ignore").copy()
+        df_pc["capability"] = df_pc["model"].map(capability_map)
+        df_pc = df_pc.dropna(subset=["capability"])
+        alpha_str = ", ".join(f"{a_i:.3f}" for a_i in alpha[: int(n)].tolist())
+        if bool(pc_metrics["include_cross"]) and pc_metrics.get("gamma") is not None:
+            eq_short = f"σ(α·PC+β·h+γ·S·h+δ), α=[{alpha_str}]"
+        else:
+            eq_short = f"σ(α·PC+β·h+δ), α=[{alpha_str}]"
+        pc_panels.append({
+            "df": df_pc,
+            "capability_map": capability_map,
+            "beta": float(pc_metrics["beta"]),
+            "gamma": float(pc_metrics["gamma"]) if pc_metrics.get("gamma") is not None else None,
+            "delta": float(pc_metrics["delta"]),
+            "include_cross": bool(pc_metrics["include_cross"]),
+            "hint_transform": hint_transform_fn,
+            "lower": lower_asymptote,
+            "method_label": pc_label,
+            "title_equation": eq_short,
+        })
 
         a, b = _fit_affine_capability_to_eci(capability_map=capability_map, eci_map=eci_map, models=train_set)
 
@@ -2132,7 +2496,8 @@ def compare_capability_approaches(
 
         pc_results.append(
             {
-                "method": f"PC{int(n)}",
+                "method": pc_label,
+                "n_pcs": int(n),
                 "output_dir": str(pc_out),
                 "rms_train": float(pc_metrics["rms_train"]),
                 "rms_test": float(pc_metrics["rms_test"]),
@@ -2147,6 +2512,70 @@ def compare_capability_approaches(
                 "mean_midpoint_error_proxy_eci_units_test": float(proxy_test),
                 "capability_to_eci_affine": {"a": float(a), "b": float(b)},
             }
+        )
+
+    # ---- Combined accuracy-vs-capability grid (all PC methods in one image) ----
+    if pc_panels:
+        plot_all_pc_accuracy_vs_capability(
+            pc_panels=pc_panels,
+            label=label,
+            output_dir=output_dir,
+        )
+
+    # ---- Comparison fits by hint (individual-all + ECI joint + each PC) ----
+    if pc_panels:
+        plot_comparison_fits_by_hint(
+            df=df_eci,
+            eci_map=eci_map,
+            indiv_all_by_hint=indiv_eci_all,
+            eci_joint_params=list(eci_metrics["joint_params"]),
+            eci_joint_include_cross=bool(eci_metrics["include_cross"]),
+            eci_joint_lower=eci_metrics.get("lower_asymptote"),
+            hint_transform=hint_transform_fn,
+            pc_methods=[
+                {
+                    "label": p["method_label"],
+                    "capability_map": p["capability_map"],
+                    "beta": p["beta"],
+                    "gamma": p["gamma"],
+                    "delta": p["delta"],
+                    "include_cross": p["include_cross"],
+                    "lower": p["lower"],
+                }
+                for p in pc_panels
+            ],
+            eval_hints=sorted(df_eci["hint"].unique().tolist()),
+            label=label,
+            output_dir=output_dir,
+        )
+
+    # ---- Collect sweep DataFrames for comparison model-sweep plots ----
+    # ECI sweep CSV was saved inside run_joint_scaling_plots
+    eci_sweep_csv = eci_out / "model_sweep.csv"
+    eci_sweep_df = pd.read_csv(eci_sweep_csv) if eci_sweep_csv.exists() else None
+
+    pc_sweep_entries: list[dict] = []
+    for pc_res in pc_results:
+        pc_sweep_csv = Path(pc_res["output_dir"]) / "model_sweep.csv"
+        if pc_sweep_csv.exists():
+            pc_sweep_df = pd.read_csv(pc_sweep_csv)
+            a = float(pc_res["capability_to_eci_affine"]["a"])
+            pc_sweep_entries.append(
+                {"name": pc_res["method"], "sweep_df": pc_sweep_df, "a_eci_scale": a}
+            )
+
+    method_sweeps: list[dict] = []
+    if eci_sweep_df is not None:
+        method_sweeps.append({"name": "ECI", "sweep_df": eci_sweep_df, "a_eci_scale": 1.0})
+    method_sweeps.extend(pc_sweep_entries)
+
+    if method_sweeps:
+        plot_comparison_model_sweep(
+            method_sweeps=method_sweeps,
+            label=label,
+            eval_hints=eval_hints_for_sweep,
+            output_dir=output_dir,
+            n_models_range=sweep_n_models_range,
         )
 
     # ---- Build comparison table ----
