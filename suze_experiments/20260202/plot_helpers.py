@@ -552,7 +552,7 @@ def run_model_sweep(
     from src.modelx.fitting import fit_joint_sigmoid
 
     rows: list[dict[str, float]] = []
-    for n in range(5, len(all_models) + 1):
+    for n in range(2, len(all_models) + 1):
         train_models = set(all_models[:n])
         test_models = set(all_models[n:])
 
@@ -1625,7 +1625,7 @@ def run_model_sweep_capability(
     individual_by_hint_all = fit_individual_sigmoids_by_hint_capability(df, fit_models=None, lower=lower_asymptote)
 
     rows: list[dict[str, float]] = []
-    for n in range(5, len(models_sorted) + 1):
+    for n in range(2, len(models_sorted) + 1):
         train_models = set(models_sorted[:n])
         test_models = set(models_sorted[n:])
 
