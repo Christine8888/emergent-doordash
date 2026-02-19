@@ -30,6 +30,7 @@ wandb/*
 
 submitit_logs/
 !christine_experiments/**/*.jsonl
+!suze_experiments/data/**/*.jsonl
 !christine_experiments/**/*.json
 christine_experiments/20251010_data/openthoughts_sonnet45.jsonl
 

@@ -124,6 +124,7 @@ def _get_experiments_for_eval(eval_name, combo_filter=None):
             "\n".join(f"  {p}" for p in missing) +
             "\nRun suze_experiments/20260209/generate_hint_data.py first."
         )
+    return experiments
 
 
 def run_experiment(eval_name, exp_name, exp_class, epochs, results_dir, models, debug=False):
@@ -155,8 +156,13 @@ if __name__ == "__main__":
     parser.add_argument("--results_dir", type=str, default="./results")
     parser.add_argument("--nodelist", type=str, default=None)
     parser.add_argument("--partition", type=str, default=None)
+    parser.add_argument("--chunk_size", type=int, default=None,
+                        help="Checkpoint chunk size in instances (sample*epoch). Default: 25")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
+
+    if args.chunk_size is not None:
+        os.environ["EXPERIMENT_CHECKPOINT_CHUNK_INSTANCES"] = str(args.chunk_size)
 
     # Resolve eval list
     if args.eval == "all":
