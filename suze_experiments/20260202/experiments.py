@@ -348,6 +348,16 @@ def compare_eci_vs_pcs_gpqa_solution_intext_masked() -> None:
         output_dir=run_dir,
         pc_ns=[1, 2, 3, 4, 5],
         sweep_n_models_range=(2, 16),
+        # Baseline eval folders to use when building PCs via PCA.
+        # (Matches `christine_experiments/20260129_fitting/fit_eci.py`.)
+        eval_benchmarks=[
+            "hellaswag",
+            "piqa",
+            "mmlu_5_shot_cot",
+            "bbh",
+            "arc_challenge",
+            "winogrande",
+        ],
     )
 
 
