@@ -67,7 +67,8 @@ def get_dataset_kwargs(args):
 def math_level_5_task(sample_ids=None, solver=None):
     dataset = get_dataset()
     if sample_ids is not None:
-        dataset = dataset.filter(lambda s: s.id in sample_ids)
+        sample_ids_str = {str(sid) for sid in sample_ids}
+        dataset = dataset.filter(lambda s: str(s.id) in sample_ids_str)
     if solver is None:
         from evals.solvers import instructions, generate
         solver = [instructions(DEFAULT_INSTRUCTIONS), generate()]
