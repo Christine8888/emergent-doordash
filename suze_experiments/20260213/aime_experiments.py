@@ -24,7 +24,7 @@ HF_TOKEN_PATH = "/afs/cs.stanford.edu/u/suzeva/hf.tok"
 with open(HF_TOKEN_PATH, "r") as f:
     os.environ["HF_TOKEN"] = f.read().strip()
 
-BASE_DIR = str(REPO_ROOT / "suze_experiments" / "data")
+BASE_DIR = str(REPO_ROOT / "christine_experiments" / "data")
 MODELS = QWEN3_MODELS + QWEN25_MODELS + GEMMA_MODELS + LLAMA_MODELS
 
 FEWSHOTS = [0]
@@ -366,7 +366,7 @@ python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 100 \
+  --max_jobs 150 \
   --max_connections 12 \
   --sc_loprio
 

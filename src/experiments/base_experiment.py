@@ -93,9 +93,28 @@ def _validate_checkpoint_state(state: Any, *, expected_meta: dict[str, Any]) -> 
     # This avoids accidentally reusing a checkpoint from a different run configuration.
     keys = ("eval_name", "experiment_name", "model_name", "fewshot", "hint_fraction", "epochs", "data_path")
     for k in keys:
-        if meta.get(k) != expected_meta.get(k):
-            logger.warning(f"Checkpoint meta mismatch on {k}: ckpt={meta.get(k)!r} expected={expected_meta.get(k)!r}")
-            return None
+        if meta.get(k) == expected_meta.get(k):
+            continue
+
+        # Allow resuming across equivalent data paths (e.g. symlinked mirrors of the repo).
+        # If both paths exist and point to the same file, treat them as compatible.
+        if k == "data_path":
+            ckpt_p = meta.get(k)
+            exp_p = expected_meta.get(k)
+            try:
+                if (
+                    isinstance(ckpt_p, str)
+                    and isinstance(exp_p, str)
+                    and os.path.exists(ckpt_p)
+                    and os.path.exists(exp_p)
+                    and os.path.samefile(ckpt_p, exp_p)
+                ):
+                    continue
+            except Exception:
+                pass
+
+        logger.warning(f"Checkpoint meta mismatch on {k}: ckpt={meta.get(k)!r} expected={expected_meta.get(k)!r}")
+        return None
 
     per = state.get("per_sample_epoch_correct")
     if not isinstance(per, dict):

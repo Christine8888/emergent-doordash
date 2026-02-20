@@ -1773,6 +1773,7 @@ def run_joint_scaling_plots_pc(
     hint_transform: str | Callable[[float], float],
     n_pcs: int,
     output_dir: Path,
+    eval_benchmarks: list[str] | None = None,
     eci_file: Path | None = None,
     alpha_fixed: np.ndarray | None = None,
     pca_n_components: int | None = None,
@@ -1796,7 +1797,11 @@ def run_joint_scaling_plots_pc(
 
     # PCA + PC scores
     n_components = int(pca_n_components) if pca_n_components is not None else max(int(n_pcs), 5)
-    _pivot, pca, pc_scores_map = compute_pc_scores(baseline_folder=baseline_folder, n_components=n_components)
+    _pivot, pca, pc_scores_map = compute_pc_scores(
+        baseline_folder=baseline_folder,
+        n_components=n_components,
+        eval_names=eval_benchmarks,
+    )
     plot_component_weights_heatmap(pca=pca, outfile=plots_dir / "pca_component_weights.png")
     plot_explained_variance(pca=pca, outfile=plots_dir / "pca_explained_variance.png")
 
@@ -2004,6 +2009,7 @@ def run_joint_scaling_plots_pc(
         "lower_asymptote": lower_asymptote,
         "hint_transform": hint_transform_name,
         "n_pcs": int(n_pcs),
+        "eval_benchmarks": (list(eval_benchmarks) if eval_benchmarks is not None else None),
         "alpha_fixed": (alpha_fixed.tolist() if alpha_fixed is not None else None),
     }
 
@@ -2344,6 +2350,7 @@ def compare_capability_approaches(
     output_dir: Path,
     pc_ns: list[int] = [2, 3],
     sweep_n_models_range: tuple[int, int] | None = None,
+    eval_benchmarks: list[str] | None = None,
 ) -> dict[str, object]:
     """Run ECI vs PC2 vs PC3 and write a comparison report + per-method artifacts.
 
@@ -2426,6 +2433,7 @@ def compare_capability_approaches(
             hint_transform=hint_transform,
             n_pcs=int(n),
             output_dir=pc_out,
+            eval_benchmarks=eval_benchmarks,
         )
 
         # Proxy midpoint error in ECI units via affine calibration (capability -> ECI)
@@ -2433,7 +2441,11 @@ def compare_capability_approaches(
         # Recompute capability map from saved alpha (consistent with pca_helpers + saved run).
         from pca_helpers import compute_pc_scores
 
-        _pivot, _pca, pc_scores_map = compute_pc_scores(baseline_folder=baseline_folder, n_components=max(int(n), 5))
+        _pivot, _pca, pc_scores_map = compute_pc_scores(
+            baseline_folder=baseline_folder,
+            n_components=max(int(n), 5),
+            eval_names=eval_benchmarks,
+        )
         capability_map = {m: float(np.dot(alpha[: int(n)], pc_scores_map[m][: int(n)])) for m in all_models if m in pc_scores_map}
 
         # Build df with PC capability column for the combined grid plot.
@@ -2644,6 +2656,7 @@ def compare_capability_approaches(
         "lower_asymptote": lower_asymptote,
         "hint_transform": (hint_transform if isinstance(hint_transform, str) else getattr(hint_transform, "__name__", "custom")),
         "pc_ns": [int(n) for n in pc_ns],
+        "eval_benchmarks": (list(eval_benchmarks) if eval_benchmarks is not None else None),
         "output_dir": str(output_dir),
     })
     write_json(output_dir / "metrics.json", result)

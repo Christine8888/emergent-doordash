@@ -81,20 +81,16 @@ def _pca_via_svd(x_centered: np.ndarray, n_components: int) -> tuple[np.ndarray,
 def default_eval_to_eci_mapping(*, baseline_folder: Path) -> dict[str, str]:
     """Return a robust eval->benchmark mapping for PCA over ECI components.
 
-    We start from `src.modelx.EVAL_TO_ECI` but patch in common local eval names
-    found in this repo's baselines (e.g., `mmlu_5_shot_cot`, `winogrande`).
+    We start from `src.modelx.EVAL_TO_ECI` but patch in common local baseline
+    eval names found in this repo (e.g., `mmlu_5_shot_cot`, `winogrande`).
     """
     from src.modelx import EVAL_TO_ECI as MODELX_EVAL_TO_ECI
 
     mapping = dict(MODELX_EVAL_TO_ECI)
 
-    # Prefer mmlu_5_shot_cot if that's what the baseline folder contains.
-    if (baseline_folder / "mmlu_5_shot_cot").exists() and not (baseline_folder / "mmlu_5_shot").exists():
-        mapping["mmlu_5_shot_cot"] = "MMLU"
-
-    # Add winogrande if present (it is part of the original PCA script input set).
-    if (baseline_folder / "winogrande").exists():
-        mapping.setdefault("winogrande", "Winogrande")
+    # Enforce the canonical MMLU baseline name for this repo.
+    mapping["mmlu_5_shot_cot"] = "MMLU"
+    mapping.pop("mmlu_5_shot", None)
 
     return mapping
 
@@ -104,6 +100,7 @@ def compute_pc_scores(
     baseline_folder: Path,
     n_components: int,
     eval_to_benchmark: dict[str, str] | None = None,
+    eval_names: list[str] | None = None,
 ) -> tuple[pd.DataFrame, PCAResult, dict[str, np.ndarray]]:
     """Compute PCA and per-model PC scores from baseline results.
 
@@ -117,6 +114,22 @@ def compute_pc_scores(
     baseline_folder = Path(baseline_folder)
     if eval_to_benchmark is None:
         eval_to_benchmark = default_eval_to_eci_mapping(baseline_folder=baseline_folder)
+
+    if eval_names is not None:
+        # Dedupe while preserving order.
+        seen: set[str] = set()
+        eval_names = [e for e in eval_names if not (e in seen or seen.add(e))]
+
+        missing = [e for e in eval_names if e not in eval_to_benchmark]
+        if missing:
+            raise ValueError(
+                "Unknown eval(s) requested for PCA: "
+                + ", ".join(repr(m) for m in missing)
+                + ". Available evals: "
+                + ", ".join(sorted(eval_to_benchmark.keys()))
+            )
+
+        eval_to_benchmark = {e: eval_to_benchmark[e] for e in eval_names}
 
     rows: list[dict[str, object]] = []
     for eval_name, benchmark_name in eval_to_benchmark.items():
@@ -133,7 +146,8 @@ def compute_pc_scores(
 
     scores = pd.DataFrame(rows)
     if scores.empty:
-        raise ValueError(f"No baseline scores loaded from {baseline_folder}")
+        suffix = f" (requested evals: {eval_names})" if eval_names is not None else ""
+        raise ValueError(f"No baseline scores loaded from {baseline_folder}{suffix}")
 
     pivot = scores.pivot_table(index="model", columns="benchmark", values="score", aggfunc="mean")
 

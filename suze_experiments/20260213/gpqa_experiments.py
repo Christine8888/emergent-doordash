@@ -19,7 +19,7 @@ from utils.submitit_defaults import DEFAULT_CONFIG
 from utils.setup import setup_logging
 
 HF_TOKEN_PATH = "/afs/cs.stanford.edu/u/suzeva/hf.tok"
-BASE_DIR = str(REPO_ROOT / "suze_experiments" / "data")
+BASE_DIR = str(REPO_ROOT / "christine_experiments" / "data")
 MODELS = QWEN3_MODELS + QWEN25_MODELS + GEMMA_MODELS + LLAMA_MODELS
 
 FEWSHOTS = [0]

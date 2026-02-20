@@ -487,10 +487,11 @@ def estimate_eci_from_epoch_params(
 EVAL_TO_ECI = {
     "hellaswag": "HellaSwag",
     "piqa": "PIQA",
-    "mmlu_5_shot": "MMLU",
+    "mmlu_5_shot_cot": "MMLU",
     "math_level_5": "MATH level 5",
     "bbh": "BBH",
     "arc_challenge": "ARC AI2",  # Epoch only uses Challenge score
+    "winogrande": "Winogrande",
     # Excluded or not directly mappable:
     # "gpqa" - excluded per user request
     # "mmlu_0_shot" - using 5_shot instead
