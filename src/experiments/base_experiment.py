@@ -3,6 +3,7 @@
 import os
 import logging
 import math
+import random
 import sys
 import time
 import contextlib
@@ -91,7 +92,7 @@ def _validate_checkpoint_state(state: Any, *, expected_meta: dict[str, Any]) -> 
 
     # Strict resume: only resume if key meta fields match exactly.
     # This avoids accidentally reusing a checkpoint from a different run configuration.
-    keys = ("eval_name", "experiment_name", "model_name", "fewshot", "hint_fraction", "epochs", "data_path")
+    keys = ("eval_name", "experiment_name", "model_name", "fewshot", "hint_fraction", "epochs", "data_path", "max_samples", "subsample_seed")
     for k in keys:
         if meta.get(k) == expected_meta.get(k):
             continue
@@ -269,6 +270,10 @@ class Experiment(ABC):
     eval_name: str = NotImplemented
     data_path: str = NotImplemented
 
+    # Optional subsampling (set by subclasses to cap large benchmarks)
+    max_samples: int | None = None
+    subsample_seed: int | None = None
+
     def __init__(
         self,
         model_name: str,
@@ -378,6 +383,10 @@ class Experiment(ABC):
         all_sample_ids = sorted(valid_samples.keys())
         if limit:
             all_sample_ids = all_sample_ids[:limit]
+        if self.max_samples and len(all_sample_ids) > self.max_samples:
+            rng = random.Random(self.subsample_seed)
+            all_sample_ids = sorted(rng.sample(all_sample_ids, self.max_samples))
+            logger.info(f"Subsampled to {len(all_sample_ids)} samples (max_samples={self.max_samples}, seed={self.subsample_seed})")
         sample_ids_set = set(all_sample_ids)
 
         logger.info(f"Running {self.name} on {len(all_sample_ids)} samples")
@@ -446,6 +455,8 @@ class Experiment(ABC):
             "hint_fraction": hint_fraction,
             "epochs": epochs,
             "data_path": self.data_path,
+            "max_samples": self.max_samples,
+            "subsample_seed": self.subsample_seed,
         }
         total_instances = len(all_sample_ids) * int(epochs)
 
