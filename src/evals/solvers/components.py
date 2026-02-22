@@ -182,12 +182,13 @@ def prefill(config: PrefillConfig) -> Solver:
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         if config.fraction > 0.0:
-            if state.sample_id not in prefill_data:
+            sid = str(state.sample_id)
+            if sid not in prefill_data:
                 raise KeyError(
                     f"Sample '{state.sample_id}' not found in prefill data. "
                     f"Available samples should be filtered using config.get_available_ids()"
                 )
-            samples = prefill_data[state.sample_id]
+            samples = prefill_data[sid]
             rng = random.Random(f"{state.epoch}_{state.sample_id}")
             sample_keys = sorted(samples.keys())
             chosen_idx = rng.choice(sample_keys)
@@ -235,12 +236,13 @@ def intext(config: PrefillConfig, prefix: str = "Here is part of a hint that may
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         if config.fraction > 0.0:
-            if state.sample_id not in hint_data:
+            sid = str(state.sample_id)
+            if sid not in hint_data:
                 raise KeyError(
                     f"Sample '{state.sample_id}' not found in hint data. "
                     f"Available samples should be filtered using config.get_available_ids()"
                 )
-            samples = hint_data[state.sample_id]
+            samples = hint_data[sid]
             rng = random.Random(f"{state.epoch}_{state.sample_id}")
             sample_keys = sorted(samples.keys())
             chosen_idx = rng.choice(sample_keys)
