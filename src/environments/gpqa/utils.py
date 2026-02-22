@@ -2,6 +2,8 @@
 
 import re
 from inspect_ai._util.answer import answer_character
+from inspect_ai.scorer import CORRECT, INCORRECT, Score, Scorer, Target, accuracy, scorer, stderr
+from inspect_ai.solver import TaskState
 
 
 def format_answer_options(choices: list[str]) -> str:
@@ -117,3 +119,16 @@ async def grade_answer(extracted_letter: str, target: str) -> bool:
         return False
 
     return _strip_parens(extracted_letter).upper() == _strip_parens(target).upper()
+
+
+@scorer(metrics=[accuracy(), stderr()])
+def mcq_scorer(num_choices: int = 4) -> Scorer:
+    """Generic MCQ scorer using extract_answer."""
+    async def score(state: TaskState, target: Target) -> Score:
+        extracted_letter = extract_answer(state.output.completion, num_choices=num_choices)
+        correct = await grade_answer(extracted_letter, target.text)
+        return Score(
+            value=CORRECT if correct else INCORRECT,
+            answer=extracted_letter,
+        )
+    return score

@@ -4,6 +4,8 @@ import re
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
+from inspect_ai.scorer import CORRECT, INCORRECT, Score, Scorer, Target, accuracy, scorer, stderr
+from inspect_ai.solver import TaskState
 
 DEFAULT_INSTRUCTIONS = (
     "Solve the following problem carefully.\n\n"
@@ -54,10 +56,14 @@ def extract_answer(response: str) -> str:
 
 
 async def grade_answer(extracted_answer: str, target: str) -> bool:
-    """Grade by normalizing both sides (case-insensitive, strip parens)."""
+    """Grade by normalizing both sides (case-insensitive, strip parens).
+
+    Strips "ANSWER:" prefix from target since dyck subtask targets include it.
+    """
     if not extracted_answer:
         return False
-    return _normalize_bbh_answer(extracted_answer) == _normalize_bbh_answer(str(target))
+    target_clean = re.sub(r'(?i)^answer\s*:\s*', '', str(target))
+    return _normalize_bbh_answer(extracted_answer) == _normalize_bbh_answer(target_clean)
 
 
 def format_prompt(sample: Sample) -> str:
@@ -76,9 +82,21 @@ def extract_sample_fields(sample: Sample) -> dict:
     return {}
 
 
+@scorer(metrics=[accuracy(), stderr()])
+def bbh_scorer() -> Scorer:
+    """Score BBH answers using extract_answer + normalize for all subtask types."""
+    async def score(state: TaskState, target: Target) -> Score:
+        extracted = extract_answer(state.output.completion)
+        correct = await grade_answer(extracted, target.text)
+        return Score(
+            value=CORRECT if correct else INCORRECT,
+            answer=extracted,
+        )
+    return score
+
+
 @task
 def bbh_task(sample_ids=None, solver=None):
-    from inspect_evals.bbh.bbh import bbh_scorer
     dataset = get_dataset()
     if sample_ids is not None:
         sample_ids_str = {str(sid) for sid in sample_ids}

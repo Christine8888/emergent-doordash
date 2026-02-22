@@ -6,9 +6,7 @@ attempt to exactly reproduce the inspect-evals few-shot solver formatting.
 
 from inspect_ai import Task, task
 from inspect_ai.dataset import Sample
-from inspect_ai.scorer import choice
-
-from environments.gpqa.utils import extract_answer as mcq_extract_answer
+from environments.gpqa.utils import extract_answer as mcq_extract_answer, mcq_scorer
 
 NUM_CHOICES = 4
 
@@ -105,5 +103,5 @@ def mmlu_5_shot_cot_task(sample_ids=None, solver=None):
     if solver is None:
         from evals.solvers import instructions, generate
         solver = [instructions(DEFAULT_INSTRUCTIONS), generate()]
-    return Task(dataset=dataset, solver=solver, scorer=choice())
+    return Task(dataset=dataset, solver=solver, scorer=mcq_scorer(num_choices=NUM_CHOICES))
 
