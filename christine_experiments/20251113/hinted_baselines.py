@@ -20,7 +20,7 @@ with open(_token_path, 'r') as f:
 from experiments.base_experiment import Experiment
 from evals.prefill import PrefillConfig
 from evals.solvers import instructions, intext, prefill, generate
-from utils.submitit_utils import launch_experiment
+from utils.submitit_utils import launch_experiment, run_specs_throttled
 from utils.model_config import QWEN3_MODELS, QWEN25_MODELS, GEMMA_MODELS, LLAMA_MODELS
 from utils.setup import setup_logging
 
@@ -166,6 +166,8 @@ if __name__ == "__main__":
     parser.add_argument("--partition", type=str, default=None)
     parser.add_argument("--chunk_size", type=int, default=None,
                         help="Checkpoint chunk size in instances (sample*epoch). Default: 25")
+    parser.add_argument("--max_concurrent", type=int, default=None,
+                        help="Max SLURM jobs active at once across all evals (default: no limit, threaded)")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
@@ -227,11 +229,27 @@ if __name__ == "__main__":
     logger.info(f"Running {len(jobs)} experiment(s) across {len(evals_to_run)} eval(s)")
     logger.info(f"Models: {[m.path for m in models_to_run]}")
 
-    with ThreadPoolExecutor(max_workers=len(jobs)) as executor:
-        futures = [
-            executor.submit(run_experiment, eval_name, exp_name, exp_class,
-                            args.epochs, args.results_dir, models_to_run, args.debug)
-            for eval_name, exp_name, exp_class in jobs
-        ]
-        for future in futures:
-            future.result()
+    if args.max_concurrent:
+        # Collect all specs across experiments, run with global concurrency limit
+        all_specs = []
+        for eval_name, exp_name, exp_class in jobs:
+            specs = launch_experiment(
+                experiment_class=exp_class, models=models_to_run,
+                hint_fractions=HINT_FRACTIONS, epochs=args.epochs,
+                results_dir=args.results_dir, debug=args.debug,
+                submit=False,
+            )
+            logger.info(f"{eval_name}/{exp_name}: {len(specs)} specs")
+            all_specs.extend(specs)
+        logger.info(f"Total: {len(all_specs)} jobs, max_concurrent={args.max_concurrent}")
+        run_specs_throttled(all_specs, max_concurrent=args.max_concurrent)
+    else:
+        # Default: launch each experiment in parallel threads (no global limit)
+        with ThreadPoolExecutor(max_workers=len(jobs)) as executor:
+            futures = [
+                executor.submit(run_experiment, eval_name, exp_name, exp_class,
+                                args.epochs, args.results_dir, models_to_run, args.debug)
+                for eval_name, exp_name, exp_class in jobs
+            ]
+            for future in futures:
+                future.result()

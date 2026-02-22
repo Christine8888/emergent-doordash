@@ -143,6 +143,62 @@ def _configure_executor(executor: submitit.AutoExecutor, config: SubmitConfig, n
     executor.update_parameters(**params)
 
 
+def _run_throttled(
+    pending_specs: list[dict],
+    executor: submitit.AutoExecutor,
+    poll_interval: int,
+    max_retries: int,
+    max_concurrent: int,
+):
+    """Submit and wait for jobs with a concurrency limit.
+
+    Submits up to `max_concurrent` jobs at a time. As jobs complete (or fail
+    and exhaust retries), new jobs are submitted from the pending queue.
+    """
+    active_jobs: list[submitit.Job] = []
+    job_meta: dict[str, dict] = {}
+    completed_jobs: list[submitit.Job] = []
+    pending = list(pending_specs)
+
+    def _fill_slots():
+        while pending and len(active_jobs) < max_concurrent:
+            spec = pending.pop(0)
+            _configure_executor(executor, spec['config'], spec['name'])
+            job = executor.submit(spec['fn'], **spec['kwargs'])
+            active_jobs.append(job)
+            job_meta[str(job.job_id)] = spec
+            logger.info(f"submitted {job.job_id}: {spec['name']}")
+
+    _fill_slots()
+    logger.info(f"throttled launch: {len(active_jobs)} active, {len(pending)} queued (max_concurrent={max_concurrent})")
+
+    while active_jobs or pending:
+        time.sleep(poll_interval)
+        status_map = check_job_status(active_jobs, job_meta)
+
+        for job in status_map.get('done', []):
+            active_jobs.remove(job)
+            completed_jobs.append(job)
+
+        for job in status_map.get('cancelled', []):
+            active_jobs.remove(job)
+
+        for job in status_map.get('failed', []) + status_map.get('timeout', []):
+            jid = str(job.job_id)
+            active_jobs.remove(job)
+            meta = job_meta[jid]
+            retries = meta.get('_retries', 0)
+            if retries < max_retries:
+                meta['_retries'] = retries + 1
+                pending.append(meta)
+                logger.info(f"requeuing {jid} (retry {retries + 1}/{max_retries})")
+
+        _fill_slots()
+
+    logger.info(f"complete: {len(completed_jobs)} done")
+    return completed_jobs
+
+
 def _wait_with_retries(
     jobs: list[submitit.Job],
     job_meta: dict[str, dict],  # job_id -> {config, name, fn, kwargs}
@@ -294,24 +350,23 @@ def launch_experiment(
     fewshots: list[int] = [0], epochs: int = 1, results_dir: str = "./results",
     config: SubmitConfig | None = None, skip_existing: bool = True,
     wait: bool = True, poll_interval: int = 300, max_retries: int = 3,
-    debug: bool = False, max_jobs: int | None = None,
+    debug: bool = False, submit: bool = True,
 ):
     """Launch experiment grid with retry logic.
-    
+
     Args:
-        max_jobs: Maximum number of jobs to submit (default: None = no limit)
         skip_existing: Skip jobs with existing output files or currently running (default: True)
+        submit: If False, return collected job specs without submitting (for use with run_specs_throttled)
     """
     config = config or DEFAULT_CONFIG
-    executor = submitit.AutoExecutor(folder=config.submitit_folder)
-    jobs = []
-    job_meta = {}
-    
+
     # Get currently running/pending jobs to avoid duplicates
     running_configs = _get_running_job_configs(config.submitit_folder) if skip_existing else set()
     if running_configs:
         logger.info(f"Found {len(running_configs)} jobs already running/pending, will skip those")
 
+    # Collect all job specs
+    specs = []
     for model in models:
         model_name = os.path.basename(model.path)
         overrides = dict(gpus_per_job=model.tp, partition=model.partitions, nodelist=model.nodelist)
@@ -321,50 +376,63 @@ def launch_experiment(
             overrides["constraint"] = model.constraint
         job_config = config.override(**overrides)
         job_name = f"{config.job_name_prefix}_{model_name}"
-        _configure_executor(executor, job_config, job_name)
 
         for fewshot in fewshots:
             for hint_fraction in hint_fractions:
                 if skip_existing:
-                    # Check if output file already exists
                     output = experiment_class.get_output_filename(
                         results_dir=results_dir, model_name=model_name, fewshot=fewshot, hint_fraction=hint_fraction)
                     if os.path.exists(output):
                         continue
-                    
-                    # Check if job is already running/pending
                     config_tuple = (model_name, fewshot, hint_fraction)
                     if config_tuple in running_configs:
                         logger.info(f"Skipping {model_name}, fewshot={fewshot}, hint={hint_fraction} (already running)")
                         continue
 
-                # Check if we've reached the max_jobs limit
-                if max_jobs is not None and len(jobs) >= max_jobs:
-                    logger.warning(f"Reached max_jobs limit of {max_jobs}, stopping submission")
-                    break
+                specs.append({
+                    'config': job_config,
+                    'name': job_name,
+                    'fn': run_single_experiment,
+                    'kwargs': dict(
+                        experiment_class=experiment_class, model_path=model.path,
+                        tensor_parallel_size=model.tp, hint_fraction=hint_fraction, fewshot=fewshot,
+                        epochs=epochs, results_dir=results_dir, config=job_config, debug=debug,
+                    ),
+                })
 
-                kwargs = dict(
-                    experiment_class=experiment_class, model_path=model.path,
-                    tensor_parallel_size=model.tp, hint_fraction=hint_fraction, fewshot=fewshot,
-                    epochs=epochs, results_dir=results_dir, config=job_config, debug=debug,
-                )
-                job = executor.submit(run_single_experiment, **kwargs)
-                jobs.append(job)
-                job_meta[str(job.job_id)] = {'config': job_config, 'name': job_name, 'fn': run_single_experiment, 'kwargs': kwargs}
-                logger.info(f"submitted {job.job_id}: {model_name}, fewshot={fewshot}, hint={hint_fraction}")
-            
-            # Break from fewshot loop if max_jobs reached
-            if max_jobs is not None and len(jobs) >= max_jobs:
-                break
-        
-        # Break from model loop if max_jobs reached
-        if max_jobs is not None and len(jobs) >= max_jobs:
-            break
+    logger.info(f"{len(specs)} jobs to submit")
+    if not submit:
+        return specs
+    if not specs:
+        return []
 
-    logger.info(f"submitted {len(jobs)} jobs")
-    if not jobs or not wait:
+    # Submit all at once
+    executor = submitit.AutoExecutor(folder=config.submitit_folder)
+    jobs = []
+    job_meta = {}
+    for spec in specs:
+        _configure_executor(executor, spec['config'], spec['name'])
+        job = executor.submit(spec['fn'], **spec['kwargs'])
+        jobs.append(job)
+        job_meta[str(job.job_id)] = spec
+        logger.info(f"submitted {job.job_id}: {spec['name']}")
+
+    if not wait:
         return jobs
     return _wait_with_retries(jobs, job_meta, executor, poll_interval, max_retries)
+
+
+def run_specs_throttled(
+    specs: list[dict],
+    max_concurrent: int,
+    config: SubmitConfig | None = None,
+    poll_interval: int = 300,
+    max_retries: int = 3,
+):
+    """Run a list of job specs with a global concurrency limit."""
+    config = config or DEFAULT_CONFIG
+    executor = submitit.AutoExecutor(folder=config.submitit_folder)
+    return _run_throttled(specs, executor, poll_interval, max_retries, max_concurrent)
 
 
 def launch_baseline(
