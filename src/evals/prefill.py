@@ -41,8 +41,14 @@ def get_prefill_fraction(text: str, fraction: float = 0.5, stop_string: str = "A
     return "".join(tokens[:last_word_idx + 1]).strip()
 
 
-def get_masked_text(text: str, fraction: float = 0.5, mask_token: str = "[MASK]", stop_string: str = "ANSWER:") -> str:
-    """Mask random words, showing only a fraction of them. Truncates at stop_string."""
+def get_masked_text(text: str, fraction: float = 0.5, mask_token: str = "[MASK]",
+                    stop_string: str = "ANSWER:", seed: int | str | None = None) -> str:
+    """Mask random words, showing only a fraction of them. Truncates at stop_string.
+
+    Args:
+        seed: If provided, use a seeded RNG for reproducible masking.
+              If None, uses the global RNG (legacy behavior).
+    """
     text = _truncate_at_stop_string(text, stop_string)
     tokens, word_indices = _split_preserving_whitespace(text)
 
@@ -50,7 +56,8 @@ def get_masked_text(text: str, fraction: float = 0.5, mask_token: str = "[MASK]"
     if not word_indices or num_to_mask == 0:
         return text
 
-    mask_indices = set(random.sample(word_indices, num_to_mask))
+    rng = random.Random(seed) if seed is not None else random
+    mask_indices = set(rng.sample(word_indices, num_to_mask))
     return "".join(mask_token if i in mask_indices else t for i, t in enumerate(tokens)).strip()
 
 
@@ -106,11 +113,15 @@ class PrefillConfig:
 def load_prefill_data(config: PrefillConfig) -> dict[str, dict[int, str]]:
     """Load prefill data from JSONL file and compute prefill text.
 
+    For sequential mode, pre-computes the truncated text (deterministic).
+    For masked mode, stores raw truncated hints so masking can be applied
+    on the fly with different seeds per epoch.
+
     Args:
         config: PrefillConfig with path and fraction
 
     Returns:
-        Dictionary mapping sample IDs to dict of sample_idx -> prefill text.
+        Dictionary mapping sample IDs to dict of sample_idx -> text.
         Returns empty dict if fraction is 0.
     """
     if config.fraction == 0.0:
@@ -133,7 +144,8 @@ def load_prefill_data(config: PrefillConfig) -> dict[str, dict[int, str]]:
             if config.mode == "sequential":
                 prefill_text = get_prefill_fraction(example.hint, fraction=config.fraction, stop_string=config.stop_string)
             else:
-                prefill_text = get_masked_text(example.hint, fraction=config.fraction, mask_token=config.mask_token, stop_string=config.stop_string)
+                # Store raw truncated hint; masking applied on the fly in solver
+                prefill_text = _truncate_at_stop_string(example.hint, config.stop_string)
 
             if example.id not in prefill_data:
                 prefill_data[example.id] = {}
@@ -149,6 +161,12 @@ def load_prefill_data(config: PrefillConfig) -> dict[str, dict[int, str]]:
 
         first_id = next(iter(prefill_data))
         first_sample = next(iter(prefill_data[first_id].values()))
-        logger.info(f"Example hint (id={first_id}, {len(first_sample)} chars):\n{first_sample}")
+        if config.mode == "sequential":
+            logger.info(f"Example hint (id={first_id}, {len(first_sample)} chars):\n{first_sample}")
+        else:
+            example_masked = get_masked_text(first_sample, fraction=config.fraction,
+                                             mask_token=config.mask_token, seed="example")
+            logger.info(f"Example raw hint (id={first_id}, {len(first_sample)} chars):\n{first_sample}")
+            logger.info(f"Example masked (fraction={config.fraction}):\n{example_masked}")
 
     return prefill_data

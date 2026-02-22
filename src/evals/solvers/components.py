@@ -15,7 +15,7 @@ from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, GenerateCo
 from inspect_ai.solver import Generate, Solver, solver
 from inspect_ai.solver import TaskState
 
-from evals.prefill import PrefillConfig
+from evals.prefill import PrefillConfig, get_masked_text
 from evals.fewshot import FewShotConfig, format_fewshot_examples
 from utils.model_config import get_start_prefill, get_generation_defaults
 
@@ -165,6 +165,10 @@ def fewshot(
 def prefill(config: PrefillConfig) -> Solver:
     """Add prefill text as an assistant message.
 
+    For masked mode, masking is applied on the fly with an epoch-dependent seed
+    so each epoch sees a different mask (variance reduction over mask position
+    and hint sample).
+
     Args:
         config: PrefillConfig with path and fraction settings
 
@@ -185,7 +189,16 @@ def prefill(config: PrefillConfig) -> Solver:
                 )
             samples = prefill_data[state.sample_id]
             rng = random.Random(f"{state.epoch}_{state.sample_id}")
-            prefill_text = rng.choice(list(samples.values()))
+            sample_keys = sorted(samples.keys())
+            chosen_idx = rng.choice(sample_keys)
+            prefill_text = samples[chosen_idx]
+
+            # For masked mode, apply mask on the fly (unseeded for max variance)
+            if config.mode == "masked":
+                prefill_text = get_masked_text(
+                    prefill_text, fraction=config.fraction,
+                    mask_token=config.mask_token,
+                )
 
             # Prepend model-specific start token if applicable (e.g., "<think>" for Qwen3)
             model_name = os.environ.get("INSPECT_EVAL_MODEL", "")
@@ -205,8 +218,8 @@ def intext(config: PrefillConfig, prefix: str = "Here is part of a hint that may
     """Add hint text inline to the user prompt.
 
     Similar to prefill() but appends hint text to the user prompt instead of
-    adding an assistant message. The hint text is prefixed with a customizable
-    prefix string.
+    adding an assistant message. For masked mode, masking is applied on the fly
+    with an epoch-dependent seed for variance reduction.
 
     Args:
         config: PrefillConfig with path, fraction, mode, and mask_token settings
@@ -229,7 +242,18 @@ def intext(config: PrefillConfig, prefix: str = "Here is part of a hint that may
                 )
             samples = hint_data[state.sample_id]
             rng = random.Random(f"{state.epoch}_{state.sample_id}")
-            hint_text = rng.choice(list(samples.values()))
+            sample_keys = sorted(samples.keys())
+            chosen_idx = rng.choice(sample_keys)
+            hint_text = samples[chosen_idx]
+
+            # For masked mode, apply mask on the fly with epoch-dependent seed
+            if config.mode == "masked":
+                mask_seed = f"{state.epoch}_{state.sample_id}_{chosen_idx}"
+                hint_text = get_masked_text(
+                    hint_text, fraction=config.fraction,
+                    mask_token=config.mask_token, seed=mask_seed,
+                )
+
             state.user_prompt.text = state.user_prompt.text + "\n\n" + prefix + hint_text
 
         return state

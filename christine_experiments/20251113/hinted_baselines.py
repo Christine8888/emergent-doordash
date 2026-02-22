@@ -33,6 +33,9 @@ ALL_EVALS = ["hellaswag", "piqa", "bbh", "arc_challenge", "mmlu_0_shot", "winogr
 
 MAX_TOKENS = 8192
 
+MAX_SAMPLES = {"mmlu_0_shot": 2000, "hellaswag": 2000, "bbh": 2000}
+SUBSAMPLE_SEED = 42
+
 
 def _get_eval_config(eval_name):
     """Lazy-load task function and instructions for an eval."""
@@ -68,10 +71,14 @@ def make_experiment(eval_name: str, hint_type: str, solver_type: str, mode: str 
 
     task_fn, default_instructions = _get_eval_config(eval_name)
 
+    _max_samples = MAX_SAMPLES.get(eval_name)
+
     class _Experiment(Experiment):
         name = _name
         eval_name = _eval_name
         data_path = _data_path
+        max_samples = _max_samples
+        subsample_seed = SUBSAMPLE_SEED if _max_samples else None
 
         def build_task(self, hint_fraction: float, sample_ids: set[str]):
             config = PrefillConfig(path=_data_path, fraction=hint_fraction, mode=mode)
