@@ -30,7 +30,7 @@ logger = setup_logging()
 BASE_DIR = "/sphinx/u/cye/emergent-doordash/suze_experiments/data"
 
 ALL_EVALS = ["piqa", "arc_challenge", "winogrande", "math_level_5"]
-# ALL_EVALS += ["mmlu_0_shot", "bbh", "hellaswag"]
+ALL_EVALS += ["mmlu_0_shot", "bbh", "hellaswag"]
 
 MAX_TOKENS = 8192
 
