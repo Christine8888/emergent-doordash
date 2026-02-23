@@ -494,7 +494,10 @@ class Experiment(ABC):
             per_chunk: dict[str, list[int]] = defaultdict(list)
             for sample in getattr(eval_log0, "samples", []) or []:
                 sid = getattr(sample, "id", None)
-                if not isinstance(sid, str) or sid not in chunk_id_set:
+                if sid is None:
+                    continue
+                sid = str(sid)
+                if sid not in chunk_id_set:
                     continue
                 scores = getattr(sample, "scores", None)
                 if not isinstance(scores, dict) or not scores:
