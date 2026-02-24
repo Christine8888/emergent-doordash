@@ -278,7 +278,7 @@ class Experiment(ABC):
         self,
         model_name: str,
         vllm_port: int,
-        timeout: int = 600,
+        timeout: int = 3000,
         max_connections: int = 32,
     ):
         """Initialize experiment.

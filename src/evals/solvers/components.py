@@ -146,7 +146,7 @@ def fewshot(
             fewshot_data=fewshot_data,
             n_examples=config.num_examples,
             example_template=example_template,
-            current_id=state.sample_id if config.exclude_current else None,
+            current_id=str(state.sample_id) if config.exclude_current else None,
             seed=config.seed,
             prefix=config.prefix,
             suffix=config.suffix,

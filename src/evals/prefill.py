@@ -144,8 +144,8 @@ def load_prefill_data(config: PrefillConfig) -> dict[str, dict[int, str]]:
             if config.mode == "sequential":
                 prefill_text = get_prefill_fraction(example.hint, fraction=config.fraction, stop_string=config.stop_string)
             else:
-                # Store raw truncated hint; masking applied on the fly in solver
-                prefill_text = _truncate_at_stop_string(example.hint, config.stop_string)
+                # Store raw hint; truncation + masking applied at runtime in solver
+                prefill_text = example.hint
 
             if example.id not in prefill_data:
                 prefill_data[example.id] = {}
