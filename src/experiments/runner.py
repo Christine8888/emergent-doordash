@@ -128,6 +128,7 @@ def setup_vllm_env(port: int, model_name: str = None):
     """Set vLLM environment variables."""
     os.environ["VLLM_BASE_URL"] = f"http://localhost:{port}/v1"
     os.environ["VLLM_API_KEY"] = "local"
+    os.environ.setdefault("OPENAI_TIMEOUT", "3000")
     if model_name:
         os.environ["INSPECT_EVAL_MODEL"] = f"vllm/{model_name}"
 
