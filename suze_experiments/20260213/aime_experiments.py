@@ -13,7 +13,7 @@ from experiments.base_experiment import Experiment
 from environments.aime.aime import aime, DEFAULT_INSTRUCTIONS
 from evals.prefill import PrefillConfig
 from evals.solvers import instructions, intext, prefill, generate
-from utils.submitit_utils import launch_experiment
+from utils.submitit_utils import launch_experiment, run_specs_throttled
 from utils.model_config import QWEN3_MODELS, QWEN25_MODELS, GEMMA_MODELS, LLAMA_MODELS, ModelSpec, SC_LOPRIO_PARTITION
 from utils.submitit_defaults import DEFAULT_CONFIG
 from utils.setup import setup_logging
@@ -254,19 +254,42 @@ def run_experiment(
         models = _apply_sc_loprio(models)
     elif low_prio:
         models = _apply_low_prio(models)
-    launch_experiment(
-        experiment_class=experiment_cls,
-        models=models,
-        hint_fractions=HINT_FRACTIONS,
-        epochs=epochs,
-        results_dir=results_dir,
-        config=DEFAULT_CONFIG.override(**config_overrides),
-        wait=True,
-        poll_interval=300,
-        max_retries=3,
-        debug=debug,
-        max_jobs=max_jobs,
-    )
+    job_config = DEFAULT_CONFIG.override(**config_overrides)
+    if max_jobs is not None:
+        specs = launch_experiment(
+            experiment_class=experiment_cls,
+            models=models,
+            hint_fractions=HINT_FRACTIONS,
+            epochs=epochs,
+            results_dir=results_dir,
+            config=job_config,
+            wait=True,
+            poll_interval=300,
+            max_retries=3,
+            debug=debug,
+            submit=False,
+        )
+        logger.info(f"{exp_name}: throttled submit with max_jobs={max_jobs} ({len(specs)} specs)")
+        run_specs_throttled(
+            specs=specs,
+            max_concurrent=max_jobs,
+            config=job_config,
+            poll_interval=300,
+            max_retries=3,
+        )
+    else:
+        launch_experiment(
+            experiment_class=experiment_cls,
+            models=models,
+            hint_fractions=HINT_FRACTIONS,
+            epochs=epochs,
+            results_dir=results_dir,
+            config=job_config,
+            wait=True,
+            poll_interval=300,
+            max_retries=3,
+            debug=debug,
+        )
 
 
 if __name__ == "__main__":
@@ -282,6 +305,20 @@ if __name__ == "__main__":
     parser.add_argument("--max_jobs", type=int, default=None, help="Maximum number of jobs to submit (default: no limit)")
     parser.add_argument("--max_connections", type=int, default=16, help="Inspect max concurrent connections per job (default: 16)")
     parser.add_argument("--max_tokens", type=int, default=8192, help="Max tokens per generation (default: 8192)")
+    parser.add_argument(
+        "--checkpoint_chunk_instances",
+        type=int,
+        default=128,
+        help=(
+            "Checkpoint chunk size in instances (sample*epoch). "
+            "Values below 128 are clamped to 128."
+        ),
+    )
+    parser.add_argument(
+        "--disable_checkpoint",
+        action="store_true",
+        help="Disable resumable checkpointing (single eval call per run).",
+    )
     parser.add_argument("--cluster", choices=["sphinx", "miso", "jag"], default=None, help="Restrict job scheduling to a specific cluster (default: all clusters)")
     parser.add_argument("--low_prio", action="store_true", help="Submit jobs at low priority QOS (default: standard)")
     parser.add_argument("--sc_loprio", action="store_true", help="Submit pre-emptible jobs to sc-loprio partition using GPU constraints (overrides --cluster/--low_prio routing)")
@@ -295,6 +332,12 @@ if __name__ == "__main__":
             args.results_dir,
         )
     else:
+        os.environ["EXPERIMENT_CHECKPOINT_CHUNK_INSTANCES"] = str(max(args.checkpoint_chunk_instances, 128))
+        if args.disable_checkpoint:
+            os.environ["EXPERIMENT_DISABLE_CHECKPOINT"] = "1"
+        else:
+            os.environ.pop("EXPERIMENT_DISABLE_CHECKPOINT", None)
+
         with ThreadPoolExecutor(max_workers=len(experiments_to_run)) as executor:
             futures = [
                 executor.submit(
@@ -332,14 +375,17 @@ python suze_experiments/20260213/aime_experiments.py \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
   --max_jobs 1 \
-  --max_connections 12 
+  --max_connections 12 \
+  --checkpoint_chunk_instances 128
 
 DEBUG
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 1 --debug
+  --max_jobs 1 \
+  --checkpoint_chunk_instances 128 \
+  --debug
 
 LOW PRIORITY SPHINX
 python suze_experiments/20260213/aime_experiments.py \
@@ -348,6 +394,7 @@ python suze_experiments/20260213/aime_experiments.py \
   --results_dir christine_experiments/20251113/results \
   --max_jobs 2 \
   --max_connections 12 \
+  --checkpoint_chunk_instances 128 \
   --low_prio \
   --cluster sphinx
 
@@ -359,6 +406,7 @@ python suze_experiments/20260213/aime_experiments.py \
   --results_dir christine_experiments/20251113/results \
   --max_jobs 8 \
   --max_connections 16 \
+  --checkpoint_chunk_instances 128 \
   --cluster miso
 
 SC-LOPRIO (pre-emptible, any cluster, GPU constraint routing)
@@ -366,9 +414,19 @@ python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 150 \
-  --max_connections 12 \
+  --max_jobs 200 \
+  --max_connections 16 \
+  --checkpoint_chunk_instances 128 \
   --sc_loprio
+
+NO CHECKPOINT BENCHMARK (higher risk on pre-emptible queues)
+python suze_experiments/20260213/aime_experiments.py \
+  --experiment all \
+  --epochs 10 \
+  --results_dir christine_experiments/20251113/results \
+  --max_jobs 1 \
+  --max_connections 12 \
+  --disable_checkpoint
 
 sacctmgr show assoc user=suzeva format=user,account,partition,qos
 """
