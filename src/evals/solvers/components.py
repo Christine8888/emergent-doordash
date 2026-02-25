@@ -10,6 +10,7 @@ Or:
 import logging
 import os
 import random
+import threading
 import time
 from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, GenerateConfig
 from inspect_ai.solver import Generate, Solver, solver
@@ -22,6 +23,15 @@ from utils.model_config import get_start_prefill, get_generation_defaults
 logger = logging.getLogger(__name__)
 
 _LENGTH_WARN_COUNT = 0
+_TOKEN_METRICS_LOCK = threading.Lock()
+_TOKEN_METRICS_START_TS = time.time()
+_TOKEN_METRICS_LAST_PRINT_TS = _TOKEN_METRICS_START_TS
+_TOKEN_METRICS_TOTAL_OUTPUT_TOKENS = 0
+_TOKEN_METRICS_TOTAL_REQUESTS = 0
+_TOKEN_METRICS_TOTAL_WITH_USAGE = 0
+_TOKEN_METRICS_LAST_PRINT_TOKENS = 0
+_TOKEN_METRICS_LAST_PRINT_REQUESTS = 0
+_TOKEN_METRICS_PRINT_INTERVAL_SEC = float(os.environ.get("EXPERIMENT_TOKENS_PER_SEC_PRINT_INTERVAL", "30"))
 
 
 def _is_length_stop(output) -> bool:
@@ -72,6 +82,82 @@ def _warn_length_stop(state: TaskState, max_tokens: int | None):
         f"sample_id={sid!r} epoch={epoch!r} (count={_LENGTH_WARN_COUNT})",
         flush=True,
     )
+
+
+def _extract_output_tokens(output) -> int | None:
+    """Best-effort extraction of generated output tokens from model output."""
+    if output is None:
+        return None
+
+    usage = getattr(output, "usage", None)
+    if usage is not None:
+        # Dataclass/object usage (Inspect style).
+        for attr in ("output_tokens", "completion_tokens"):
+            val = getattr(usage, attr, None)
+            if isinstance(val, int):
+                return val
+        # Dict usage (OpenAI-style dict payloads).
+        if isinstance(usage, dict):
+            for key in ("output_tokens", "completion_tokens"):
+                val = usage.get(key)
+                if isinstance(val, int):
+                    return val
+
+    # Fallbacks in metadata.
+    md = getattr(output, "metadata", None)
+    if isinstance(md, dict):
+        for key in ("output_tokens", "completion_tokens"):
+            val = md.get(key)
+            if isinstance(val, int):
+                return val
+
+    return None
+
+
+def _record_tokens_per_second_metric(output) -> None:
+    """Track rolling output token throughput and print periodic progress."""
+    if _TOKEN_METRICS_PRINT_INTERVAL_SEC <= 0:
+        return
+
+    out_tokens = _extract_output_tokens(output)
+    now = time.time()
+
+    global _TOKEN_METRICS_LAST_PRINT_TS
+    global _TOKEN_METRICS_TOTAL_OUTPUT_TOKENS
+    global _TOKEN_METRICS_TOTAL_REQUESTS
+    global _TOKEN_METRICS_TOTAL_WITH_USAGE
+    global _TOKEN_METRICS_LAST_PRINT_TOKENS
+    global _TOKEN_METRICS_LAST_PRINT_REQUESTS
+
+    with _TOKEN_METRICS_LOCK:
+        _TOKEN_METRICS_TOTAL_REQUESTS += 1
+        if isinstance(out_tokens, int):
+            _TOKEN_METRICS_TOTAL_OUTPUT_TOKENS += out_tokens
+            _TOKEN_METRICS_TOTAL_WITH_USAGE += 1
+
+        since_last = now - _TOKEN_METRICS_LAST_PRINT_TS
+        if since_last < _TOKEN_METRICS_PRINT_INTERVAL_SEC:
+            return
+
+        elapsed = max(now - _TOKEN_METRICS_START_TS, 1e-6)
+        delta_tokens = _TOKEN_METRICS_TOTAL_OUTPUT_TOKENS - _TOKEN_METRICS_LAST_PRINT_TOKENS
+        delta_requests = _TOKEN_METRICS_TOTAL_REQUESTS - _TOKEN_METRICS_LAST_PRINT_REQUESTS
+        avg_tps = _TOKEN_METRICS_TOTAL_OUTPUT_TOKENS / elapsed
+        win_tps = delta_tokens / max(since_last, 1e-6)
+
+        ts = time.strftime("%m/%d %H:%M:%S")
+        print(
+            f"[{ts}] throughput: output_tokens/s avg={avg_tps:.1f} window={win_tps:.1f} "
+            f"total_out_tokens={_TOKEN_METRICS_TOTAL_OUTPUT_TOKENS} "
+            f"requests={_TOKEN_METRICS_TOTAL_REQUESTS} "
+            f"requests_with_usage={_TOKEN_METRICS_TOTAL_WITH_USAGE} "
+            f"window_requests={delta_requests}",
+            flush=True,
+        )
+
+        _TOKEN_METRICS_LAST_PRINT_TS = now
+        _TOKEN_METRICS_LAST_PRINT_TOKENS = _TOKEN_METRICS_TOTAL_OUTPUT_TOKENS
+        _TOKEN_METRICS_LAST_PRINT_REQUESTS = _TOKEN_METRICS_TOTAL_REQUESTS
 
 
 @solver
@@ -359,6 +445,13 @@ def generate(
                 _warn_length_stop(state, max_tokens=max_tokens)
         except Exception:
             # Never let warning logic break eval execution.
+            pass
+
+        # Best-effort rolling throughput telemetry for live progress monitoring.
+        try:
+            _record_tokens_per_second_metric(getattr(state, "output", None))
+        except Exception:
+            # Never let telemetry logic break eval execution.
             pass
 
         return state
