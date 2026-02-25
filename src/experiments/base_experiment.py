@@ -417,10 +417,10 @@ class Experiment(ABC):
                     epochs=epochs,
                     limit=None,
                     max_connections=self.max_connections,
-                    max_retries=10,  # HTTP-level retries (prevents infinite retry loops)
+                    max_retries=3,  # HTTP-level retries
                     display="plain",
                     fail_on_error=False,
-                    retry_on_error=10,  # sample-level retries
+                    retry_on_error=3,  # sample-level retries
                     metadata=metadata,
                 )
 
@@ -436,13 +436,25 @@ class Experiment(ABC):
 
         # ---- Checkpointed, resumable run ----
         # EXPERIMENT_CHECKPOINT_CHUNK_INSTANCES controls how many (sample × epoch)
-        # instances to process per chunk.  chunk_size (in samples) is derived as
+        # instances to process per chunk. chunk_size (in samples) is derived as
         # ceil(chunk_instances / epochs) so checkpoint frequency stays consistent
-        # regardless of epoch count.  Default: 25 instances per chunk.
-        _DEFAULT_CHUNK_INSTANCES = 25
+        # regardless of epoch count.
+        #
+        # Keep a fixed floor to avoid tiny chunks that starve vLLM's dynamic
+        # batching and add excessive per-chunk eval overhead.
+        _MIN_CHUNK_INSTANCES = 128
+        _DEFAULT_CHUNK_INSTANCES = 128
         chunk_instances_env = os.environ.get("EXPERIMENT_CHECKPOINT_CHUNK_INSTANCES")
         try:
-            chunk_instances = max(int(chunk_instances_env), 1) if chunk_instances_env is not None else _DEFAULT_CHUNK_INSTANCES
+            chunk_instances = int(chunk_instances_env) if chunk_instances_env is not None else _DEFAULT_CHUNK_INSTANCES
+            if chunk_instances < _MIN_CHUNK_INSTANCES:
+                logger.warning(
+                    "EXPERIMENT_CHECKPOINT_CHUNK_INSTANCES=%r is below minimum %d; using %d",
+                    chunk_instances_env,
+                    _MIN_CHUNK_INSTANCES,
+                    _MIN_CHUNK_INSTANCES,
+                )
+                chunk_instances = _MIN_CHUNK_INSTANCES
         except Exception:
             logger.warning(f"Invalid EXPERIMENT_CHECKPOINT_CHUNK_INSTANCES={chunk_instances_env!r}; using {_DEFAULT_CHUNK_INSTANCES}")
             chunk_instances = _DEFAULT_CHUNK_INSTANCES
@@ -536,10 +548,10 @@ class Experiment(ABC):
                     epochs=epochs,
                     limit=None,
                     max_connections=self.max_connections,
-                    max_retries=10,  # HTTP-level retries (prevents infinite retry loops)
+                    max_retries=3,  # HTTP-level retries
                     display="plain",
                     fail_on_error=False,
-                    retry_on_error=10,  # sample-level retries
+                    retry_on_error=3,  # sample-level retries
                     metadata=metadata,
                 )
 
