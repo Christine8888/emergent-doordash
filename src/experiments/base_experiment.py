@@ -417,10 +417,10 @@ class Experiment(ABC):
                     epochs=epochs,
                     limit=None,
                     max_connections=self.max_connections,
-                    max_retries=10,  # HTTP-level retries (prevents infinite retry loops)
+                    max_retries=3,  # HTTP-level retries
                     display="plain",
                     fail_on_error=False,
-                    retry_on_error=10,  # sample-level retries
+                    retry_on_error=3,  # sample-level retries
                     metadata=metadata,
                 )
 
@@ -536,10 +536,10 @@ class Experiment(ABC):
                     epochs=epochs,
                     limit=None,
                     max_connections=self.max_connections,
-                    max_retries=10,  # HTTP-level retries (prevents infinite retry loops)
+                    max_retries=3,  # HTTP-level retries
                     display="plain",
                     fail_on_error=False,
-                    retry_on_error=10,  # sample-level retries
+                    retry_on_error=3,  # sample-level retries
                     metadata=metadata,
                 )
 
