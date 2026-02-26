@@ -1,0 +1,17 @@
+{
+  "model": "vllm/Qwen3-0.6B",
+  "total_samples": 3,
+  "completed_samples": 3,
+  "metadata": {
+    "timeout": 1200,
+    "hint_fraction": 0.1,
+    "fewshot": 0,
+    "data_path": "/sailhome/suzeva/emergent-doordash/christine_experiments/data/solution/aime.jsonl",
+    "solver_name": "solution_intext_masked"
+  },
+  "aime_scorer": {
+    "accuracy": 0.3333333333333333,
+    "stderr": 0.2721655269759087,
+    "scorer": "aime_scorer"
+  }
+}
