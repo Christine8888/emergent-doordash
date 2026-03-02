@@ -12,7 +12,7 @@ import os
 import random
 import threading
 import time
-from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem, GenerateConfig
+from inspect_ai.model import ChatMessageAssistant, ChatMessageSystem
 from inspect_ai.solver import Generate, Solver, solver
 from inspect_ai.solver import TaskState
 
@@ -397,8 +397,9 @@ def generate(
         model_name = os.environ.get("INSPECT_EVAL_MODEL", "")
         gen_defaults = get_generation_defaults(model_name)
 
-        # Configure generation with model-specific defaults
-        gen_config = GenerateConfig(
+        # Generate with model-specific defaults.
+        state = await gen(
+            state,
             max_tokens=max_tokens,
             continue_final_message=continue_message,
             timeout=timeout,
@@ -435,9 +436,6 @@ def generate(
                     )
         except Exception:
             pass
-
-        # Generate
-        state = await gen(state, config=gen_config)
 
         # Best-effort warning if generation appears to have been truncated by max_tokens.
         try:
