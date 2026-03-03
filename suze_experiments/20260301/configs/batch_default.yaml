@@ -5,6 +5,7 @@ model_path: "Qwen/Qwen3-4B"
 max_model_len: 12288              # p99 input (~900 tok) + max_tokens (8192) + margin
 gpu_memory_utilization: 0.92
 dtype: "auto"
+max_num_seqs: null                # null => use vLLM default
 
 # dataset
 num_samples: 30

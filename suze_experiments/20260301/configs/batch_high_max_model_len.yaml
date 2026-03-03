@@ -1,15 +1,11 @@
 # model
 model_path: "Qwen/Qwen3-4B"
-tensor_parallel_size: 1
 
-# vllm server
-max_model_len: 12288              # p99 input (~900 tok) + max_tokens (8192) + margin; max input is ~3900
+# vllm offline engine
+max_model_len: 20480              # p99 input (~900 tok) + max_tokens (8192) + margin
 gpu_memory_utilization: 0.92
-enable_prefix_caching: true
-enable_chunked_prefill: true
-max_num_batched_tokens: 8192      # vLLM default with chunked prefill is 2048
-max_num_seqs: null                # null => use vLLM default
 dtype: "auto"
+max_num_seqs: null                # null => use vLLM default
 
 # dataset
 num_samples: 30
@@ -26,20 +22,11 @@ stop_string: "ANSWER:"
 hint_prefix: "Here is part of a hint that may be helpful to your solution:\n"
 
 # generation
-max_tokens: 8192
-timeout: 1200
+max_tokens: 16384
 temperature: 0.6
 top_p: 0.95
 top_k: 20
 presence_penalty: 1.0
-
-# eval orchestrator
-max_connections: 16
-epochs: 1
-max_retries: 3
-retry_on_error: 3
-fail_on_error: false
-display: "plain"
 
 # output
 log_dir: "suze_experiments/20260301/logs"

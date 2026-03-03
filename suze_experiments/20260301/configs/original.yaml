@@ -9,6 +9,7 @@ enable_prefix_caching: true
 enable_chunked_prefill: true
 dtype: "auto"
 max_num_batched_tokens: 2048
+max_num_seqs: null               # null => use vLLM default
 
 # dataset
 num_samples: 30

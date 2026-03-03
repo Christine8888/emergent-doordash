@@ -8,6 +8,7 @@ gpu_memory_utilization: 0.92
 enable_prefix_caching: true
 enable_chunked_prefill: true
 max_num_batched_tokens: 8192      # vLLM default with chunked prefill is 2048
+max_num_seqs: null                # null => use vLLM default
 dtype: "auto"
 
 # dataset

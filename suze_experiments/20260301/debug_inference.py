@@ -20,6 +20,9 @@ Usage:
     python suze_experiments/20260301/debug_inference.py \
         --config suze_experiments/20260301/configs/higher_max_tok.yaml
 
+    python suze_experiments/20260301/debug_inference.py \
+        --config suze_experiments/20260301/configs/high_max_model_len.yaml
+
 """
 
 from pathlib import Path
@@ -65,6 +68,7 @@ REQUIRED_KEYS = [
     "max_model_len", "gpu_memory_utilization",
     "enable_prefix_caching", "enable_chunked_prefill", "dtype",
     "max_num_batched_tokens",
+    "max_num_seqs",
     "num_samples", "seed", "shuffle",
     "hint_fraction", "hint_type", "solver_type", "mode",
     "mask_token", "stop_string", "hint_prefix",
@@ -87,6 +91,9 @@ _THROUGHPUT_LAST_PRINT_TOKENS = 0
 _THROUGHPUT_LAST_PRINT_REQUESTS = 0
 _THROUGHPUT_PRINT_INTERVAL = 30.0
 _LENGTH_WARN_COUNT = 0
+_THROUGHPUT_TRACE: list[tuple[float, int, int]] = []
+_STEADY_LOWER_FRACTION = 0.2
+_STEADY_UPPER_FRACTION = 0.8
 
 
 def _reset_throughput_tracker():
@@ -94,6 +101,7 @@ def _reset_throughput_tracker():
     global _THROUGHPUT_TOTAL_OUT_TOKENS, _THROUGHPUT_TOTAL_REQUESTS
     global _THROUGHPUT_LAST_PRINT_TOKENS, _THROUGHPUT_LAST_PRINT_REQUESTS
     global _LENGTH_WARN_COUNT
+    global _THROUGHPUT_TRACE
     now = time.time()
     _THROUGHPUT_START_TS = now
     _THROUGHPUT_LAST_PRINT_TS = now
@@ -102,6 +110,7 @@ def _reset_throughput_tracker():
     _THROUGHPUT_LAST_PRINT_TOKENS = 0
     _THROUGHPUT_LAST_PRINT_REQUESTS = 0
     _LENGTH_WARN_COUNT = 0
+    _THROUGHPUT_TRACE = []
 
 
 def _extract_output_tokens(output) -> int | None:
@@ -128,11 +137,19 @@ def _record_throughput(output) -> None:
     global _THROUGHPUT_LAST_PRINT_TS, _THROUGHPUT_TOTAL_OUT_TOKENS
     global _THROUGHPUT_TOTAL_REQUESTS, _THROUGHPUT_LAST_PRINT_TOKENS
     global _THROUGHPUT_LAST_PRINT_REQUESTS
+    global _THROUGHPUT_TRACE
 
     with _THROUGHPUT_LOCK:
         _THROUGHPUT_TOTAL_REQUESTS += 1
         if isinstance(out_tokens, int):
             _THROUGHPUT_TOTAL_OUT_TOKENS += out_tokens
+        _THROUGHPUT_TRACE.append(
+            (
+                max(now - _THROUGHPUT_START_TS, 0.0),
+                _THROUGHPUT_TOTAL_OUT_TOKENS,
+                _THROUGHPUT_TOTAL_REQUESTS,
+            )
+        )
 
         since_last = now - _THROUGHPUT_LAST_PRINT_TS
         if since_last < _THROUGHPUT_PRINT_INTERVAL:
@@ -158,6 +175,62 @@ def _record_throughput(output) -> None:
         _THROUGHPUT_LAST_PRINT_TS = now
         _THROUGHPUT_LAST_PRINT_TOKENS = _THROUGHPUT_TOTAL_OUT_TOKENS
         _THROUGHPUT_LAST_PRINT_REQUESTS = _THROUGHPUT_TOTAL_REQUESTS
+
+
+def _interpolate_time_at_value(points: list[tuple[float, float]], target: float) -> float | None:
+    """Linearly interpolate time where cumulative value reaches target."""
+    if not points:
+        return None
+
+    prev_t = 0.0
+    prev_v = 0.0
+    for t, v in points:
+        if v >= target:
+            if v <= prev_v:
+                return t
+            ratio = (target - prev_v) / (v - prev_v)
+            return prev_t + ratio * (t - prev_t)
+        prev_t = t
+        prev_v = v
+    return points[-1][0]
+
+
+def _compute_steady_state_throughput(
+    trace: list[tuple[float, int, int]],
+    total_output_tokens: int,
+    total_requests: int,
+    lower_fraction: float = _STEADY_LOWER_FRACTION,
+    upper_fraction: float = _STEADY_UPPER_FRACTION,
+) -> dict[str, float | None]:
+    """Estimate steady-state throughput from the middle token-progress band."""
+    if not trace or upper_fraction <= lower_fraction:
+        return {"output_tokens_per_sec": None, "samples_per_sec": None}
+
+    token_points = [(t, float(tok)) for t, tok, _ in trace]
+    req_points = [(t, float(req)) for t, _, req in trace]
+
+    steady_output_tps: float | None = None
+    if total_output_tokens > 0:
+        lo_tok = lower_fraction * total_output_tokens
+        hi_tok = upper_fraction * total_output_tokens
+        t_lo = _interpolate_time_at_value(token_points, lo_tok)
+        t_hi = _interpolate_time_at_value(token_points, hi_tok)
+        if t_lo is not None and t_hi is not None and t_hi > t_lo:
+            steady_output_tps = (hi_tok - lo_tok) / (t_hi - t_lo)
+
+    steady_samples_ps: float | None = None
+    if total_requests > 0:
+        lo_req = lower_fraction * total_requests
+        hi_req = upper_fraction * total_requests
+        t_lo = _interpolate_time_at_value(req_points, lo_req)
+        t_hi = _interpolate_time_at_value(req_points, hi_req)
+        if t_lo is not None and t_hi is not None and t_hi > t_lo:
+            steady_samples_ps = (hi_req - lo_req) / (t_hi - t_lo)
+
+    return {
+        "output_tokens_per_sec": steady_output_tps,
+        "samples_per_sec": steady_samples_ps,
+    }
 
 
 def _is_length_stop(output) -> bool:
@@ -445,6 +518,10 @@ def main(cfg: dict, run_name: str = "run"):
     log_dir = Path(cfg["log_dir"])
     log_dir.mkdir(parents=True, exist_ok=True)
 
+    server_kwargs: dict[str, Any] = {}
+    if cfg["max_num_seqs"] is not None:
+        server_kwargs["max_num_seqs"] = cfg["max_num_seqs"]
+
     with vLLMServer(
         model_path=cfg["model_path"],
         tensor_parallel_size=cfg["tensor_parallel_size"],
@@ -454,6 +531,7 @@ def main(cfg: dict, run_name: str = "run"):
         enable_chunked_prefill=cfg["enable_chunked_prefill"],
         dtype=cfg["dtype"],
         max_num_batched_tokens=cfg["max_num_batched_tokens"],
+        **server_kwargs,
     ) as server:
         setup_vllm_env(server.port, model_name)
         os.environ["VLLM_MAX_MODEL_LEN"] = str(cfg["max_model_len"])
@@ -505,6 +583,16 @@ def main(cfg: dict, run_name: str = "run"):
     n_samples = log.results.completed_samples
     output_tokens_per_sec = total_output_tokens / elapsed if elapsed > 0 else 0
     samples_per_sec = n_samples / elapsed if elapsed > 0 else 0
+    with _THROUGHPUT_LOCK:
+        trace_snapshot = list(_THROUGHPUT_TRACE)
+        total_requests = _THROUGHPUT_TOTAL_REQUESTS
+    steady = _compute_steady_state_throughput(
+        trace=trace_snapshot,
+        total_output_tokens=total_output_tokens,
+        total_requests=total_requests,
+    )
+    steady_output_tps = steady["output_tokens_per_sec"]
+    steady_samples_ps = steady["samples_per_sec"]
 
     logger.info("=== Results ===")
     logger.info(f"  Model: {log.eval.model}")
@@ -512,7 +600,14 @@ def main(cfg: dict, run_name: str = "run"):
     logger.info(f"  Completed samples: {n_samples}")
     logger.info(f"  Elapsed: {elapsed:.1f}s ({elapsed/60:.1f}m)")
     logger.info(f"  Tokens — input: {total_input_tokens:,}  output: {total_output_tokens:,}  total: {total_tokens:,}")
-    logger.info(f"  Throughput — {output_tokens_per_sec:.1f} output tok/s, {samples_per_sec:.3f} samples/s")
+    logger.info(f"  Throughput — overall={output_tokens_per_sec:.1f} output tok/s, {samples_per_sec:.3f} samples/s")
+    if steady_output_tps is not None and steady_samples_ps is not None:
+        logger.info(
+            f"  Throughput (steady {int(_STEADY_LOWER_FRACTION*100)}-{int(_STEADY_UPPER_FRACTION*100)}%) "
+            f"— {steady_output_tps:.1f} output tok/s, {steady_samples_ps:.3f} samples/s"
+        )
+    else:
+        logger.info("  Throughput (steady 20-80%) — unavailable (insufficient trace data)")
     for score in log.results.scores:
         logger.info(f"  {score.name}:")
         for metric_name, metric_value in score.metrics.items():
@@ -526,6 +621,9 @@ def main(cfg: dict, run_name: str = "run"):
         "throughput": {
             "output_tokens_per_sec": round(output_tokens_per_sec, 1),
             "samples_per_sec": round(samples_per_sec, 4),
+            "steady_output_tokens_per_sec": round(steady_output_tps, 1) if steady_output_tps is not None else None,
+            "steady_samples_per_sec": round(steady_samples_ps, 4) if steady_samples_ps is not None else None,
+            "steady_window_fraction": [_STEADY_LOWER_FRACTION, _STEADY_UPPER_FRACTION],
         },
         "token_usage": usage_summary,
         "token_totals": {

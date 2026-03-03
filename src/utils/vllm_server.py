@@ -151,6 +151,8 @@ class vLLMServer:
 
         # Add any extra vLLM arguments
         for key, value in self.vllm_kwargs.items():
+            if value is None:
+                continue
             cmd.extend([f"--{key.replace('_', '-')}", str(value)])
 
         logger.info(f"Starting vLLM server on port {self.port}")
