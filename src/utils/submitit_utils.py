@@ -6,6 +6,7 @@ import logging
 import subprocess
 import time
 import threading
+import urllib.request
 from pathlib import Path
 from typing import Callable
 import submitit
@@ -18,6 +19,82 @@ logger = logging.getLogger(__name__)
 
 _SMOKE_DEFAULT_PROMPT = "Reply with exactly: OK"
 _SMOKE_DEFAULT_MAX_TOKENS = 8
+
+
+def _parse_prometheus_value(text: str, metric_names: list[str], *, is_counter: bool = True) -> float | None:
+    """Sum all matching lines for counters, or return last gauge value."""
+    for metric_name in metric_names:
+        total = 0.0
+        found = False
+        for line in text.splitlines():
+            if line.startswith("#") or not line.startswith(metric_name):
+                continue
+            rest = line[len(metric_name):]
+            if rest and rest[0] not in ("{", " "):
+                continue
+            val_str = line.rsplit("}", 1)[-1].strip() if "{" in line else line.split()[-1]
+            try:
+                value = float(val_str)
+            except ValueError:
+                continue
+            if is_counter:
+                total += value
+                found = True
+            else:
+                return value
+        if found:
+            return total
+    return None
+
+
+def _metrics_poller(port: int, interval: float, stop_event: threading.Event) -> None:
+    """Poll vLLM /metrics and print throughput + queue depth."""
+    url = f"http://localhost:{port}/metrics"
+    prev_gen_tokens = None
+    prev_prompt_tokens = None
+    prev_time = None
+
+    gen_names = ["vllm:generation_tokens_total", "vllm_generation_tokens_total"]
+    prompt_names = ["vllm:prompt_tokens_total", "vllm_prompt_tokens_total"]
+    running_names = ["vllm:num_requests_running", "vllm_num_requests_running"]
+    waiting_names = ["vllm:num_requests_waiting", "vllm_num_requests_waiting"]
+
+    while not stop_event.is_set():
+        stop_event.wait(interval)
+        if stop_event.is_set():
+            break
+
+        try:
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                text = resp.read().decode()
+        except Exception as exc:
+            print(f"[metrics-poller] fetch failed: {exc}", flush=True)
+            continue
+
+        now = time.time()
+        gen_tokens = _parse_prometheus_value(text, gen_names)
+        prompt_tokens = _parse_prometheus_value(text, prompt_names)
+        running = _parse_prometheus_value(text, running_names, is_counter=False)
+        waiting = _parse_prometheus_value(text, waiting_names, is_counter=False)
+
+        if gen_tokens is not None and prev_gen_tokens is not None and prev_time is not None:
+            dt = now - prev_time
+            if dt > 0:
+                gen_rate = (gen_tokens - prev_gen_tokens) / dt
+                prompt_rate = ((prompt_tokens or 0) - (prev_prompt_tokens or 0)) / dt
+                parts = [
+                    f"gen_tok/s={gen_rate:.1f}",
+                    f"prompt_tok/s={prompt_rate:.1f}",
+                ]
+                if running is not None:
+                    parts.append(f"running={int(running)}")
+                if waiting is not None:
+                    parts.append(f"waiting={int(waiting)}")
+                print(f"[metrics-poller] {' '.join(parts)}", flush=True)
+
+        prev_gen_tokens = gen_tokens
+        prev_prompt_tokens = prompt_tokens
+        prev_time = now
 
 
 class GPUMonitor:
@@ -251,14 +328,38 @@ def run_single_experiment(
 
     with GPUMonitor(), vLLMServer(
         model_path=model_path, tensor_parallel_size=tensor_parallel_size,
-        max_model_len=config.max_model_len, gpu_memory_utilization=config.gpu_memory_utilization, n_gpus=n_gpus,
+        max_model_len=config.max_model_len,
+        gpu_memory_utilization=config.gpu_memory_utilization,
+        enable_prefix_caching=config.enable_prefix_caching,
+        enable_chunked_prefill=config.enable_chunked_prefill,
+        max_num_batched_tokens=config.max_num_batched_tokens,
+        n_gpus=n_gpus,
     ) as server:
         os.environ["VLLM_MAX_MODEL_LEN"] = str(config.max_model_len)
+        stop_event = None
+        poller = None
+        metrics_enabled = os.environ.get("EXPERIMENT_VLLM_METRICS", "1").lower() not in {
+            "0", "false", "no"
+        }
+        poll_interval = float(os.environ.get("EXPERIMENT_VLLM_METRICS_POLL_INTERVAL_SEC", "10"))
+        if metrics_enabled:
+            stop_event = threading.Event()
+            poller = threading.Thread(
+                target=_metrics_poller,
+                args=(server.port, poll_interval, stop_event),
+                daemon=True,
+            )
+            poller.start()
         experiment = experiment_class(
             model_name=model_name, vllm_port=server.port,
             timeout=config.timeout, max_connections=config.max_connections,
         )
-        return experiment.run(hint_fraction=hint_fraction, fewshot=fewshot, epochs=epochs, results_dir=results_dir)
+        try:
+            return experiment.run(hint_fraction=hint_fraction, fewshot=fewshot, epochs=epochs, results_dir=results_dir)
+        finally:
+            if stop_event is not None and poller is not None:
+                stop_event.set()
+                poller.join(timeout=5)
 
 
 def run_baseline_eval(
@@ -503,6 +604,9 @@ def run_smoke_inference(
         tensor_parallel_size=tensor_parallel_size,
         max_model_len=config.max_model_len,
         gpu_memory_utilization=config.gpu_memory_utilization,
+        enable_prefix_caching=config.enable_prefix_caching,
+        enable_chunked_prefill=config.enable_chunked_prefill,
+        max_num_batched_tokens=config.max_num_batched_tokens,
         n_gpus=n_gpus,
     ) as server:
         import openai

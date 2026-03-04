@@ -128,7 +128,7 @@ def setup_vllm_env(port: int, model_name: str = None):
     """Set vLLM environment variables."""
     os.environ["VLLM_BASE_URL"] = f"http://localhost:{port}/v1"
     os.environ["VLLM_API_KEY"] = "local"
-    os.environ.setdefault("OPENAI_TIMEOUT", "3000")
+    os.environ.setdefault("OPENAI_TIMEOUT", "3600")
     if model_name:
         os.environ["INSPECT_EVAL_MODEL"] = f"vllm/{model_name}"
 
@@ -142,7 +142,7 @@ def run_eval(
     max_connections: int = 32,
     metadata: Optional[dict] = None,
     *,
-    max_tokens: int,
+    max_tokens: int | None = None,
     label: str = "",
 ) -> dict:
     """Run an Inspect eval and save results.
@@ -155,7 +155,7 @@ def run_eval(
         limit: Optional sample limit
         max_connections: Max concurrent connections
         metadata: Optional metadata to include
-        max_tokens: Max tokens to generate per sample (generation cap)
+        max_tokens: Deprecated/ignored (kept for compatibility)
 
     Returns:
         Dictionary with results and status
@@ -179,8 +179,8 @@ def run_eval(
         logger.info(f"  Limit: {limit}")
 
     with _timestamp_steps_stdout(enabled=True, label=label or model_name):
-        eval_log = inspect_eval(
-            task,
+        eval_kwargs = dict(
+            task=task,
             model=f"vllm/{model_name}",
             log_dir=str(output_path.parent),
             epochs=epochs,
@@ -191,8 +191,14 @@ def run_eval(
             fail_on_error=False,
             retry_on_error=10,  # sample-level retries
             metadata=metadata or {},
-            max_tokens=max_tokens,
         )
+        if max_tokens is not None:
+            logger.warning(
+                "run_eval received max_tokens=%s but this is ignored "
+                "to preserve provider defaults.",
+                max_tokens,
+            )
+        eval_log = inspect_eval(**eval_kwargs)
 
     results = extract_scores_from_log(eval_log[0])
 
@@ -225,7 +231,7 @@ def run_eval_with_vllm(
     limit: Optional[int] = None,
     task_kwargs: Optional[dict] = None,
     *,
-    max_tokens: int,
+    max_tokens: int | None = None,
 ) -> dict:
     """Run eval with vLLM server management.
 
@@ -269,6 +275,9 @@ def run_eval_with_vllm(
         tensor_parallel_size=tensor_parallel_size,
         max_model_len=config.max_model_len,
         gpu_memory_utilization=config.gpu_memory_utilization,
+        enable_prefix_caching=config.enable_prefix_caching,
+        enable_chunked_prefill=config.enable_chunked_prefill,
+        max_num_batched_tokens=config.max_num_batched_tokens,
         n_gpus=n_gpus,
     ) as server:
         setup_vllm_env(server.port, model_name)
@@ -285,5 +294,4 @@ def run_eval_with_vllm(
             epochs=epochs,
             limit=limit,
             max_connections=config.max_connections,
-            max_tokens=max_tokens,
         )

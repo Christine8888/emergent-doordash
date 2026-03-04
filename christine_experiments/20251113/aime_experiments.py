@@ -37,7 +37,7 @@ def make_experiment(hint_type: str, solver_type: str, mode: str = "sequential"):
             solver = [
                 instructions(DEFAULT_INSTRUCTIONS),
                 hint_solver,
-                generate(max_tokens=8192, timeout=self.timeout),
+                generate(timeout=self.timeout),
             ]
             return aime(sample_ids=sample_ids, solver=solver)
 

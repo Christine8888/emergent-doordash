@@ -43,10 +43,13 @@ class SubmitConfig:
     # vLLM config
     max_model_len: int = 32768
     max_connections: int = 64
-    gpu_memory_utilization: float = 0.85
+    gpu_memory_utilization: float = 0.95
+    max_num_batched_tokens: int = 32768
+    enable_prefix_caching: bool = True
+    enable_chunked_prefill: bool = True
 
     # Experiment config
-    timeout: int = 1200
+    timeout: int = 3600
     max_retries: int = 3
 
     # Submitit config

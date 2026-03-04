@@ -31,8 +31,6 @@ BASE_DIR = "/sphinx/u/cye/emergent-doordash/suze_experiments/data"
 
 ALL_EVALS = ["hellaswag", "piqa", "bbh", "arc_challenge", "mmlu_0_shot", "winogrande", "math_level_5"]
 
-MAX_TOKENS = 8192
-
 MAX_SAMPLES = {"mmlu_0_shot": 2000, "hellaswag": 2000, "bbh": 2000}
 SUBSAMPLE_SEED = 42
 
@@ -90,7 +88,7 @@ def make_experiment(eval_name: str, hint_type: str, solver_type: str, mode: str 
             solver = [
                 instructions(default_instructions),
                 hint_solver,
-                generate(max_tokens=MAX_TOKENS, timeout=self.timeout),
+                generate(timeout=self.timeout),
             ]
             return task_fn(sample_ids=sample_ids, solver=solver)
 

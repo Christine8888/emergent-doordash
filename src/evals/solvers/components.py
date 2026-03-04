@@ -18,7 +18,7 @@ from inspect_ai.solver import TaskState
 
 from evals.prefill import PrefillConfig, get_masked_text
 from evals.fewshot import FewShotConfig, format_fewshot_examples
-from utils.model_config import get_start_prefill, get_generation_defaults
+from utils.model_config import get_start_prefill
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ _TOKEN_METRICS_TOTAL_WITH_USAGE = 0
 _TOKEN_METRICS_LAST_PRINT_TOKENS = 0
 _TOKEN_METRICS_LAST_PRINT_REQUESTS = 0
 _TOKEN_METRICS_PRINT_INTERVAL_SEC = float(os.environ.get("EXPERIMENT_TOKENS_PER_SEC_PRINT_INTERVAL", "30"))
+_MAX_TOKENS_IGNORED_WARNED = False
 
 
 def _is_length_stop(output) -> bool:
@@ -371,16 +372,13 @@ def generate(
     max_tokens: int | None = None,
     timeout: int | None = None,
 ) -> Solver:
-    """Generate with automatic continuation detection and model-specific defaults.
+    """Generate with automatic continuation detection.
 
     If the last message is an assistant message, enables continue_final_message
     for vLLM to continue from that message.
 
-    Applies model-specific generation defaults (temperature, top_p, top_k) based
-    on the model family. See utils.model_config.MODEL_GENERATION_DEFAULTS.
-
     Args:
-        max_tokens: Maximum tokens to generate
+        max_tokens: Deprecated/ignored. Kept for backward compatibility.
         timeout: Timeout in seconds (total across all retries)
 
     Returns:
@@ -393,21 +391,22 @@ def generate(
             isinstance(state.messages[-1], ChatMessageAssistant)
         )
 
-        # Get model-specific generation defaults
-        model_name = os.environ.get("INSPECT_EVAL_MODEL", "")
-        gen_defaults = get_generation_defaults(model_name)
+        gen_kwargs = {
+            "continue_final_message": continue_message,
+        }
+        if timeout is not None:
+            gen_kwargs["timeout"] = timeout
 
-        # Generate with model-specific defaults.
-        state = await gen(
-            state,
-            max_tokens=max_tokens,
-            continue_final_message=continue_message,
-            timeout=timeout,
-            temperature=gen_defaults.get("temperature"),
-            top_p=gen_defaults.get("top_p"),
-            top_k=gen_defaults.get("top_k"),
-            presence_penalty=gen_defaults.get("presence_penalty"),
-        )
+        global _MAX_TOKENS_IGNORED_WARNED
+        if max_tokens is not None and not _MAX_TOKENS_IGNORED_WARNED:
+            logger.warning(
+                "generate(max_tokens=...) is ignored to preserve provider defaults."
+            )
+            _MAX_TOKENS_IGNORED_WARNED = True
+
+        # Leave generation params (temperature/top_p/top_k/etc.) unset
+        # so provider defaults are used.
+        state = await gen(state, **gen_kwargs)
 
         # Warn if estimated input tokens exceed 80% of the context window.
         try:
