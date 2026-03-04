@@ -501,6 +501,7 @@ class Experiment(ABC):
         remaining_ids = [sid for sid in all_sample_ids if sid not in completed_ids]
         logger.info(f"Checkpoint progress: {len(completed_ids)}/{len(all_sample_ids)} samples complete; remaining={len(remaining_ids)}")
         logger.info(f"Checkpoint file: {ckpt_path}")
+        resume_no_chunk = os.environ.get("EXPERIMENT_RESUME_NO_CHUNK") == "1"
 
         def _extract_chunk_correctness(eval_log0, *, chunk_id_set: set[str]) -> dict[str, list[int]]:
             per_chunk: dict[str, list[int]] = defaultdict(list)
@@ -531,6 +532,14 @@ class Experiment(ABC):
             return out
 
         # Run remaining samples in chunks, checkpointing after each chunk.
+        if resume_no_chunk:
+            # Finish all remaining samples in one eval call while still honoring existing checkpoint progress.
+            chunk_size = max(1, len(remaining_ids))
+            logger.info(
+                "Resume-no-chunk mode: finishing in one run (remaining_samples=%d, remaining_instances=%d)",
+                len(remaining_ids),
+                len(remaining_ids) * int(epochs),
+            )
         while remaining_ids:
             chunk = remaining_ids[:chunk_size]
             remaining_ids = remaining_ids[chunk_size:]

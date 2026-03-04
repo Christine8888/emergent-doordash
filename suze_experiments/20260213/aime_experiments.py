@@ -342,6 +342,14 @@ if __name__ == "__main__":
         help="Enable resumable checkpointing/chunking (default: disabled).",
     )
     parser.add_argument(
+        "--resume_no_chunk",
+        action="store_true",
+        help=(
+            "Resume from existing checkpoint (if any), but finish remaining samples "
+            "in a single unchunked eval call."
+        ),
+    )
+    parser.add_argument(
         "--disable_checkpoint",
         action="store_true",
         help=argparse.SUPPRESS,
@@ -359,14 +367,22 @@ if __name__ == "__main__":
             args.results_dir,
         )
     else:
-        if args.enable_checkpoint and args.disable_checkpoint:
-            raise ValueError("Cannot pass both --enable_checkpoint and --disable_checkpoint")
+        mode_flags = int(args.enable_checkpoint) + int(args.resume_no_chunk) + int(args.disable_checkpoint)
+        if mode_flags > 1:
+            raise ValueError(
+                "Pass at most one of --enable_checkpoint, --resume_no_chunk, --disable_checkpoint"
+            )
         # Default behavior: no checkpoint chunking unless explicitly enabled.
         if args.enable_checkpoint:
             os.environ["EXPERIMENT_CHECKPOINT_CHUNK_INSTANCES"] = str(max(args.checkpoint_chunk_instances, 128))
             os.environ.pop("EXPERIMENT_DISABLE_CHECKPOINT", None)
+            os.environ.pop("EXPERIMENT_RESUME_NO_CHUNK", None)
+        elif args.resume_no_chunk:
+            os.environ.pop("EXPERIMENT_DISABLE_CHECKPOINT", None)
+            os.environ["EXPERIMENT_RESUME_NO_CHUNK"] = "1"
         else:
             os.environ["EXPERIMENT_DISABLE_CHECKPOINT"] = "1"
+            os.environ.pop("EXPERIMENT_RESUME_NO_CHUNK", None)
 
         with ThreadPoolExecutor(max_workers=len(experiments_to_run)) as executor:
             futures = [
@@ -467,6 +483,7 @@ python suze_experiments/20260213/aime_experiments.py \
   --cluster miso \
   --num_gpus 8 \
   --disable_checkpoint
+  --resume_no_chunk
 
 
 USE THIS FOR NON-PREEMPTIBLE
@@ -477,5 +494,12 @@ python suze_experiments/20260213/aime_experiments.py \
   --max_jobs 1 \
   --cluster sphinx \
   --disable_checkpoint
+  --resume_no_chunk
+
+python suze_experiments/20260213/aime_experiments.py \
+  --experiment all \
+  --epochs 10 \
+  --results_dir christine_experiments/20251113/results --plan
+
 
 """
