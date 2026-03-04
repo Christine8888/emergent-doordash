@@ -45,62 +45,17 @@ display: "plain"
 log_dir: "suze_experiments/20260301/logs"
 
 
-# this gets ~3000 tokens/s
+# this gets ~2500 tokens/s
 
 
-# [metrics-poller] gen_tok/s=0.0 prompt_tok/s=0.0 running=0 waiting=0
-# [metrics-poller] gen_tok/s=0.0 prompt_tok/s=0.0 running=0 waiting=0
-# [metrics-poller] gen_tok/s=3768.1 prompt_tok/s=12189.6 running=96 waiting=0
-# [metrics-poller] gen_tok/s=6099.8 prompt_tok/s=0.0 running=96 waiting=0
-# Steps:   1/932   0% | Samples:   1/932 | accuracy:  n/a | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=5527.2 prompt_tok/s=104.7 running=96 waiting=0
-# Steps:   2/932   0% | Samples:   2/932 | accuracy: 0.00 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=5136.2 prompt_tok/s=285.9 running=96 waiting=0
-# Steps:   4/932   0% | Samples:   4/932 | accuracy: 0.50 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=4722.9 prompt_tok/s=218.8 running=96 waiting=0
-# Steps:   7/932   0% | Samples:   6/932 | accuracy: 0.80 | vllm: 94/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=4431.5 prompt_tok/s=236.3 running=96 waiting=0
-# Steps:   8/932   0% | Samples:   8/932 | accuracy: 0.67 | vllm: 95/96 | HTTP retries: 0
-# Steps:   9/932   0% | Samples:   9/932 | accuracy: 0.75 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=4165.5 prompt_tok/s=414.1 running=96 waiting=0
-# Steps:  11/932   1% | Samples:  11/932 | accuracy: 0.78 | vllm: 95/96 | HTTP retries: 0
-# Steps:  13/932   1% | Samples:  13/932 | accuracy: 0.83 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3955.1 prompt_tok/s=388.2 running=96 waiting=0
-# Steps:  16/932   1% | Samples:  16/932 | accuracy: 0.86 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3796.1 prompt_tok/s=563.2 running=96 waiting=0
-# Steps:  19/932   2% | Samples:  19/932 | accuracy: 0.89 | vllm: 95/96 | HTTP retries: 0
-# Steps:  22/932   2% | Samples:  22/932 | accuracy: 0.90 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3684.7 prompt_tok/s=505.6 running=96 waiting=0
-# Steps:  23/932   2% | Samples:  23/932 | accuracy: 0.91 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3603.1 prompt_tok/s=125.8 running=96 waiting=0
-# [metrics-poller] gen_tok/s=3481.5 prompt_tok/s=0.0 running=95 waiting=0
-# Steps:  24/932   2% | Samples:  24/932 | accuracy: 0.91 | vllm: 95/96 | HTTP retries: 0
-# Steps:  26/932   2% | Samples:  26/932 | accuracy: 0.92 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3371.6 prompt_tok/s=432.2 running=96 waiting=0
-# Steps:  27/932   2% | Samples:  27/932 | accuracy: 0.92 | vllm: 95/96 | HTTP retries: 0
-# Steps:  29/932   3% | Samples:  29/932 | accuracy: 0.93 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3270.7 prompt_tok/s=691.8 running=96 waiting=0
-# Steps:  33/932   3% | Samples:  33/932 | accuracy: 0.94 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3267.6 prompt_tok/s=301.5 running=96 waiting=0
-# Steps:  34/932   3% | Samples:  34/932 | accuracy: 0.94 | vllm: 95/96 | HTTP retries: 0
-# Steps:  35/932   3% | Samples:  35/932 | accuracy: 0.94 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3188.8 prompt_tok/s=332.6 running=96 waiting=0
-# Steps:  38/932   4% | Samples:  38/932 | accuracy: 0.95 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3114.4 prompt_tok/s=264.1 running=96 waiting=0
-# Steps:  41/932   4% | Samples:  39/932 | accuracy: 0.95 | vllm: 92/96 | HTTP retries: 0
-# Steps:  43/932   4% | Samples:  43/932 | accuracy: 0.95 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3069.2 prompt_tok/s=746.5 running=94 waiting=0
-# Steps:  49/932   5% | Samples:  49/932 | accuracy: 0.96 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3091.6 prompt_tok/s=1014.1 running=96 waiting=0
-# Steps:  52/932   5% | Samples:  52/932 | accuracy: 0.96 | vllm: 95/96 | HTTP retries: 0
-# Steps:  56/932   6% | Samples:  56/932 | accuracy: 0.96 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3143.1 prompt_tok/s=768.1 running=96 waiting=0
-# Steps:  58/932   6% | Samples:  58/932 | accuracy: 0.96 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3134.5 prompt_tok/s=169.5 running=96 waiting=0
-# Steps:  59/932   6% | Samples:  59/932 | accuracy: 0.95 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3055.0 prompt_tok/s=335.4 running=96 waiting=0
-# Steps:  62/932   6% | Samples:  62/932 | accuracy: 0.95 | vllm: 95/96 | HTTP retries: 0
-# Steps:  64/932   6% | Samples:  64/932 | accuracy: 0.95 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=3026.7 prompt_tok/s=367.1 running=96 waiting=0
-# Steps:  67/932   7% | Samples:  67/932 | accuracy: 0.95 | vllm: 95/96 | HTTP retries: 0
-# [metrics-poller] gen_tok/s=2993.1 prompt_tok/s=653.6 running=96 waiting=0
+# Steps: 104/932  11% | Samples: 104/932 | accuracy: 0.86 | vllm: 95/96 | HTTP retries: 0
+# [metrics-poller] elapsed=00:06:53 gen_tok/s=2542.6 prompt_tok/s=635.5 running=96 waiting=0
+# [metrics-poller] elapsed=00:07:03 gen_tok/s=2558.8 prompt_tok/s=263.3 running=96 waiting=0
+# Steps: 107/932  11% | Samples: 107/932 | accuracy: 0.86 | vllm: 95/96 | HTTP retries: 0
+# [metrics-poller] elapsed=00:07:13 gen_tok/s=2510.6 prompt_tok/s=204.5 running=96 waiting=0
+# [metrics-poller] elapsed=00:07:23 gen_tok/s=2475.0 prompt_tok/s=0.0 running=96 waiting=0
+# Steps: 109/932  11% | Samples: 109/932 | accuracy: 0.85 | vllm: 95/96 | HTTP retries: 0
+# [metrics-poller] elapsed=00:07:33 gen_tok/s=2403.4 prompt_tok/s=216.8 running=96 waiting=0
+# Steps: 112/932  12% | Samples: 111/932 | accuracy: 0.85 | vllm: 94/96 | HTTP retries: 0
+# [metrics-poller] elapsed=00:07:43 gen_tok/s=2425.6 prompt_tok/s=670.9 running=96 waiting=0
+# Steps: 116/932  12% | Samples: 116/932 | accuracy: 0.86 | vllm: 95/96 | HTTP retries: 0

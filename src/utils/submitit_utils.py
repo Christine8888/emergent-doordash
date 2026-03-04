@@ -6,6 +6,7 @@ import logging
 import subprocess
 import time
 import threading
+import urllib.request
 from pathlib import Path
 from typing import Callable
 import submitit
@@ -18,6 +19,110 @@ logger = logging.getLogger(__name__)
 
 _SMOKE_DEFAULT_PROMPT = "Reply with exactly: OK"
 _SMOKE_DEFAULT_MAX_TOKENS = 8
+
+
+def _resolve_max_connections(max_connections: int | None) -> int:
+    """Resolve max_connections, deriving a GPU-aware default when unset."""
+    if max_connections is not None:
+        return max_connections
+
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        gpu_names = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    except Exception as exc:
+        logger.warning(
+            "Failed to detect GPU model for dynamic max_connections (%s); using fallback=48",
+            exc,
+        )
+        return 48
+
+    joined_names = " ".join(gpu_names).upper()
+    if "H200" in joined_names:
+        return 96
+    if "H100" in joined_names:
+        return 64
+    return 48
+
+
+def _parse_prometheus_value(text: str, metric_names: list[str], *, is_counter: bool = True) -> float | None:
+    """Sum all matching lines for counters, or return last gauge value."""
+    for metric_name in metric_names:
+        total = 0.0
+        found = False
+        for line in text.splitlines():
+            if line.startswith("#") or not line.startswith(metric_name):
+                continue
+            rest = line[len(metric_name):]
+            if rest and rest[0] not in ("{", " "):
+                continue
+            val_str = line.rsplit("}", 1)[-1].strip() if "{" in line else line.split()[-1]
+            try:
+                value = float(val_str)
+            except ValueError:
+                continue
+            if is_counter:
+                total += value
+                found = True
+            else:
+                return value
+        if found:
+            return total
+    return None
+
+
+def _metrics_poller(port: int, interval: float, stop_event: threading.Event) -> None:
+    """Poll vLLM /metrics and print throughput + queue depth."""
+    url = f"http://localhost:{port}/metrics"
+    prev_gen_tokens = None
+    prev_prompt_tokens = None
+    prev_time = None
+
+    gen_names = ["vllm:generation_tokens_total", "vllm_generation_tokens_total"]
+    prompt_names = ["vllm:prompt_tokens_total", "vllm_prompt_tokens_total"]
+    running_names = ["vllm:num_requests_running", "vllm_num_requests_running"]
+    waiting_names = ["vllm:num_requests_waiting", "vllm_num_requests_waiting"]
+
+    while not stop_event.is_set():
+        stop_event.wait(interval)
+        if stop_event.is_set():
+            break
+
+        try:
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                text = resp.read().decode()
+        except Exception as exc:
+            print(f"[metrics-poller] fetch failed: {exc}", flush=True)
+            continue
+
+        now = time.time()
+        gen_tokens = _parse_prometheus_value(text, gen_names)
+        prompt_tokens = _parse_prometheus_value(text, prompt_names)
+        running = _parse_prometheus_value(text, running_names, is_counter=False)
+        waiting = _parse_prometheus_value(text, waiting_names, is_counter=False)
+
+        if gen_tokens is not None and prev_gen_tokens is not None and prev_time is not None:
+            dt = now - prev_time
+            if dt > 0:
+                gen_rate = (gen_tokens - prev_gen_tokens) / dt
+                prompt_rate = ((prompt_tokens or 0) - (prev_prompt_tokens or 0)) / dt
+                parts = [
+                    f"gen_tok/s={gen_rate:.1f}",
+                    f"prompt_tok/s={prompt_rate:.1f}",
+                ]
+                if running is not None:
+                    parts.append(f"running={int(running)}")
+                if waiting is not None:
+                    parts.append(f"waiting={int(waiting)}")
+                print(f"[metrics-poller] {' '.join(parts)}", flush=True)
+
+        prev_gen_tokens = gen_tokens
+        prev_prompt_tokens = prompt_tokens
+        prev_time = now
 
 
 class GPUMonitor:
@@ -143,6 +248,17 @@ def _configure_executor(executor: submitit.AutoExecutor, config: SubmitConfig, n
     executor.update_parameters(**params)
 
 
+def _format_experiment_spec(spec: dict) -> str:
+    """Return a compact human-readable experiment spec label for logs."""
+    kwargs = spec.get("kwargs", {})
+    model_name = os.path.basename(kwargs.get("model_path", "unknown"))
+    hint_fraction = kwargs.get("hint_fraction")
+    fewshot = kwargs.get("fewshot")
+    return (
+        f"model={model_name}, hint={hint_fraction}, fewshot={fewshot}"
+    )
+
+
 def _run_throttled(
     pending_specs: list[dict],
     executor: submitit.AutoExecutor,
@@ -167,7 +283,9 @@ def _run_throttled(
             job = executor.submit(spec['fn'], **spec['kwargs'])
             active_jobs.append(job)
             job_meta[str(job.job_id)] = spec
-            logger.info(f"submitted {job.job_id}: {spec['name']}")
+            logger.info(
+                f"submitted {job.job_id}: {spec['name']} ({_format_experiment_spec(spec)})"
+            )
 
     _fill_slots()
     logger.info(f"throttled launch: {len(active_jobs)} active, {len(pending)} queued (max_concurrent={max_concurrent})")
@@ -248,17 +366,47 @@ def run_single_experiment(
 
     model_name = os.path.basename(model_path)
     n_gpus = int(os.environ.get('SLURM_GPUS_ON_NODE', tensor_parallel_size))
+    resolved_max_connections = _resolve_max_connections(config.max_connections)
+    logger.info(
+        "Using max_connections=%s for model=%s",
+        resolved_max_connections,
+        model_name,
+    )
 
     with GPUMonitor(), vLLMServer(
         model_path=model_path, tensor_parallel_size=tensor_parallel_size,
-        max_model_len=config.max_model_len, gpu_memory_utilization=config.gpu_memory_utilization, n_gpus=n_gpus,
+        max_model_len=config.max_model_len,
+        gpu_memory_utilization=config.gpu_memory_utilization,
+        enable_prefix_caching=config.enable_prefix_caching,
+        enable_chunked_prefill=config.enable_chunked_prefill,
+        max_num_batched_tokens=config.max_num_batched_tokens,
+        n_gpus=n_gpus,
     ) as server:
         os.environ["VLLM_MAX_MODEL_LEN"] = str(config.max_model_len)
+        stop_event = None
+        poller = None
+        metrics_enabled = os.environ.get("EXPERIMENT_VLLM_METRICS", "1").lower() not in {
+            "0", "false", "no"
+        }
+        poll_interval = float(os.environ.get("EXPERIMENT_VLLM_METRICS_POLL_INTERVAL_SEC", "10"))
+        if metrics_enabled:
+            stop_event = threading.Event()
+            poller = threading.Thread(
+                target=_metrics_poller,
+                args=(server.port, poll_interval, stop_event),
+                daemon=True,
+            )
+            poller.start()
         experiment = experiment_class(
             model_name=model_name, vllm_port=server.port,
-            timeout=config.timeout, max_connections=config.max_connections,
+            timeout=config.timeout, max_connections=resolved_max_connections,
         )
-        return experiment.run(hint_fraction=hint_fraction, fewshot=fewshot, epochs=epochs, results_dir=results_dir)
+        try:
+            return experiment.run(hint_fraction=hint_fraction, fewshot=fewshot, epochs=epochs, results_dir=results_dir)
+        finally:
+            if stop_event is not None and poller is not None:
+                stop_event.set()
+                poller.join(timeout=5)
 
 
 def run_baseline_eval(
@@ -350,7 +498,7 @@ def launch_experiment(
     fewshots: list[int] = [0], epochs: int = 1, results_dir: str = "./results",
     config: SubmitConfig | None = None, skip_existing: bool = True,
     wait: bool = True, poll_interval: int = 300, max_retries: int = 3,
-    debug: bool = False, submit: bool = True,
+    debug: bool = False, submit: bool = True, num_gpus: int | None = None,
 ):
     """Launch experiment grid with retry logic.
 
@@ -367,9 +515,25 @@ def launch_experiment(
 
     # Collect all job specs
     specs = []
+    if num_gpus is not None and int(num_gpus) < 1:
+        raise ValueError(f"num_gpus must be >= 1, got {num_gpus!r}")
+
     for model in models:
         model_name = os.path.basename(model.path)
-        overrides = dict(gpus_per_job=model.tp, partition=model.partitions, nodelist=model.nodelist)
+        if num_gpus is not None:
+            if int(num_gpus) < int(model.tp):
+                raise ValueError(
+                    f"num_gpus={num_gpus} is smaller than tp={model.tp} for model {model_name}; "
+                    "increase num_gpus or filter models."
+                )
+            if int(num_gpus) % int(model.tp) != 0:
+                raise ValueError(
+                    f"num_gpus={num_gpus} must be divisible by tp={model.tp} for model {model_name}."
+                )
+            gpus_per_job = int(num_gpus)
+        else:
+            gpus_per_job = int(model.tp)
+        overrides = dict(gpus_per_job=gpus_per_job, partition=model.partitions, nodelist=model.nodelist)
         if model.account:
             overrides["account"] = model.account
         if model.constraint:
@@ -415,7 +579,9 @@ def launch_experiment(
         job = executor.submit(spec['fn'], **spec['kwargs'])
         jobs.append(job)
         job_meta[str(job.job_id)] = spec
-        logger.info(f"submitted {job.job_id}: {spec['name']}")
+        logger.info(
+            f"submitted {job.job_id}: {spec['name']} ({_format_experiment_spec(spec)})"
+        )
 
     if not wait:
         return jobs
@@ -503,6 +669,9 @@ def run_smoke_inference(
         tensor_parallel_size=tensor_parallel_size,
         max_model_len=config.max_model_len,
         gpu_memory_utilization=config.gpu_memory_utilization,
+        enable_prefix_caching=config.enable_prefix_caching,
+        enable_chunked_prefill=config.enable_chunked_prefill,
+        max_num_batched_tokens=config.max_num_batched_tokens,
         n_gpus=n_gpus,
     ) as server:
         import openai

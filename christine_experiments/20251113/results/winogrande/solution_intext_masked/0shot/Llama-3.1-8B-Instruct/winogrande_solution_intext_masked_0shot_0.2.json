@@ -1,0 +1,45 @@
+{
+  "model": "vllm/Llama-3.1-8B-Instruct",
+  "total_samples": 6325,
+  "completed_samples": 6325,
+  "metadata": {
+    "timeout": 1200,
+    "hint_fraction": 0.2,
+    "fewshot": 0,
+    "data_path": "/sphinx/u/cye/emergent-doordash/suze_experiments/data/solution/winogrande.jsonl",
+    "solver_name": "solution_intext_masked"
+  },
+  "winogrande_scorer": {
+    "accuracy": 0.3222134387351779,
+    "stderr": 0.005876084558993971,
+    "scorer": "winogrande_scorer"
+  },
+  "manual_bootstrap": {
+    "accuracy": 0.3224260869565217,
+    "stderr": 0.011192677625704188,
+    "scorer": "manual_bootstrap",
+    "epochs": 5
+  },
+  "pass_at_k": {
+    "1": {
+      "accuracy": 0.32220316205533595,
+      "stderr": 0.011401238519510989
+    },
+    "2": {
+      "accuracy": 0.5232355731225296,
+      "stderr": 0.01047487658984869
+    },
+    "3": {
+      "accuracy": 0.6546980237154151,
+      "stderr": 0.008646564682968611
+    },
+    "4": {
+      "accuracy": 0.7412719367588931,
+      "stderr": 0.0060617680675575485
+    },
+    "5": {
+      "accuracy": 0.8,
+      "stderr": 0.0
+    }
+  }
+}

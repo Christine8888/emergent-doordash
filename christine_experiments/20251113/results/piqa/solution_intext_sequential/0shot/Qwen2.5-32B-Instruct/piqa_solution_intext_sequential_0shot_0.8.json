@@ -1,0 +1,45 @@
+{
+  "model": "vllm/Qwen2.5-32B-Instruct",
+  "total_samples": 9190,
+  "completed_samples": 9190,
+  "metadata": {
+    "timeout": 1200,
+    "hint_fraction": 0.8,
+    "fewshot": 0,
+    "data_path": "/sphinx/u/cye/emergent-doordash/suze_experiments/data/solution/piqa.jsonl",
+    "solver_name": "solution_intext_sequential"
+  },
+  "piqa_scorer": {
+    "accuracy": 0.9658324265505984,
+    "stderr": 0.001894960683712526,
+    "scorer": "piqa_scorer"
+  },
+  "manual_bootstrap": {
+    "accuracy": 0.9658346028291622,
+    "stderr": 0.0018540232981592894,
+    "scorer": "manual_bootstrap",
+    "epochs": 5
+  },
+  "pass_at_k": {
+    "1": {
+      "accuracy": 0.9658541893362352,
+      "stderr": 0.0019843555691063915
+    },
+    "2": {
+      "accuracy": 0.974367247007617,
+      "stderr": 0.0014746426250895534
+    },
+    "3": {
+      "accuracy": 0.9780696409140369,
+      "stderr": 0.0010817461813535164
+    },
+    "4": {
+      "accuracy": 0.9802121871599565,
+      "stderr": 0.000739034048275577
+    },
+    "5": {
+      "accuracy": 0.9815016322089227,
+      "stderr": 0.0
+    }
+  }
+}

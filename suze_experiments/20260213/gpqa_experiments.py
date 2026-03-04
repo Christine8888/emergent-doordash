@@ -34,8 +34,6 @@ def make_experiment(
     hint_type: str,
     solver_type: str,
     mode: str = "sequential",
-    *,
-    max_tokens: int = 8000,
 ):
     _name = f"{hint_type}_{solver_type}_{mode}"
     _data_path = f"{BASE_DIR}/{hint_type}/gpqa.jsonl"
@@ -59,7 +57,7 @@ def make_experiment(
             solver = [
                 instructions(DEFAULT_INSTRUCTIONS),
                 hint_solver,
-                generate(max_tokens=max_tokens, timeout=self.timeout),
+                generate(timeout=self.timeout),
             ]
             return gpqa_diamond(sample_ids=sample_ids, solver=solver)
 
@@ -153,12 +151,11 @@ def run_experiment(
     max_jobs: int | None = None,
     *,
     max_connections: int = 16,
-    max_tokens: int = 8000,
 ):
     """Run a single experiment with full retry logic."""
     logger.info(f"Starting {exp_name}...")
     hint_type, solver_type, mode = EXPERIMENT_SPECS[exp_name]
-    experiment_cls = make_experiment(hint_type, solver_type, mode, max_tokens=max_tokens)
+    experiment_cls = make_experiment(hint_type, solver_type, mode)
     launch_experiment(
         experiment_class=experiment_cls,
         models=MODELS,
@@ -186,7 +183,6 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true", help="Enable Inspect HTTP debug logging")
     parser.add_argument("--max_jobs", type=int, default=None, help="Maximum number of jobs to submit (default: no limit)")
     parser.add_argument("--max_connections", type=int, default=16, help="Inspect max concurrent connections per job (default: 16)")
-    parser.add_argument("--max_tokens", type=int, default=8000, help="Max tokens per generation (default: 8000)")
     args = parser.parse_args()
 
     experiments_to_run = list(EXPERIMENTS.keys()) if args.experiment == "all" else [args.experiment]
@@ -204,7 +200,6 @@ if __name__ == "__main__":
                     args.debug,
                     args.max_jobs,
                     max_connections=args.max_connections,
-                    max_tokens=args.max_tokens,
                 )
                 for exp_name in experiments_to_run
             ]
