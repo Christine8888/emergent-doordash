@@ -385,18 +385,6 @@ def generate(
         Solver that generates with appropriate configuration
     """
     async def solve(state: TaskState, gen: Generate) -> TaskState:
-        # Auto-detect if we should continue from last message
-        continue_message = (
-            len(state.messages) > 0 and
-            isinstance(state.messages[-1], ChatMessageAssistant)
-        )
-
-        gen_kwargs = {
-            "continue_final_message": continue_message,
-        }
-        if timeout is not None:
-            gen_kwargs["timeout"] = timeout
-
         global _MAX_TOKENS_IGNORED_WARNED
         if max_tokens is not None and not _MAX_TOKENS_IGNORED_WARNED:
             logger.warning(
@@ -404,8 +392,13 @@ def generate(
             )
             _MAX_TOKENS_IGNORED_WARNED = True
 
+        gen_kwargs = {}
+        if timeout is not None:
+            gen_kwargs["timeout"] = timeout
+
         # Leave generation params (temperature/top_p/top_k/etc.) unset
-        # so provider defaults are used.
+        # so vLLM uses HF generation_config.json defaults.
+        # continue_final_message is auto-detected by vLLM provider.
         state = await gen(state, **gen_kwargs)
 
         # Warn if estimated input tokens exceed 80% of the context window.
