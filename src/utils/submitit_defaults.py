@@ -42,7 +42,7 @@ class SubmitConfig:
 
     # vLLM config
     max_model_len: int = 32768
-    max_connections: int = 64
+    max_connections: int | None = 64
     gpu_memory_utilization: float = 0.95
     max_num_batched_tokens: int = 32768
     enable_prefix_caching: bool = True

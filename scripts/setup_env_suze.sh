@@ -5,8 +5,9 @@
 # Constants (keep at top)
 # ----------------------------
 CONDA_BASE="/sphinx/u/${USER}/miniconda3"
-CONDA_ENV_NAME="emergent_doordash"
-PROJECT_ROOT="/afs/cs.stanford.edu/u/suzeva/emergent-doordash"
+CONDA_ENV_NAME="ed"
+# Resolve repo root from this script location to support different clone paths.
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # ----------------------------
 # Environment

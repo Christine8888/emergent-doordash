@@ -8,6 +8,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = REPO_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
+SETUP_ENV_SCRIPT = REPO_ROOT / "scripts" / "setup_env_suze.sh"
 
 from experiments.base_experiment import Experiment
 from environments.aime.aime import aime, DEFAULT_INSTRUCTIONS
@@ -235,7 +236,8 @@ def run_experiment(
     debug: bool = False,
     max_jobs: int | None = None,
     *,
-    max_connections: int = 16,
+    max_connections: int | None = None,
+    num_gpus: int | None = None,
     cluster: str | None = None,
     low_prio: bool = False,
     sc_loprio: bool = False,
@@ -245,7 +247,11 @@ def run_experiment(
     hint_type, solver_type, mode = EXPERIMENT_SPECS[exp_name]
     experiment_cls = make_experiment(hint_type, solver_type, mode)
     models = _restrict_models_to_cluster(MODELS, cluster) if cluster is not None else MODELS
-    config_overrides = dict(max_connections=max_connections)
+    config_overrides = {}
+    # Ensure submitit workers source this repo's setup script (activates conda env "ed").
+    config_overrides["setup_commands"] = [f"source {SETUP_ENV_SCRIPT}"]
+    if max_connections is not None:
+        config_overrides["max_connections"] = max_connections
     if cluster is not None:
         config_overrides["account"] = _CLUSTER_ACCOUNT.get(cluster, "nlp")
     if sc_loprio:
@@ -266,6 +272,7 @@ def run_experiment(
             max_retries=3,
             debug=debug,
             submit=False,
+            num_gpus=num_gpus,
         )
         logger.info(f"{exp_name}: throttled submit with max_jobs={max_jobs} ({len(specs)} specs)")
         run_specs_throttled(
@@ -287,6 +294,7 @@ def run_experiment(
             poll_interval=300,
             max_retries=3,
             debug=debug,
+            num_gpus=num_gpus,
         )
 
 
@@ -301,7 +309,24 @@ if __name__ == "__main__":
     parser.add_argument("--plan", action="store_true", help="Print existing vs missing outputs under results_dir, then exit")
     parser.add_argument("--debug", action="store_true", help="Enable Inspect HTTP debug logging")
     parser.add_argument("--max_jobs", type=int, default=None, help="Maximum number of jobs to submit (default: no limit)")
-    parser.add_argument("--max_connections", type=int, default=16, help="Inspect max concurrent connections per job (default: 16)")
+    parser.add_argument(
+        "--max_connections",
+        type=int,
+        default=None,
+        help=(
+            "Inspect max concurrent connections per job. "
+            "Default (when omitted): auto by GPU (H200=96, H100=64, other=48)."
+        ),
+    )
+    parser.add_argument(
+        "--num_gpus",
+        type=int,
+        default=None,
+        help=(
+            "Requested GPUs per job. vLLM data_parallel_size is inferred as num_gpus / model.tp. "
+            "Must be divisible by model.tp for every selected model."
+        ),
+    )
     parser.add_argument(
         "--checkpoint_chunk_instances",
         type=int,
@@ -345,6 +370,7 @@ if __name__ == "__main__":
                     args.debug,
                     args.max_jobs,
                     max_connections=args.max_connections,
+                    num_gpus=args.num_gpus,
                     cluster=args.cluster,
                     low_prio=args.low_prio,
                     sc_loprio=args.sc_loprio,
@@ -405,6 +431,7 @@ python suze_experiments/20260213/aime_experiments.py \
   --checkpoint_chunk_instances 128 \
   --cluster miso
 
+
 SC-LOPRIO (pre-emptible, any cluster, GPU constraint routing)
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
@@ -415,14 +442,30 @@ python suze_experiments/20260213/aime_experiments.py \
   --checkpoint_chunk_instances 128 \
   --sc_loprio
 
-NO CHECKPOINT BENCHMARK (higher risk on pre-emptible queues)
+
+
+sacctmgr show assoc user=suzeva format=user,account,partition,qos
+"""
+
+"""
+
+MISO NON-PREEMPTIBLE, DP=8
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
   --max_jobs 1 \
-  --max_connections 12 \
-  --disable_checkpoint
+  --max_connections 96 \
+  --cluster miso \
+  --num_gpus 8
 
-sacctmgr show assoc user=suzeva format=user,account,partition,qos
+
+USE THIS FOR NON-PREEMPTIBLE
+python suze_experiments/20260213/aime_experiments.py \
+  --experiment all \
+  --epochs 10 \
+  --results_dir christine_experiments/20251113/results \
+  --max_jobs 1 \
+  --cluster sphinx
+
 """

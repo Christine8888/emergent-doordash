@@ -21,6 +21,34 @@ _SMOKE_DEFAULT_PROMPT = "Reply with exactly: OK"
 _SMOKE_DEFAULT_MAX_TOKENS = 8
 
 
+def _resolve_max_connections(max_connections: int | None) -> int:
+    """Resolve max_connections, deriving a GPU-aware default when unset."""
+    if max_connections is not None:
+        return max_connections
+
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        gpu_names = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    except Exception as exc:
+        logger.warning(
+            "Failed to detect GPU model for dynamic max_connections (%s); using fallback=48",
+            exc,
+        )
+        return 48
+
+    joined_names = " ".join(gpu_names).upper()
+    if "H200" in joined_names:
+        return 96
+    if "H100" in joined_names:
+        return 64
+    return 48
+
+
 def _parse_prometheus_value(text: str, metric_names: list[str], *, is_counter: bool = True) -> float | None:
     """Sum all matching lines for counters, or return last gauge value."""
     for metric_name in metric_names:
@@ -220,6 +248,17 @@ def _configure_executor(executor: submitit.AutoExecutor, config: SubmitConfig, n
     executor.update_parameters(**params)
 
 
+def _format_experiment_spec(spec: dict) -> str:
+    """Return a compact human-readable experiment spec label for logs."""
+    kwargs = spec.get("kwargs", {})
+    model_name = os.path.basename(kwargs.get("model_path", "unknown"))
+    hint_fraction = kwargs.get("hint_fraction")
+    fewshot = kwargs.get("fewshot")
+    return (
+        f"model={model_name}, hint={hint_fraction}, fewshot={fewshot}"
+    )
+
+
 def _run_throttled(
     pending_specs: list[dict],
     executor: submitit.AutoExecutor,
@@ -244,7 +283,9 @@ def _run_throttled(
             job = executor.submit(spec['fn'], **spec['kwargs'])
             active_jobs.append(job)
             job_meta[str(job.job_id)] = spec
-            logger.info(f"submitted {job.job_id}: {spec['name']}")
+            logger.info(
+                f"submitted {job.job_id}: {spec['name']} ({_format_experiment_spec(spec)})"
+            )
 
     _fill_slots()
     logger.info(f"throttled launch: {len(active_jobs)} active, {len(pending)} queued (max_concurrent={max_concurrent})")
@@ -325,6 +366,12 @@ def run_single_experiment(
 
     model_name = os.path.basename(model_path)
     n_gpus = int(os.environ.get('SLURM_GPUS_ON_NODE', tensor_parallel_size))
+    resolved_max_connections = _resolve_max_connections(config.max_connections)
+    logger.info(
+        "Using max_connections=%s for model=%s",
+        resolved_max_connections,
+        model_name,
+    )
 
     with GPUMonitor(), vLLMServer(
         model_path=model_path, tensor_parallel_size=tensor_parallel_size,
@@ -352,7 +399,7 @@ def run_single_experiment(
             poller.start()
         experiment = experiment_class(
             model_name=model_name, vllm_port=server.port,
-            timeout=config.timeout, max_connections=config.max_connections,
+            timeout=config.timeout, max_connections=resolved_max_connections,
         )
         try:
             return experiment.run(hint_fraction=hint_fraction, fewshot=fewshot, epochs=epochs, results_dir=results_dir)
@@ -451,7 +498,7 @@ def launch_experiment(
     fewshots: list[int] = [0], epochs: int = 1, results_dir: str = "./results",
     config: SubmitConfig | None = None, skip_existing: bool = True,
     wait: bool = True, poll_interval: int = 300, max_retries: int = 3,
-    debug: bool = False, submit: bool = True,
+    debug: bool = False, submit: bool = True, num_gpus: int | None = None,
 ):
     """Launch experiment grid with retry logic.
 
@@ -468,9 +515,25 @@ def launch_experiment(
 
     # Collect all job specs
     specs = []
+    if num_gpus is not None and int(num_gpus) < 1:
+        raise ValueError(f"num_gpus must be >= 1, got {num_gpus!r}")
+
     for model in models:
         model_name = os.path.basename(model.path)
-        overrides = dict(gpus_per_job=model.tp, partition=model.partitions, nodelist=model.nodelist)
+        if num_gpus is not None:
+            if int(num_gpus) < int(model.tp):
+                raise ValueError(
+                    f"num_gpus={num_gpus} is smaller than tp={model.tp} for model {model_name}; "
+                    "increase num_gpus or filter models."
+                )
+            if int(num_gpus) % int(model.tp) != 0:
+                raise ValueError(
+                    f"num_gpus={num_gpus} must be divisible by tp={model.tp} for model {model_name}."
+                )
+            gpus_per_job = int(num_gpus)
+        else:
+            gpus_per_job = int(model.tp)
+        overrides = dict(gpus_per_job=gpus_per_job, partition=model.partitions, nodelist=model.nodelist)
         if model.account:
             overrides["account"] = model.account
         if model.constraint:
@@ -516,7 +579,9 @@ def launch_experiment(
         job = executor.submit(spec['fn'], **spec['kwargs'])
         jobs.append(job)
         job_meta[str(job.job_id)] = spec
-        logger.info(f"submitted {job.job_id}: {spec['name']}")
+        logger.info(
+            f"submitted {job.job_id}: {spec['name']} ({_format_experiment_spec(spec)})"
+        )
 
     if not wait:
         return jobs
