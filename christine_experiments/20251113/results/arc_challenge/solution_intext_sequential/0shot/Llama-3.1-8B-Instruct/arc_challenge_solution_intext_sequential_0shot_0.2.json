@@ -1,0 +1,45 @@
+{
+  "model": "vllm/Llama-3.1-8B-Instruct",
+  "total_samples": 5860,
+  "completed_samples": 5860,
+  "metadata": {
+    "timeout": 1200,
+    "hint_fraction": 0.2,
+    "fewshot": 0,
+    "data_path": "/sphinx/u/cye/emergent-doordash/suze_experiments/data/solution/arc_challenge.jsonl",
+    "solver_name": "solution_intext_sequential"
+  },
+  "arc_challenge_scorer": {
+    "accuracy": 0.28225255972696245,
+    "stderr": 0.005879710764846272,
+    "scorer": "arc_challenge_scorer"
+  },
+  "manual_bootstrap": {
+    "accuracy": 0.28226621160409554,
+    "stderr": 0.009995548753638804,
+    "scorer": "manual_bootstrap",
+    "epochs": 5
+  },
+  "pass_at_k": {
+    "1": {
+      "accuracy": 0.28229863481228673,
+      "stderr": 0.010188538078104943
+    },
+    "2": {
+      "accuracy": 0.4308003412969283,
+      "stderr": 0.009589077034516358
+    },
+    "3": {
+      "accuracy": 0.5266305460750853,
+      "stderr": 0.007794567267709172
+    },
+    "4": {
+      "accuracy": 0.5954795221843003,
+      "stderr": 0.006204567658827047
+    },
+    "5": {
+      "accuracy": 0.6476109215017065,
+      "stderr": 0.0
+    }
+  }
+}
