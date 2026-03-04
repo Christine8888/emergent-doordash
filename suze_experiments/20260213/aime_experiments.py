@@ -315,7 +315,7 @@ if __name__ == "__main__":
         default=None,
         help=(
             "Inspect max concurrent connections per job. "
-            "Default (when omitted): auto by GPU (H200=96, H100=64, other=48)."
+            "Default (when omitted): auto by GPU (H200/H100=96, other=64)."
         ),
     )
     parser.add_argument(
@@ -337,9 +337,14 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--enable_checkpoint",
+        action="store_true",
+        help="Enable resumable checkpointing/chunking (default: disabled).",
+    )
+    parser.add_argument(
         "--disable_checkpoint",
         action="store_true",
-        help="Disable resumable checkpointing (single eval call per run).",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument("--cluster", choices=["sphinx", "miso", "jag"], default=None, help="Restrict job scheduling to a specific cluster (default: all clusters)")
     parser.add_argument("--low_prio", action="store_true", help="Submit jobs at low priority QOS (default: standard)")
@@ -354,11 +359,14 @@ if __name__ == "__main__":
             args.results_dir,
         )
     else:
-        os.environ["EXPERIMENT_CHECKPOINT_CHUNK_INSTANCES"] = str(max(args.checkpoint_chunk_instances, 128))
-        if args.disable_checkpoint:
-            os.environ["EXPERIMENT_DISABLE_CHECKPOINT"] = "1"
-        else:
+        if args.enable_checkpoint and args.disable_checkpoint:
+            raise ValueError("Cannot pass both --enable_checkpoint and --disable_checkpoint")
+        # Default behavior: no checkpoint chunking unless explicitly enabled.
+        if args.enable_checkpoint:
+            os.environ["EXPERIMENT_CHECKPOINT_CHUNK_INSTANCES"] = str(max(args.checkpoint_chunk_instances, 128))
             os.environ.pop("EXPERIMENT_DISABLE_CHECKPOINT", None)
+        else:
+            os.environ["EXPERIMENT_DISABLE_CHECKPOINT"] = "1"
 
         with ThreadPoolExecutor(max_workers=len(experiments_to_run)) as executor:
             futures = [
@@ -457,7 +465,8 @@ python suze_experiments/20260213/aime_experiments.py \
   --max_jobs 1 \
   --max_connections 96 \
   --cluster miso \
-  --num_gpus 8
+  --num_gpus 8 \
+  --disable_checkpoint
 
 
 USE THIS FOR NON-PREEMPTIBLE
@@ -466,6 +475,7 @@ python suze_experiments/20260213/aime_experiments.py \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
   --max_jobs 1 \
-  --cluster sphinx
+  --cluster sphinx \
+  --disable_checkpoint
 
 """

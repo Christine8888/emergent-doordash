@@ -36,17 +36,17 @@ def _resolve_max_connections(max_connections: int | None) -> int:
         gpu_names = [line.strip() for line in result.stdout.splitlines() if line.strip()]
     except Exception as exc:
         logger.warning(
-            "Failed to detect GPU model for dynamic max_connections (%s); using fallback=48",
+            "Failed to detect GPU model for dynamic max_connections (%s); using fallback=64",
             exc,
         )
-        return 48
+        return 64
 
     joined_names = " ".join(gpu_names).upper()
     if "H200" in joined_names:
         return 96
     if "H100" in joined_names:
-        return 64
-    return 48
+        return 96
+    return 64
 
 
 def _parse_prometheus_value(text: str, metric_names: list[str], *, is_counter: bool = True) -> float | None:
