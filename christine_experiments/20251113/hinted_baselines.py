@@ -11,7 +11,7 @@ sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 import getpass
 _HF_TOKEN_PATHS = {
     "cye": "/sphinx/u/cye/emergent-doordash/hf.tok",
-    "suzeva": "/afs/cs.stanford.edu/u/suzeva/hf.tok",
+    "suzeva": "/nlp/scr/suzeva/hf.tok",
 }
 _token_path = _HF_TOKEN_PATHS.get(getpass.getuser(), _HF_TOKEN_PATHS["cye"])
 with open(_token_path, 'r') as f:

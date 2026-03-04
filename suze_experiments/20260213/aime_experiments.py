@@ -20,14 +20,13 @@ from utils.setup import setup_logging
 
 logger = setup_logging()
 
-HF_TOKEN_PATH = "/afs/cs.stanford.edu/u/suzeva/hf.tok"
+HF_TOKEN_PATH = "/nlp/scr/suzeva/hf.tok"
 with open(HF_TOKEN_PATH, "r") as f:
     os.environ["HF_TOKEN"] = f.read().strip()
 
 BASE_DIR = str(REPO_ROOT / "christine_experiments" / "data")
 MODELS = QWEN3_MODELS + QWEN25_MODELS + GEMMA_MODELS + LLAMA_MODELS
 
-FEWSHOTS = [0]
 
 
 def make_experiment(hint_type: str, solver_type: str, mode: str = "sequential", *, max_tokens: int = 8192):
@@ -175,7 +174,7 @@ def plan_runs(
             inprog_total = 0
             inprog_count = 0
 
-            for fewshot in FEWSHOTS:
+            for fewshot in [0]:
                 for hint_fraction in HINT_FRACTIONS:
                     total_jobs += 1
                     out = _output_path(

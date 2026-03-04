@@ -54,6 +54,10 @@ class vLLMServer:
         gpu_memory_utilization: float = 0.9,
         n_gpus: Optional[int] = None,
         verbose: bool = True,
+        enable_prefix_caching: bool = True,
+        enable_chunked_prefill: bool = True,
+        dtype: str = "auto",
+        max_num_batched_tokens: Optional[int] = None,
         **vllm_kwargs
     ):
         """Initialize vLLM server configuration.
@@ -67,6 +71,12 @@ class vLLMServer:
             gpu_memory_utilization: GPU memory utilization
             n_gpus: Total GPUs available (for data parallelism calculation)
             verbose: Whether to log stderr
+            enable_prefix_caching: Enable vLLM prefix caching
+            enable_chunked_prefill: Enable vLLM chunked prefill
+            dtype: Model dtype (e.g. "auto", "float16", "bfloat16")
+            max_num_batched_tokens: Max tokens per batch during prefill.
+                    When chunked prefill is enabled vLLM defaults to 2048;
+                    None means use vLLM's default.
             **vllm_kwargs: Additional vLLM arguments
         """
         self.model_path = model_path
@@ -76,6 +86,10 @@ class vLLMServer:
         self.max_model_len = max_model_len
         self.gpu_memory_utilization = gpu_memory_utilization
         self.verbose = verbose
+        self.enable_prefix_caching = enable_prefix_caching
+        self.enable_chunked_prefill = enable_chunked_prefill
+        self.dtype = dtype
+        self.max_num_batched_tokens = max_num_batched_tokens
         self.vllm_kwargs = vllm_kwargs
 
         # Calculate data parallelism
@@ -126,13 +140,19 @@ class vLLMServer:
             "--data-parallel-size", str(self.data_parallel_size),
             "--max-model-len", str(self.max_model_len),
             "--gpu-memory-utilization", str(self.gpu_memory_utilization),
-            "--enable-prefix-caching",
-            "--enable-chunked-prefill",
-            "--dtype", "auto",
+            "--dtype", self.dtype,
         ]
+        if self.enable_prefix_caching:
+            cmd.append("--enable-prefix-caching")
+        if self.enable_chunked_prefill:
+            cmd.append("--enable-chunked-prefill")
+        if self.max_num_batched_tokens is not None:
+            cmd.extend(["--max-num-batched-tokens", str(self.max_num_batched_tokens)])
 
         # Add any extra vLLM arguments
         for key, value in self.vllm_kwargs.items():
+            if value is None:
+                continue
             cmd.extend([f"--{key.replace('_', '-')}", str(value)])
 
         logger.info(f"Starting vLLM server on port {self.port}")

@@ -1,0 +1,223 @@
+2026-03-02 15:56:30,263 INFO === Debug Inference Config ===
+2026-03-02 15:56:30,264 INFO   display: plain
+2026-03-02 15:56:30,264 INFO   dtype: auto
+2026-03-02 15:56:30,264 INFO   enable_chunked_prefill: True
+2026-03-02 15:56:30,264 INFO   enable_prefix_caching: True
+2026-03-02 15:56:30,264 INFO   epochs: 1
+2026-03-02 15:56:30,265 INFO   fail_on_error: False
+2026-03-02 15:56:30,265 INFO   gpu_memory_utilization: 0.92
+2026-03-02 15:56:30,265 INFO   hint_fraction: 0.3
+2026-03-02 15:56:30,265 INFO   hint_prefix: Here is part of a hint that may be helpful to your solution:
+
+2026-03-02 15:56:30,265 INFO   hint_type: solution
+2026-03-02 15:56:30,265 INFO   log_dir: suze_experiments/20260301/logs
+2026-03-02 15:56:30,266 INFO   mask_token: [MASK]
+2026-03-02 15:56:30,266 INFO   max_connections: 32
+2026-03-02 15:56:30,266 INFO   max_model_len: 20480
+2026-03-02 15:56:30,266 INFO   max_num_batched_tokens: 8192
+2026-03-02 15:56:30,266 INFO   max_retries: 3
+2026-03-02 15:56:30,266 INFO   max_tokens: 16384
+2026-03-02 15:56:30,267 INFO   mode: masked
+2026-03-02 15:56:30,267 INFO   model_path: Qwen/Qwen3-4B
+2026-03-02 15:56:30,267 INFO   num_samples: 30
+2026-03-02 15:56:30,267 INFO   presence_penalty: 1.0
+2026-03-02 15:56:30,267 INFO   retry_on_error: 3
+2026-03-02 15:56:30,267 INFO   seed: 42
+2026-03-02 15:56:30,267 INFO   shuffle: True
+2026-03-02 15:56:30,267 INFO   solver_type: intext
+2026-03-02 15:56:30,267 INFO   stop_string: ANSWER:
+2026-03-02 15:56:30,267 INFO   temperature: 0.6
+2026-03-02 15:56:30,267 INFO   tensor_parallel_size: 1
+2026-03-02 15:56:30,267 INFO   timeout: 1200
+2026-03-02 15:56:30,267 INFO   top_k: 20
+2026-03-02 15:56:30,267 INFO   top_p: 0.95
+2026-03-02 15:56:30,751 INFO Subsampled 30 AIME problems
+2026-03-02 15:56:31,263 INFO Loaded hints for 932 questions from /juice5b/scr5b/suzeva/projects/emergent-doordash/christine_experiments/data/solution/aime.jsonl (mode=masked, fraction=0.3)
+2026-03-02 15:56:35,582 INFO CUDA_VISIBLE_DEVICES: not set (will use all)
+2026-03-02 15:56:35,582 INFO Starting vLLM server on port 44483
+2026-03-02 15:56:35,582 INFO Model: Qwen/Qwen3-4B
+2026-03-02 15:56:35,582 INFO Served as: Qwen3-4B
+2026-03-02 15:56:35,582 INFO TP: 1, DP: 1
+2026-03-02 15:56:35,582 INFO Command: vllm serve Qwen/Qwen3-4B --port 44483 --served-model-name Qwen3-4B --tensor-parallel-size 1 --data-parallel-size 1 --max-model-len 20480 --gpu-memory-utilization 0.92 --dtype auto --enable-prefix-caching --enable-chunked-prefill --max-num-batched-tokens 8192
+2026-03-02 15:56:35,584 INFO Waiting for health check at http://localhost:44483/health
+2026-03-02 15:56:40,451 INFO [vLLM stderr] /sphinx/u/suzeva/miniconda3/envs/emergent_doordash/lib/python3.10/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+2026-03-02 15:56:40,451 INFO [vLLM stderr]   warnings.warn(
+2026-03-02 15:56:43,037 INFO [vLLM stdout] INFO 03-02 15:56:43 [__init__.py:216] Automatically detected platform cuda.
+2026-03-02 15:56:52,027 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:56:52 [api_server.py:1839] vLLM API server version 0.11.0
+2026-03-02 15:56:52,035 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:56:52 [utils.py:233] non-default args: {'model_tag': 'Qwen/Qwen3-4B', 'port': 44483, 'model': 'Qwen/Qwen3-4B', 'max_model_len': 20480, 'served_model_name': ['Qwen3-4B'], 'gpu_memory_utilization': 0.92, 'enable_prefix_caching': True, 'max_num_batched_tokens': 8192, 'enable_chunked_prefill': True}
+2026-03-02 15:56:52,621 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:56:52 [model.py:547] Resolved architecture: Qwen3ForCausalLM
+2026-03-02 15:56:52,621 INFO [vLLM stderr] [1;36m(APIServer pid=1445282)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
+2026-03-02 15:56:52,621 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:56:52 [model.py:1510] Using max model len 20480
+2026-03-02 15:56:53,025 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:56:53 [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=8192.
+2026-03-02 15:56:58,128 INFO [vLLM stderr] /sphinx/u/suzeva/miniconda3/envs/emergent_doordash/lib/python3.10/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+2026-03-02 15:56:58,128 INFO [vLLM stderr]   warnings.warn(
+2026-03-02 15:56:59,924 INFO [vLLM stdout] INFO 03-02 15:56:59 [__init__.py:216] Automatically detected platform cuda.
+2026-03-02 15:57:07,579 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:07 [core.py:644] Waiting for init message from front-end.
+2026-03-02 15:57:07,623 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:07 [core.py:77] Initializing a V1 LLM engine (v0.11.0) with config: model='Qwen/Qwen3-4B', speculative_config=None, tokenizer='Qwen/Qwen3-4B', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=20480, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_fallback=False, disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser=''), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None), seed=0, served_model_name=Qwen3-4B, enable_prefix_caching=True, chunked_prefill_enabled=True, pooler_config=None, compilation_config={"level":3,"debug_dump_path":"","cache_dir":"","backend":"","custom_ops":[],"splitting_ops":["vllm.unified_attention","vllm.unified_attention_with_output","vllm.mamba_mixer2","vllm.mamba_mixer","vllm.short_conv","vllm.linear_attention","vllm.plamo2_mamba_mixer","vllm.gdn_attention","vllm.sparse_attn_indexer"],"use_inductor":true,"compile_sizes":[],"inductor_compile_config":{"enable_auto_functionalized_v2":false},"inductor_passes":{},"cudagraph_mode":[2,1],"use_cudagraph":true,"cudagraph_num_of_warmups":1,"cudagraph_capture_sizes":[512,504,496,488,480,472,464,456,448,440,432,424,416,408,400,392,384,376,368,360,352,344,336,328,320,312,304,296,288,280,272,264,256,248,240,232,224,216,208,200,192,184,176,168,160,152,144,136,128,120,112,104,96,88,80,72,64,56,48,40,32,24,16,8,4,2,1],"cudagraph_copy_inputs":false,"full_cuda_graph":false,"use_inductor_graph_partition":false,"pass_config":{},"max_capture_size":512,"local_cache_dir":null}
+2026-03-02 15:57:09,493 INFO [vLLM stdout] [Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+2026-03-02 15:57:09,497 INFO [vLLM stdout] [Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+2026-03-02 15:57:09,498 INFO [vLLM stdout] [Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+2026-03-02 15:57:09,499 INFO [vLLM stdout] [Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+2026-03-02 15:57:09,500 INFO [vLLM stdout] [Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+2026-03-02 15:57:09,501 INFO [vLLM stdout] [Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+2026-03-02 15:57:09,502 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:09 [parallel_state.py:1208] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0, EP rank 0
+2026-03-02 15:57:09,737 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m WARNING 03-02 15:57:09 [topk_topp_sampler.py:66] FlashInfer is not available. Falling back to the PyTorch-native implementation of top-p & top-k sampling. For the best performance, please install FlashInfer.
+2026-03-02 15:57:09,879 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:09 [gpu_model_runner.py:2602] Starting to load model Qwen/Qwen3-4B...
+2026-03-02 15:57:10,117 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:10 [gpu_model_runner.py:2634] Loading model from scratch...
+2026-03-02 15:57:10,216 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:10 [cuda.py:366] Using Flash Attention backend on V1 engine.
+2026-03-02 15:57:10,592 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:10 [weight_utils.py:392] Using model weights format ['*.safetensors']
+2026-03-02 15:57:10,790 INFO [vLLM stderr] [1;36m(EngineCore_DP0 pid=1445487)[0;0m
+2026-03-02 15:57:10,790 INFO [vLLM stderr] Loading safetensors checkpoint shards:   0% Completed | 0/3 [00:00<?, ?it/s]
+2026-03-02 15:57:11,415 INFO [vLLM stderr] [1;36m(EngineCore_DP0 pid=1445487)[0;0m
+2026-03-02 15:57:11,415 INFO [vLLM stderr] Loading safetensors checkpoint shards:  33% Completed | 1/3 [00:00<00:01,  1.60it/s]
+2026-03-02 15:57:12,224 INFO [vLLM stderr] [1;36m(EngineCore_DP0 pid=1445487)[0;0m
+2026-03-02 15:57:12,224 INFO [vLLM stderr] Loading safetensors checkpoint shards:  67% Completed | 2/3 [00:01<00:00,  1.36it/s]
+2026-03-02 15:57:12,440 INFO [vLLM stderr] [1;36m(EngineCore_DP0 pid=1445487)[0;0m
+2026-03-02 15:57:12,440 INFO [vLLM stderr] Loading safetensors checkpoint shards: 100% Completed | 3/3 [00:01<00:00,  2.01it/s]
+2026-03-02 15:57:12,441 INFO [vLLM stderr] [1;36m(EngineCore_DP0 pid=1445487)[0;0m
+2026-03-02 15:57:12,441 INFO [vLLM stderr] Loading safetensors checkpoint shards: 100% Completed | 3/3 [00:01<00:00,  1.82it/s]
+2026-03-02 15:57:12,441 INFO [vLLM stderr] [1;36m(EngineCore_DP0 pid=1445487)[0;0m
+2026-03-02 15:57:12,448 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:12 [default_loader.py:267] Loading weights took 1.66 seconds
+2026-03-02 15:57:12,940 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:12 [gpu_model_runner.py:2653] Model loading took 7.5552 GiB and 2.335708 seconds
+2026-03-02 15:57:21,316 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:21 [backends.py:548] Using cache directory: /nlp/scr/suzeva/xdg_cache/vllm/torch_compile_cache/84ecbf9dd3/rank_0_0/backbone for vLLM's torch.compile
+2026-03-02 15:57:21,319 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:21 [backends.py:559] Dynamo bytecode transform time: 8.15 s
+2026-03-02 15:57:25,317 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:25 [backends.py:164] Directly load the compiled graph(s) for dynamic shape from the cache, took 3.547 s
+2026-03-02 15:57:28,464 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:28 [monitor.py:34] torch.compile takes 8.15 s in total
+2026-03-02 15:57:29,819 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:29 [gpu_worker.py:298] Available KV cache memory: 27.31 GiB
+2026-03-02 15:57:30,137 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:30 [kv_cache_utils.py:1087] GPU KV cache size: 198,896 tokens
+2026-03-02 15:57:30,137 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:30 [kv_cache_utils.py:1091] Maximum concurrency for 20,480 tokens per request: 9.71x
+2026-03-02 15:57:30,475 INFO [vLLM stderr] [1;36m(EngineCore_DP0 pid=1445487)[0;0m
+2026-03-02 15:57:30,623 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|                                                                                                                             | 0/67 [00:00<?, ?it/s]
+2026-03-02 15:57:30,769 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   4%|█████▏                                                                                                               | 3/67 [00:00<00:03, 20.37it/s]
+2026-03-02 15:57:30,905 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   9%|██████████▍                                                                                                          | 6/67 [00:00<00:02, 20.47it/s]
+2026-03-02 15:57:31,037 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  13%|███████████████▋                                                                                                     | 9/67 [00:00<00:02, 21.17it/s]
+2026-03-02 15:57:31,168 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  18%|████████████████████▊                                                                                               | 12/67 [00:00<00:02, 21.77it/s]
+2026-03-02 15:57:31,302 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  22%|█████████████████████████▉                                                                                          | 15/67 [00:00<00:02, 22.11it/s]
+2026-03-02 15:57:31,433 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  27%|███████████████████████████████▏                                                                                    | 18/67 [00:00<00:02, 22.22it/s]
+2026-03-02 15:57:31,565 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  31%|████████████████████████████████████▎                                                                               | 21/67 [00:00<00:02, 22.44it/s]
+2026-03-02 15:57:31,695 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  36%|█████████████████████████████████████████▌                                                                          | 24/67 [00:01<00:01, 22.55it/s]
+2026-03-02 15:57:31,840 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  40%|██████████████████████████████████████████████▋                                                                     | 27/67 [00:01<00:01, 22.72it/s]
+2026-03-02 15:57:31,970 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  45%|███████████████████████████████████████████████████▉                                                                | 30/67 [00:01<00:01, 22.03it/s]
+2026-03-02 15:57:32,088 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  49%|█████████████████████████████████████████████████████████▏                                                          | 33/67 [00:01<00:01, 22.36it/s]
+2026-03-02 15:57:32,209 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  54%|██████████████████████████████████████████████████████████████▎                                                     | 36/67 [00:01<00:01, 23.18it/s]
+2026-03-02 15:57:32,332 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  58%|███████████████████████████████████████████████████████████████████▌                                                | 39/67 [00:01<00:01, 23.67it/s]
+2026-03-02 15:57:32,455 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  63%|████████████████████████████████████████████████████████████████████████▋                                           | 42/67 [00:01<00:01, 23.90it/s]
+2026-03-02 15:57:32,577 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  67%|█████████████████████████████████████████████████████████████████████████████▉                                      | 45/67 [00:01<00:00, 24.00it/s]
+2026-03-02 15:57:32,705 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  72%|███████████████████████████████████████████████████████████████████████████████████                                 | 48/67 [00:02<00:00, 24.17it/s]
+2026-03-02 15:57:32,836 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  76%|████████████████████████████████████████████████████████████████████████████████████████▎                           | 51/67 [00:02<00:00, 23.96it/s]
+2026-03-02 15:57:32,962 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  81%|█████████████████████████████████████████████████████████████████████████████████████████████▍                      | 54/67 [00:02<00:00, 23.64it/s]
+2026-03-02 15:57:33,087 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  85%|██████████████████████████████████████████████████████████████████████████████████████████████████▋                 | 57/67 [00:02<00:00, 23.71it/s]
+2026-03-02 15:57:33,212 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  90%|███████████████████████████████████████████████████████████████████████████████████████████████████████▉            | 60/67 [00:02<00:00, 23.81it/s]
+2026-03-02 15:57:33,363 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  94%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████       | 63/67 [00:02<00:00, 23.84it/s]
+2026-03-02 15:57:33,424 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  99%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████▎ | 66/67 [00:02<00:00, 22.49it/s]
+2026-03-02 15:57:33,424 INFO [vLLM stderr] Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 67/67 [00:02<00:00, 22.72it/s]
+2026-03-02 15:57:33,424 INFO [vLLM stderr] [1;36m(EngineCore_DP0 pid=1445487)[0;0m
+2026-03-02 15:57:33,565 INFO [vLLM stderr] Capturing CUDA graphs (decode, FULL):   0%|                                                                                                                                                | 0/35 [00:00<?, ?it/s]
+2026-03-02 15:57:33,699 INFO [vLLM stderr] Capturing CUDA graphs (decode, FULL):   9%|███████████▋                                                                                                                            | 3/35 [00:00<00:01, 21.28it/s]
+2026-03-02 15:57:33,841 INFO [vLLM stderr] Capturing CUDA graphs (decode, FULL):  17%|███████████████████████▎                                                                                                                | 6/35 [00:00<00:01, 21.93it/s]
+2026-03-02 15:57:33,981 INFO [vLLM stderr] Capturing CUDA graphs (decode, FULL):  26%|██████████████████████████████████▉                                                                                                     | 9/35 [00:00<00:01, 21.54it/s]
+2026-03-02 15:57:34,114 INFO [vLLM stderr] Capturing CUDA graphs (decode, FULL):  34%|██████████████████████████████████████████████▎                                                                                        | 12/35 [00:00<00:01, 21.51it/s]
+2026-03-02 15:57:34,248 INFO [vLLM stderr] Capturing CUDA graphs (decode, FULL):  43%|█████████████████████████████████████████████████████████▊                                                                             | 15/35 [00:00<00:00, 21.88it/s]
+2026-03-02 15:57:34,383 INFO [vLLM stderr] Capturing CUDA graphs (decode, FULL):  51%|█████████████████████████████████████████████████████████████████████▍                                                                 | 18/35 [00:00<00:00, 22.03it/s]
+2026-03-02 15:57:34,522 INFO [vLLM stderr] Capturing CUDA graphs (decode, FULL):  60%|█████████████████████████████████████████████████████████████████████████████████                                                      | 21/35 [00:00<00:00, 22.11it/s]
+2026-03-02 15:57:34,655 INFO [vLLM stderr] Capturing CUDA graphs (decode, FULL):  69%|████████████████████████████████████████████████████████████████████████████████████████████▌                                          | 24/35 [00:01<00:00, 21.93it/s]
+2026-03-02 15:57:34,786 INFO [vLLM stderr] Capturing CUDA graphs (decode, FULL):  77%|████████████████████████████████████████████████████████████████████████████████████████████████████████▏                              | 27/35 [00:01<00:00, 22.13it/s]
+2026-03-02 15:57:34,922 INFO [vLLM stderr] Capturing CUDA graphs (decode, FULL):  86%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████▋                   | 30/35 [00:01<00:00, 22.35it/s]
+2026-03-02 15:57:35,016 INFO [vLLM stderr] Capturing CUDA graphs (decode, FULL):  94%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▎       | 33/35 [00:01<00:00, 22.26it/s]
+2026-03-02 15:57:35,016 INFO [vLLM stderr] Capturing CUDA graphs (decode, FULL): 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 35/35 [00:01<00:00, 21.99it/s]
+2026-03-02 15:57:35,340 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:35 [gpu_model_runner.py:3480] Graph capturing finished in 5 secs, took 0.75 GiB
+2026-03-02 15:57:35,359 INFO [vLLM stdout] [1;36m(EngineCore_DP0 pid=1445487)[0;0m INFO 03-02 15:57:35 [core.py:210] init engine (profile, create kv cache, warmup model) took 22.42 seconds
+2026-03-02 15:57:36,374 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [loggers.py:147] Engine 000: vllm cache_config_info with initialization after num_gpu_blocks is: 12431
+2026-03-02 15:57:36,626 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [api_server.py:1634] Supported_tasks: ['generate']
+2026-03-02 15:57:36,734 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m WARNING 03-02 15:57:36 [model.py:1389] Default sampling parameters have been overridden by the model's Hugging Face generation config recommended from the model creator. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+2026-03-02 15:57:36,734 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [serving_responses.py:137] Using default chat sampling params from model: {'temperature': 0.6, 'top_k': 20, 'top_p': 0.95}
+2026-03-02 15:57:36,841 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [serving_chat.py:139] Using default chat sampling params from model: {'temperature': 0.6, 'top_k': 20, 'top_p': 0.95}
+2026-03-02 15:57:36,943 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [serving_completion.py:76] Using default completion sampling params from model: {'temperature': 0.6, 'top_k': 20, 'top_p': 0.95}
+2026-03-02 15:57:36,943 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [api_server.py:1912] Starting vLLM API server 0 on http://0.0.0.0:44483
+2026-03-02 15:57:36,944 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:34] Available routes are:
+2026-03-02 15:57:36,944 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /openapi.json, Methods: HEAD, GET
+2026-03-02 15:57:36,944 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /docs, Methods: HEAD, GET
+2026-03-02 15:57:36,944 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /docs/oauth2-redirect, Methods: HEAD, GET
+2026-03-02 15:57:36,944 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /redoc, Methods: HEAD, GET
+2026-03-02 15:57:36,944 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /health, Methods: GET
+2026-03-02 15:57:36,945 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /load, Methods: GET
+2026-03-02 15:57:36,945 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /ping, Methods: POST
+2026-03-02 15:57:36,945 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /ping, Methods: GET
+2026-03-02 15:57:36,945 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /tokenize, Methods: POST
+2026-03-02 15:57:36,945 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /detokenize, Methods: POST
+2026-03-02 15:57:36,945 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /v1/models, Methods: GET
+2026-03-02 15:57:36,945 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /version, Methods: GET
+2026-03-02 15:57:36,946 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /v1/responses, Methods: POST
+2026-03-02 15:57:36,946 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /v1/responses/{response_id}, Methods: GET
+2026-03-02 15:57:36,946 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /v1/responses/{response_id}/cancel, Methods: POST
+2026-03-02 15:57:36,946 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /v1/chat/completions, Methods: POST
+2026-03-02 15:57:36,946 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /v1/completions, Methods: POST
+2026-03-02 15:57:36,947 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /v1/embeddings, Methods: POST
+2026-03-02 15:57:36,947 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /pooling, Methods: POST
+2026-03-02 15:57:36,947 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /classify, Methods: POST
+2026-03-02 15:57:36,947 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /score, Methods: POST
+2026-03-02 15:57:36,947 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /v1/score, Methods: POST
+2026-03-02 15:57:36,947 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /v1/audio/transcriptions, Methods: POST
+2026-03-02 15:57:36,948 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /v1/audio/translations, Methods: POST
+2026-03-02 15:57:36,948 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /rerank, Methods: POST
+2026-03-02 15:57:36,948 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /v1/rerank, Methods: POST
+2026-03-02 15:57:36,948 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /v2/rerank, Methods: POST
+2026-03-02 15:57:36,949 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /scale_elastic_ep, Methods: POST
+2026-03-02 15:57:36,949 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /is_scaling_elastic_ep, Methods: POST
+2026-03-02 15:57:36,949 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /invocations, Methods: POST
+2026-03-02 15:57:36,949 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO 03-02 15:57:36 [launcher.py:42] Route: /metrics, Methods: GET
+2026-03-02 15:57:37,020 INFO [vLLM stderr] [1;36m(APIServer pid=1445282)[0;0m INFO:     Started server process [1445282]
+2026-03-02 15:57:37,020 INFO [vLLM stderr] [1;36m(APIServer pid=1445282)[0;0m INFO:     Waiting for application startup.
+2026-03-02 15:57:37,282 INFO [vLLM stderr] [1;36m(APIServer pid=1445282)[0;0m INFO:     Application startup complete.
+2026-03-02 15:57:37,798 INFO [vLLM stdout] [1;36m(APIServer pid=1445282)[0;0m INFO:     127.0.0.1:40424 - "GET /health HTTP/1.1" 200 OK
+2026-03-02 15:57:37,799 INFO vLLM server ready on port 44483
+2026-03-02 15:57:37,799 INFO vLLM server ready on port 44483
+---------------------------------------------------------                                                         
+task (30 samples): vllm/Qwen3-4B                                                                                  
+max_retries: 3, max_connections: 32, fail_on_error: False, retry_on_error: 3, dataset: di-zhang-fdu/AIME_1983_2024
+---------------------------------------------------------                                                         
+                                                                                                                  
+[03/02 15:58:37] [0m59s] throughput: output_tok/s avg=35.4 window=35.4 total_out=2,120 requests=1 window_requests=1
+Steps:   1/30   3% | Samples:   1/ 30 | accuracy:  n/a | vllm: 29/32 | HTTP retries: 0
+Steps:   4/30  13% | Samples:   4/ 30 | accuracy: 1.00 | vllm: 26/32 | HTTP retries: 0
+Steps:   5/30  16% | Samples:   5/ 30 | accuracy: 1.00 | vllm: 25/32 | HTTP retries: 0
+[03/02 15:59:24] [1m46s] throughput: output_tok/s avg=151.7 window=300.7 total_out=16,177 requests=6 window_requests=5
+Steps:   7/30  23% | Samples:   6/ 30 | accuracy: 0.80 | vllm: 23/32 | HTTP retries: 0
+Steps:  10/30  33% | Samples:  10/ 30 | accuracy: 0.89 | vllm: 20/32 | HTTP retries: 0
+Steps:  11/30  36% | Samples:  11/ 30 | accuracy: 0.90 | vllm: 19/32 | HTTP retries: 0
+Steps:  13/30  43% | Samples:  13/ 30 | accuracy: 0.92 | vllm: 17/32 | HTTP retries: 0
+[03/02 16:00:23] [2m45s] throughput: output_tok/s avg=331.7 window=655.8 total_out=55,026 requests=14 window_requests=8
+Steps:  14/30  46% | Samples:  14/ 30 | accuracy: 0.92 | vllm: 16/32 | HTTP retries: 0
+Steps:  15/30  50% | Samples:  15/ 30 | accuracy: 0.93 | vllm: 15/32 | HTTP retries: 0
+Steps:  16/30  53% | Samples:  16/ 30 | accuracy: 0.93 | vllm: 14/32 | HTTP retries: 0
+[03/02 16:00:59] [3m21s] throughput: output_tok/s avg=418.1 window=816.9 total_out=84,407 requests=18 window_requests=4
+Steps:  18/30  60% | Samples:  18/ 30 | accuracy: 0.88 | vllm: 12/32 | HTTP retries: 0
+Steps:  19/30  63% | Samples:  19/ 30 | accuracy: 0.89 | vllm: 11/32 | HTTP retries: 0
+Steps:  20/30  66% | Samples:  20/ 30 | accuracy: 0.89 | vllm: 10/32 | HTTP retries: 0
+Steps:  21/30  70% | Samples:  21/ 30 | accuracy: 0.90 | vllm:  9/32 | HTTP retries: 0
+[03/02 16:01:39] [4m01s] throughput: output_tok/s avg=496.8 window=899.4 total_out=119,918 requests=22 window_requests=4
+Steps:  22/30  73% | Samples:  22/ 30 | accuracy: 0.90 | vllm:  8/32 | HTTP retries: 0
+Steps:  23/30  76% | Samples:  23/ 30 | accuracy: 0.91 | vllm:  7/32 | HTTP retries: 0
+[03/02 16:02:54] [5m16s] throughput: output_tok/s avg=453.1 window=313.0 total_out=143,540 requests=24 window_requests=2
+Steps:  24/30  80% | Samples:  24/ 30 | accuracy: 0.91 | vllm:  6/32 | HTTP retries: 0
+[03/02 16:04:01] [6m23s] throughput: output_tok/s avg=416.9 window=245.2 total_out=159,924 requests=25 window_requests=1
+[03/02 16:04:01] WARNING: generation hit max_tokens (max_tokens=16384) sample_id='2018-II-13' epoch=1 (count=1)
+[03/02 16:04:08] WARNING: generation hit max_tokens (max_tokens=16384) sample_id='2018-II-12' epoch=1 (count=2)
+[03/02 16:04:08] WARNING: generation hit max_tokens (max_tokens=16384) sample_id='1990-14' epoch=1 (count=3)
+[03/02 16:04:08] WARNING: generation hit max_tokens (max_tokens=16384) sample_id='2013-II-6' epoch=1 (count=4)
+[03/02 16:04:08] WARNING: generation hit max_tokens (max_tokens=16384) sample_id='2000-I-13' epoch=1 (count=5)
+[03/02 16:04:09] WARNING: generation hit max_tokens (max_tokens=16384) sample_id='1993-9' epoch=1 (count=6)
+Steps:  30/30 100% | Samples:  25/ 30 | accuracy: 0.88 | vllm:  0/32 | HTTP retries: 0
+
+---------------------------------------------------------                                                         
+task (30 samples): vllm/Qwen3-4B                                                                                  
+max_retries: 3, max_connections: 32, fail_on_error: False, retry_on_error: 3, dataset: di-zhang-fdu/AIME_1983_2024
+                                                                                                                  
+total time:                   0:06:29                                                                             
+vllm/Qwen3-4B                 281,303 tokens [I: 39,459, O: 241,844]                                              
+aime_scorer                                                                                                       
+accuracy     0.700                                                                                                
+stderr       0.085                                                                                                
+Log: suze_experiments/20260301/logs/2026-03-02T23-57-41+00-00_task_Cbh5UTpAhrpoESKHUdKohW.eval                    
+---------------------------------------------------------                                                         
+                                                                                                                  
