@@ -387,21 +387,16 @@ def generate(
         Solver that generates with appropriate configuration
     """
     async def solve(state: TaskState, gen: Generate) -> TaskState:
-        # Auto-detect if we should continue from last message
-        continue_message = (
-            len(state.messages) > 0 and
-            isinstance(state.messages[-1], ChatMessageAssistant)
-        )
-
         # Get model-specific generation defaults
         model_name = os.environ.get("INSPECT_EVAL_MODEL", "")
         gen_defaults = get_generation_defaults(model_name)
 
         # Generate with model-specific defaults.
+        # Note: continue_final_message is auto-detected by vLLM provider
+        # when the last message is an assistant message.
         state = await gen(
             state,
             max_tokens=max_tokens,
-            continue_final_message=continue_message,
             timeout=timeout,
             temperature=gen_defaults.get("temperature"),
             top_p=gen_defaults.get("top_p"),
