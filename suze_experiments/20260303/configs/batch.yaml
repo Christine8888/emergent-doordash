@@ -1,0 +1,36 @@
+# model
+model_path: "Qwen/Qwen3-4B"
+
+# vllm offline engine
+max_model_len: 12288              # p99 input (~900 tok) + max_tokens (8192) + margin
+gpu_memory_utilization: 0.95
+dtype: "auto"
+max_num_batched_tokens: 8192      # null => use vLLM default
+max_num_seqs: null                # null => use vLLM default
+
+# dataset
+num_samples: 1000
+seed: 42
+shuffle: true
+
+# hints
+hint_fraction: 0.3
+hint_type: "solution"
+solver_type: "intext"         # "intext" or "prefill"
+mode: "masked"                # "masked" or "sequential"
+mask_token: "[MASK]"
+stop_string: "ANSWER:"
+hint_prefix: "Here is part of a hint that may be helpful to your solution:\n"
+
+# generation
+max_tokens: 8192
+temperature: 0.6
+top_p: 0.95
+top_k: 20
+presence_penalty: 1.0
+
+# output
+log_dir: "suze_experiments/20260301/logs"
+
+
+# THIS GETS ~1000-2800 output/decode tokens/s after 5min 

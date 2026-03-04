@@ -1,0 +1,82 @@
+# model
+model_path: "Qwen/Qwen3-4B"
+tensor_parallel_size: 1
+
+# vllm server
+max_model_len: 12288              # p99 input (~900 tok) + max_tokens (8192) + margin; max input is ~3900
+gpu_memory_utilization: 0.92
+enable_prefix_caching: true
+enable_chunked_prefill: true
+max_num_batched_tokens: 8192      # vLLM default with chunked prefill is 2048
+max_num_seqs: null                # null => use vLLM default
+dtype: "auto"
+
+# dataset
+num_samples: 1000
+seed: 42
+shuffle: true
+
+# hints
+hint_fraction: 0.3
+hint_type: "solution"
+solver_type: "intext"         # "intext" or "prefill"
+mode: "masked"                # "masked" or "sequential"
+mask_token: "[MASK]"
+stop_string: "ANSWER:"
+hint_prefix: "Here is part of a hint that may be helpful to your solution:\n"
+
+# generation
+max_tokens: 8192
+timeout: 1200
+temperature: 0.6
+top_p: 0.95
+top_k: 20
+presence_penalty: 1.0
+
+# eval orchestrator
+max_connections: 32
+epochs: 1
+max_retries: 3
+retry_on_error: 3
+fail_on_error: false
+display: "plain"
+
+# output
+log_dir: "suze_experiments/20260301/logs"
+
+
+# metrics-poller] available metrics (90): http_request_duration_highr_seconds_bucket, http_request_duration_highr_seconds_count, http_request_duration_highr_seconds_created, http_request_duration_highr_seconds_sum, process_cpu_seconds_total, process_max_fds, process_open_fds, process_resident_memory_bytes, process_start_time_seconds, process_virtual_memory_bytes, python_gc_collections_total, python_gc_objects_collected_total, python_gc_objects_uncollectable_total, python_info, vllm:cache_config_info, vllm:e2e_request_latency_seconds_bucket, vllm:e2e_request_latency_seconds_count, vllm:e2e_request_latency_seconds_created, vllm:e2e_request_latency_seconds_sum, vllm:generation_tokens_created...
+# [metrics-poller] gen_tok/s=143.1 prompt_tok/s=4063.7 running=32 waiting=0
+# [metrics-poller] gen_tok/s=3239.0 prompt_tok/s=0.0 running=32 waiting=0
+# [metrics-poller] gen_tok/s=2892.8 prompt_tok/s=0.0 running=32 waiting=0
+# Steps:   1/932   0% | Samples:   1/932 | accuracy:  n/a | vllm: 31/32 | HTTP retries: 0
+# [metrics-poller] gen_tok/s=2659.5 prompt_tok/s=93.6 running=32 waiting=0
+# Steps:   3/932   0% | Samples:   3/932 | accuracy: 1.00 | vllm: 31/32 | HTTP retries: 0
+# Steps:   4/932   0% | Samples:   4/932 | accuracy: 1.00 | vllm: 31/32 | HTTP retries: 0
+# [metrics-poller] gen_tok/s=2479.4 prompt_tok/s=267.7 running=31 waiting=0
+# Steps:   6/932   0% | Samples:   6/932 | accuracy: 1.00 | vllm: 31/32 | HTTP retries: 0
+# [metrics-poller] gen_tok/s=2327.5 prompt_tok/s=525.9 running=32 waiting=0
+# Steps:   8/932   0% | Samples:   8/932 | accuracy: 0.86 | vllm: 31/32 | HTTP retries: 0
+# [metrics-poller] gen_tok/s=2279.7 prompt_tok/s=439.7 running=32 waiting=0
+# Steps:  11/932   1% | Samples:  11/932 | accuracy: 0.90 | vllm: 31/32 | HTTP retries: 0
+# [metrics-poller] gen_tok/s=2163.8 prompt_tok/s=0.0 running=31 waiting=0
+# [metrics-poller] gen_tok/s=2022.3 prompt_tok/s=243.2 running=32 waiting=0
+# [metrics-poller] gen_tok/s=1834.2 prompt_tok/s=0.0 running=32 waiting=0
+# Steps:  13/932   1% | Samples:  13/932 | accuracy: 0.91 | vllm: 31/32 | HTTP retries: 0
+# Steps:  16/932   1% | Samples:  15/932 | accuracy: 0.93 | vllm: 30/32 | HTTP retries: 0
+# [metrics-poller] gen_tok/s=1740.6 prompt_tok/s=502.4 running=32 waiting=0
+# [metrics-poller] gen_tok/s=1515.9 prompt_tok/s=0.0 running=15 waiting=0
+# Steps:  33/932   3% | Samples:  17/932 | accuracy: 0.93 | vllm: 15/32 | HTTP retries: 0
+# [metrics-poller] gen_tok/s=1484.7 prompt_tok/s=429.5 running=18 waiting=0
+# Steps:  34/932   3% | Samples:  34/932 | accuracy: 0.47 | vllm: 31/32 | HTTP retries: 2
+# [metrics-poller] gen_tok/s=2214.3 prompt_tok/s=1851.3 running=31 waiting=0
+# Steps:  35/932   3% | Samples:  35/932 | accuracy: 0.47 | vllm: 31/32 | HTTP retries: 2
+# [metrics-poller] gen_tok/s=2395.3 prompt_tok/s=494.3 running=32 waiting=0
+# Steps:  38/932   4% | Samples:  38/932 | accuracy: 0.46 | vllm: 31/32 | HTTP retries: 2
+# [metrics-poller] gen_tok/s=2352.7 prompt_tok/s=292.3 running=32 waiting=0
+# Steps:  41/932   4% | Samples:  41/932 | accuracy: 0.47 | vllm: 31/32 | HTTP retries: 2
+# Steps:  44/932   4% | Samples:  43/932 | accuracy: 0.48 | vllm: 29/32 | HTTP retries: 2
+# [metrics-poller] gen_tok/s=2233.2 prompt_tok/s=364.7 running=28 waiting=0
+
+
+# steady state ~2300 decode tokens/s
