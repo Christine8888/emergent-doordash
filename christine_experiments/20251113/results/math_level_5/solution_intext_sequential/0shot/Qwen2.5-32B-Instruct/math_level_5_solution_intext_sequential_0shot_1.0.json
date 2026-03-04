@@ -1,0 +1,45 @@
+{
+  "model": "vllm/Qwen2.5-32B-Instruct",
+  "total_samples": 6560,
+  "completed_samples": 6560,
+  "metadata": {
+    "timeout": 1200,
+    "hint_fraction": 1.0,
+    "fewshot": 0,
+    "data_path": "/sphinx/u/cye/emergent-doordash/suze_experiments/data/solution/math_level_5.jsonl",
+    "solver_name": "solution_intext_sequential"
+  },
+  "math_level_5_scorer": {
+    "accuracy": 0.9548780487804878,
+    "stderr": 0.0025628074098075835,
+    "scorer": "math_level_5_scorer"
+  },
+  "manual_bootstrap": {
+    "accuracy": 0.9549565548780488,
+    "stderr": 0.002448247495797085,
+    "scorer": "manual_bootstrap",
+    "epochs": 5
+  },
+  "pass_at_k": {
+    "1": {
+      "accuracy": 0.9548612804878048,
+      "stderr": 0.0023490843766320094
+    },
+    "2": {
+      "accuracy": 0.9650198170731706,
+      "stderr": 0.0018489735152063598
+    },
+    "3": {
+      "accuracy": 0.969032012195122,
+      "stderr": 0.0014265678505048238
+    },
+    "4": {
+      "accuracy": 0.9717118902439025,
+      "stderr": 0.0010228772126881838
+    },
+    "5": {
+      "accuracy": 0.9733231707317073,
+      "stderr": 0.0
+    }
+  }
+}

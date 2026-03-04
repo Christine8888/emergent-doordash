@@ -1,0 +1,45 @@
+{
+  "model": "vllm/Qwen3-14B",
+  "total_samples": 10000,
+  "completed_samples": 10000,
+  "metadata": {
+    "timeout": 1200,
+    "hint_fraction": 0.4,
+    "fewshot": 0,
+    "data_path": "/sphinx/u/cye/emergent-doordash/suze_experiments/data/solution/mmlu_0_shot.jsonl",
+    "solver_name": "solution_intext_masked"
+  },
+  "mmlu_0_shot_scorer": {
+    "accuracy": 0.4344,
+    "stderr": 0.004956779599699789,
+    "scorer": "mmlu_0_shot_scorer"
+  },
+  "manual_bootstrap": {
+    "accuracy": 0.433786,
+    "stderr": 0.00842930625852449,
+    "scorer": "manual_bootstrap",
+    "epochs": 5
+  },
+  "pass_at_k": {
+    "1": {
+      "accuracy": 0.434379,
+      "stderr": 0.00860597809664887
+    },
+    "2": {
+      "accuracy": 0.616745,
+      "stderr": 0.007226165995879138
+    },
+    "3": {
+      "accuracy": 0.7102324999999999,
+      "stderr": 0.005134656147202076
+    },
+    "4": {
+      "accuracy": 0.7612689999999999,
+      "stderr": 0.0035024475727696504
+    },
+    "5": {
+      "accuracy": 0.792,
+      "stderr": 0.0
+    }
+  }
+}
