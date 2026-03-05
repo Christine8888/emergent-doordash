@@ -34,6 +34,42 @@ logger = setup_logging()
 _CHECKPOINT_VERSION = 1
 
 
+def _normalize_repo_relative_path(path: str | None) -> str | None:
+    """Normalize a path to a repo-relative form when possible.
+
+    This makes checkpoint metadata robust across different clone roots
+    (e.g., /sailhome/... vs /juice5b/...) while still distinguishing
+    different dataset locations inside the repo.
+    """
+    if not isinstance(path, str) or not path:
+        return None
+    norm = os.path.normpath(path).replace("\\", "/")
+    repo_name = Path(__file__).resolve().parents[2].name  # emergent-doordash
+    marker = f"/{repo_name}/"
+    if marker in norm:
+        return norm.split(marker, 1)[1]
+    return norm
+
+
+def _dataset_path_key(path: str | None) -> str | None:
+    """Return a stable dataset key for cross-clone checkpoint compatibility.
+
+    Priority:
+    1) suffix after '/data/' when present (most specific and intentful)
+    2) last 2 path segments as a generic fallback
+    """
+    if not isinstance(path, str) or not path:
+        return None
+    norm = os.path.normpath(path).replace("\\", "/")
+    marker = "/data/"
+    if marker in norm:
+        return norm.split(marker, 1)[1]
+    parts = [p for p in norm.split("/") if p]
+    if len(parts) >= 2:
+        return "/".join(parts[-2:])
+    return parts[0] if parts else None
+
+
 def _now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -102,6 +138,21 @@ def _validate_checkpoint_state(state: Any, *, expected_meta: dict[str, Any]) -> 
         if k == "data_path":
             ckpt_p = meta.get(k)
             exp_p = expected_meta.get(k)
+
+            # Preferred: compare repo-relative normalized paths so different
+            # clone prefixes do not invalidate compatible checkpoints.
+            ckpt_rel = _normalize_repo_relative_path(ckpt_p)
+            exp_rel = _normalize_repo_relative_path(exp_p)
+            if ckpt_rel is not None and exp_rel is not None and ckpt_rel == exp_rel:
+                continue
+
+            # Generic cross-clone fallback: compare dataset-specific suffix key.
+            ckpt_key = _dataset_path_key(ckpt_p)
+            exp_key = _dataset_path_key(exp_p)
+            if ckpt_key is not None and exp_key is not None and ckpt_key == exp_key:
+                continue
+
+            # Fallback: if both absolute paths exist and are same inode, accept.
             try:
                 if (
                     isinstance(ckpt_p, str)

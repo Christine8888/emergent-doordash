@@ -135,14 +135,51 @@ def _ckpt_path(output_path: Path) -> Path:
     return output_path.with_suffix(".ckpt.json")
 
 
-def _read_ckpt_progress(ckpt_path: Path) -> tuple[int, int] | None:
-    """Return (completed_instances, total_instances) from a checkpoint file, or None if unreadable."""
+def _normalize_repo_relative_path(path: str | None) -> str | None:
+    """Normalize path to repo-relative form when possible."""
+    if not isinstance(path, str) or not path:
+        return None
+    norm = os.path.normpath(path).replace("\\", "/")
+    marker = f"/{REPO_ROOT.name}/"
+    if marker in norm:
+        return norm.split(marker, 1)[1]
+    return norm
+
+
+def _dataset_path_key(path: str | None) -> str | None:
+    """Return a stable dataset key for checkpoint compatibility checks."""
+    if not isinstance(path, str) or not path:
+        return None
+    norm = os.path.normpath(path).replace("\\", "/")
+    marker = "/data/"
+    if marker in norm:
+        return norm.split(marker, 1)[1]
+    parts = [p for p in norm.split("/") if p]
+    if len(parts) >= 2:
+        return "/".join(parts[-2:])
+    return parts[0] if parts else None
+
+
+def _read_ckpt_progress(ckpt_path: Path, *, expected_data_path: str | None = None) -> tuple[int, int] | None:
+    """Return (completed_instances, total_instances) from a compatible checkpoint, or None."""
     if not ckpt_path.exists():
         return None
     try:
         import json
         with open(ckpt_path) as f:
             data = json.load(f)
+
+        if expected_data_path is not None:
+            meta = data.get("meta")
+            ckpt_data_path = meta.get("data_path") if isinstance(meta, dict) else None
+            ckpt_rel = _normalize_repo_relative_path(ckpt_data_path)
+            exp_rel = _normalize_repo_relative_path(expected_data_path)
+            if not (ckpt_rel is not None and exp_rel is not None and ckpt_rel == exp_rel):
+                ckpt_key = _dataset_path_key(ckpt_data_path)
+                exp_key = _dataset_path_key(expected_data_path)
+                if ckpt_key is None or exp_key is None or ckpt_key != exp_key:
+                    return None
+
         completed = data.get("completed_samples")
         total = data.get("total_samples")
         if isinstance(completed, int) and isinstance(total, int) and total > 0:
@@ -193,7 +230,10 @@ def plan_runs(
                         exp_missing += 1
                         missing_for_model += 1
                         missing_hint_fractions.append(hint_fraction)
-                        progress = _read_ckpt_progress(_ckpt_path(out))
+                        progress = _read_ckpt_progress(
+                            _ckpt_path(out),
+                            expected_data_path=exp_cls.data_path,
+                        )
                         if progress is not None:
                             inprog_count += 1
                             inprog_completed += progress[0]
@@ -478,11 +518,10 @@ python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 1 \
+  --max_jobs 8 \
   --max_connections 96 \
   --cluster miso \
   --num_gpus 8 \
-  --disable_checkpoint
   --resume_no_chunk
 
 
@@ -491,9 +530,8 @@ python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 1 \
+  --max_jobs 8 \
   --cluster sphinx \
-  --disable_checkpoint
   --resume_no_chunk
 
 python suze_experiments/20260213/aime_experiments.py \
