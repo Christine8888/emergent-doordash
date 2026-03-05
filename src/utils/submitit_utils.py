@@ -39,14 +39,14 @@ def _resolve_max_connections(max_connections: int | None) -> int:
             "Failed to detect GPU model for dynamic max_connections (%s); using fallback=64",
             exc,
         )
-        return 64
+        return 48
 
     joined_names = " ".join(gpu_names).upper()
     if "H200" in joined_names:
-        return 96
+        return 64
     if "H100" in joined_names:
-        return 96
-    return 64
+        return 64
+    return 48
 
 
 def _parse_prometheus_value(text: str, metric_names: list[str], *, is_counter: bool = True) -> float | None:

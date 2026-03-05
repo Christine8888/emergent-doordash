@@ -78,6 +78,8 @@ _CLUSTER_NODE_PREFIX = {"sphinx": "sphinx", "miso": "miso", "jag": "jagupard"}
 _LOW_PRIO_PARTITION = {"sphinx": "sphinx-lo", "miso": "miso-lo", "jag-standard": "jag-lo"}
 # SLURM account to use per cluster (miso partition requires account=miso).
 _CLUSTER_ACCOUNT = {"sphinx": "nlp", "miso": "miso", "jag": "nlp"}
+# Cluster-specific walltime policy (hours). MISO must be capped at 6h.
+_CLUSTER_TIME_HOURS = {"miso": 6}
 
 
 def _apply_low_prio(models: list[ModelSpec]) -> list[ModelSpec]:
@@ -294,6 +296,8 @@ def run_experiment(
         config_overrides["max_connections"] = max_connections
     if cluster is not None:
         config_overrides["account"] = _CLUSTER_ACCOUNT.get(cluster, "nlp")
+        if cluster in _CLUSTER_TIME_HOURS:
+            config_overrides["time_hours"] = _CLUSTER_TIME_HOURS[cluster]
     if sc_loprio:
         models = _apply_sc_loprio(models)
     elif low_prio:
@@ -522,7 +526,8 @@ python suze_experiments/20260213/aime_experiments.py \
   --max_connections 96 \
   --cluster miso \
   --num_gpus 8 \
-  --resume_no_chunk
+  --enable_checkpoint \
+  --checkpoint_chunk_instances 1000
 
 
 USE THIS FOR NON-PREEMPTIBLE
@@ -532,7 +537,8 @@ python suze_experiments/20260213/aime_experiments.py \
   --results_dir christine_experiments/20251113/results \
   --max_jobs 8 \
   --cluster sphinx \
-  --resume_no_chunk
+  --enable_checkpoint \
+  --checkpoint_chunk_instances 500 
 
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
