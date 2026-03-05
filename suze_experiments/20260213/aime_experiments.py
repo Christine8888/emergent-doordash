@@ -516,14 +516,23 @@ sacctmgr show assoc user=suzeva format=user,account,partition,qos
 """
 
 """
+SC LOPRIO
+python suze_experiments/20260213/aime_experiments.py \
+  --experiment all \
+  --epochs 10 \
+  --results_dir christine_experiments/20251113/results \
+  --max_jobs 200 \
+  --enable_checkpoint \
+  --checkpoint_chunk_instances 130 \
+  --sc_loprio
 
 MISO NON-PREEMPTIBLE, DP=8
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 8 \
-  --max_connections 96 \
+  --max_jobs 3 \
+  --max_connections 196 \
   --cluster miso \
   --num_gpus 8 \
   --enable_checkpoint \
@@ -535,7 +544,7 @@ python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 8 \
+  --max_jobs 5 \
   --cluster sphinx \
   --enable_checkpoint \
   --checkpoint_chunk_instances 500 
