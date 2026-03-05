@@ -280,6 +280,8 @@ def run_experiment(
     *,
     max_connections: int | None = None,
     num_gpus: int | None = None,
+    cpus_per_task: int | None = None,
+    mem_gb: int | None = None,
     cluster: str | None = None,
     low_prio: bool = False,
     sc_loprio: bool = False,
@@ -294,6 +296,10 @@ def run_experiment(
     config_overrides["setup_commands"] = [f"source {SETUP_ENV_SCRIPT}"]
     if max_connections is not None:
         config_overrides["max_connections"] = max_connections
+    if cpus_per_task is not None:
+        config_overrides["cpus_per_task"] = cpus_per_task
+    if mem_gb is not None:
+        config_overrides["mem_gb"] = mem_gb
     if cluster is not None:
         config_overrides["account"] = _CLUSTER_ACCOUNT.get(cluster, "nlp")
         if cluster in _CLUSTER_TIME_HOURS:
@@ -372,6 +378,18 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--cpus_per_task",
+        type=int,
+        default=None,
+        help="Requested SLURM CPUs per task (default: SubmitConfig default).",
+    )
+    parser.add_argument(
+        "--mem_gb",
+        type=int,
+        default=None,
+        help="Requested SLURM memory in GB per job (default: SubmitConfig default).",
+    )
+    parser.add_argument(
         "--checkpoint_chunk_instances",
         type=int,
         default=128,
@@ -439,6 +457,8 @@ if __name__ == "__main__":
                     args.max_jobs,
                     max_connections=args.max_connections,
                     num_gpus=args.num_gpus,
+                    cpus_per_task=args.cpus_per_task,
+                    mem_gb=args.mem_gb,
                     cluster=args.cluster,
                     low_prio=args.low_prio,
                     sc_loprio=args.sc_loprio,
@@ -531,10 +551,12 @@ python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 3 \
+  --max_jobs 4 \
   --max_connections 196 \
   --cluster miso \
   --num_gpus 8 \
+  --cpus_per_task 100 \
+  --mem_gb 1000 \
   --enable_checkpoint \
   --checkpoint_chunk_instances 1000
 
