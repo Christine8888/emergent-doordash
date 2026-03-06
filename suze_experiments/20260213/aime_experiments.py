@@ -69,7 +69,7 @@ EXPERIMENT_SPECS: dict[str, tuple[str, str, str]] = {
 EXPERIMENTS = {name: make_experiment(*spec) for name, spec in EXPERIMENT_SPECS.items()}
 
 HINT_FRACTIONS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-HINT_FRACTIONS += [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
+# HINT_FRACTIONS += [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
 
 # Mapping from --cluster argument to SLURM partition name and node-name prefix.
 _CLUSTER_PARTITION = {"sphinx": "sphinx", "miso": "miso", "jag": "jag-standard"}
@@ -78,6 +78,8 @@ _CLUSTER_NODE_PREFIX = {"sphinx": "sphinx", "miso": "miso", "jag": "jagupard"}
 _LOW_PRIO_PARTITION = {"sphinx": "sphinx-lo", "miso": "miso-lo", "jag-standard": "jag-lo"}
 # SLURM account to use per cluster (miso partition requires account=miso).
 _CLUSTER_ACCOUNT = {"sphinx": "nlp", "miso": "miso", "jag": "nlp"}
+# Cluster-specific walltime policy (hours). MISO must be capped at 6h.
+_CLUSTER_TIME_HOURS = {"miso": 6}
 
 
 def _apply_low_prio(models: list[ModelSpec]) -> list[ModelSpec]:
@@ -135,14 +137,51 @@ def _ckpt_path(output_path: Path) -> Path:
     return output_path.with_suffix(".ckpt.json")
 
 
-def _read_ckpt_progress(ckpt_path: Path) -> tuple[int, int] | None:
-    """Return (completed_instances, total_instances) from a checkpoint file, or None if unreadable."""
+def _normalize_repo_relative_path(path: str | None) -> str | None:
+    """Normalize path to repo-relative form when possible."""
+    if not isinstance(path, str) or not path:
+        return None
+    norm = os.path.normpath(path).replace("\\", "/")
+    marker = f"/{REPO_ROOT.name}/"
+    if marker in norm:
+        return norm.split(marker, 1)[1]
+    return norm
+
+
+def _dataset_path_key(path: str | None) -> str | None:
+    """Return a stable dataset key for checkpoint compatibility checks."""
+    if not isinstance(path, str) or not path:
+        return None
+    norm = os.path.normpath(path).replace("\\", "/")
+    marker = "/data/"
+    if marker in norm:
+        return norm.split(marker, 1)[1]
+    parts = [p for p in norm.split("/") if p]
+    if len(parts) >= 2:
+        return "/".join(parts[-2:])
+    return parts[0] if parts else None
+
+
+def _read_ckpt_progress(ckpt_path: Path, *, expected_data_path: str | None = None) -> tuple[int, int] | None:
+    """Return (completed_instances, total_instances) from a compatible checkpoint, or None."""
     if not ckpt_path.exists():
         return None
     try:
         import json
         with open(ckpt_path) as f:
             data = json.load(f)
+
+        if expected_data_path is not None:
+            meta = data.get("meta")
+            ckpt_data_path = meta.get("data_path") if isinstance(meta, dict) else None
+            ckpt_rel = _normalize_repo_relative_path(ckpt_data_path)
+            exp_rel = _normalize_repo_relative_path(expected_data_path)
+            if not (ckpt_rel is not None and exp_rel is not None and ckpt_rel == exp_rel):
+                ckpt_key = _dataset_path_key(ckpt_data_path)
+                exp_key = _dataset_path_key(expected_data_path)
+                if ckpt_key is None or exp_key is None or ckpt_key != exp_key:
+                    return None
+
         completed = data.get("completed_samples")
         total = data.get("total_samples")
         if isinstance(completed, int) and isinstance(total, int) and total > 0:
@@ -193,7 +232,10 @@ def plan_runs(
                         exp_missing += 1
                         missing_for_model += 1
                         missing_hint_fractions.append(hint_fraction)
-                        progress = _read_ckpt_progress(_ckpt_path(out))
+                        progress = _read_ckpt_progress(
+                            _ckpt_path(out),
+                            expected_data_path=exp_cls.data_path,
+                        )
                         if progress is not None:
                             inprog_count += 1
                             inprog_completed += progress[0]
@@ -238,6 +280,8 @@ def run_experiment(
     *,
     max_connections: int | None = None,
     num_gpus: int | None = None,
+    cpus_per_task: int | None = None,
+    mem_gb: int | None = None,
     cluster: str | None = None,
     low_prio: bool = False,
     sc_loprio: bool = False,
@@ -252,8 +296,14 @@ def run_experiment(
     config_overrides["setup_commands"] = [f"source {SETUP_ENV_SCRIPT}"]
     if max_connections is not None:
         config_overrides["max_connections"] = max_connections
+    if cpus_per_task is not None:
+        config_overrides["cpus_per_task"] = cpus_per_task
+    if mem_gb is not None:
+        config_overrides["mem_gb"] = mem_gb
     if cluster is not None:
         config_overrides["account"] = _CLUSTER_ACCOUNT.get(cluster, "nlp")
+        if cluster in _CLUSTER_TIME_HOURS:
+            config_overrides["time_hours"] = _CLUSTER_TIME_HOURS[cluster]
     if sc_loprio:
         models = _apply_sc_loprio(models)
     elif low_prio:
@@ -315,7 +365,7 @@ if __name__ == "__main__":
         default=None,
         help=(
             "Inspect max concurrent connections per job. "
-            "Default (when omitted): auto by GPU (H200=96, H100=64, other=48)."
+            "Default (when omitted): auto by GPU (H200/H100=96, other=64)."
         ),
     )
     parser.add_argument(
@@ -328,6 +378,18 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--cpus_per_task",
+        type=int,
+        default=None,
+        help="Requested SLURM CPUs per task (default: SubmitConfig default).",
+    )
+    parser.add_argument(
+        "--mem_gb",
+        type=int,
+        default=None,
+        help="Requested SLURM memory in GB per job (default: SubmitConfig default).",
+    )
+    parser.add_argument(
         "--checkpoint_chunk_instances",
         type=int,
         default=128,
@@ -337,9 +399,22 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--enable_checkpoint",
+        action="store_true",
+        help="Enable resumable checkpointing/chunking (default: disabled).",
+    )
+    parser.add_argument(
+        "--resume_no_chunk",
+        action="store_true",
+        help=(
+            "Resume from existing checkpoint (if any), but finish remaining samples "
+            "in a single unchunked eval call."
+        ),
+    )
+    parser.add_argument(
         "--disable_checkpoint",
         action="store_true",
-        help="Disable resumable checkpointing (single eval call per run).",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument("--cluster", choices=["sphinx", "miso", "jag"], default=None, help="Restrict job scheduling to a specific cluster (default: all clusters)")
     parser.add_argument("--low_prio", action="store_true", help="Submit jobs at low priority QOS (default: standard)")
@@ -354,11 +429,22 @@ if __name__ == "__main__":
             args.results_dir,
         )
     else:
-        os.environ["EXPERIMENT_CHECKPOINT_CHUNK_INSTANCES"] = str(max(args.checkpoint_chunk_instances, 128))
-        if args.disable_checkpoint:
-            os.environ["EXPERIMENT_DISABLE_CHECKPOINT"] = "1"
-        else:
+        mode_flags = int(args.enable_checkpoint) + int(args.resume_no_chunk) + int(args.disable_checkpoint)
+        if mode_flags > 1:
+            raise ValueError(
+                "Pass at most one of --enable_checkpoint, --resume_no_chunk, --disable_checkpoint"
+            )
+        # Default behavior: no checkpoint chunking unless explicitly enabled.
+        if args.enable_checkpoint:
+            os.environ["EXPERIMENT_CHECKPOINT_CHUNK_INSTANCES"] = str(max(args.checkpoint_chunk_instances, 128))
             os.environ.pop("EXPERIMENT_DISABLE_CHECKPOINT", None)
+            os.environ.pop("EXPERIMENT_RESUME_NO_CHUNK", None)
+        elif args.resume_no_chunk:
+            os.environ.pop("EXPERIMENT_DISABLE_CHECKPOINT", None)
+            os.environ["EXPERIMENT_RESUME_NO_CHUNK"] = "1"
+        else:
+            os.environ["EXPERIMENT_DISABLE_CHECKPOINT"] = "1"
+            os.environ.pop("EXPERIMENT_RESUME_NO_CHUNK", None)
 
         with ThreadPoolExecutor(max_workers=len(experiments_to_run)) as executor:
             futures = [
@@ -371,6 +457,8 @@ if __name__ == "__main__":
                     args.max_jobs,
                     max_connections=args.max_connections,
                     num_gpus=args.num_gpus,
+                    cpus_per_task=args.cpus_per_task,
+                    mem_gb=args.mem_gb,
                     cluster=args.cluster,
                     low_prio=args.low_prio,
                     sc_loprio=args.sc_loprio,
@@ -448,16 +536,29 @@ sacctmgr show assoc user=suzeva format=user,account,partition,qos
 """
 
 """
+SC LOPRIO
+python suze_experiments/20260213/aime_experiments.py \
+  --experiment all \
+  --epochs 10 \
+  --results_dir christine_experiments/20251113/results \
+  --max_jobs 200 \
+  --enable_checkpoint \
+  --checkpoint_chunk_instances 130 \
+  --sc_loprio
 
 MISO NON-PREEMPTIBLE, DP=8
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 1 \
-  --max_connections 96 \
+  --max_jobs 4 \
+  --max_connections 196 \
   --cluster miso \
-  --num_gpus 8
+  --num_gpus 8 \
+  --cpus_per_task 100 \
+  --mem_gb 1000 \
+  --enable_checkpoint \
+  --checkpoint_chunk_instances 1000
 
 
 USE THIS FOR NON-PREEMPTIBLE
@@ -465,7 +566,15 @@ python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 1 \
-  --cluster sphinx
+  --max_jobs 5 \
+  --cluster sphinx \
+  --enable_checkpoint \
+  --checkpoint_chunk_instances 500 
+
+python suze_experiments/20260213/aime_experiments.py \
+  --experiment all \
+  --epochs 10 \
+  --results_dir christine_experiments/20251113/results --plan
+
 
 """

@@ -34,6 +34,42 @@ logger = setup_logging()
 _CHECKPOINT_VERSION = 1
 
 
+def _normalize_repo_relative_path(path: str | None) -> str | None:
+    """Normalize a path to a repo-relative form when possible.
+
+    This makes checkpoint metadata robust across different clone roots
+    (e.g., /sailhome/... vs /juice5b/...) while still distinguishing
+    different dataset locations inside the repo.
+    """
+    if not isinstance(path, str) or not path:
+        return None
+    norm = os.path.normpath(path).replace("\\", "/")
+    repo_name = Path(__file__).resolve().parents[2].name  # emergent-doordash
+    marker = f"/{repo_name}/"
+    if marker in norm:
+        return norm.split(marker, 1)[1]
+    return norm
+
+
+def _dataset_path_key(path: str | None) -> str | None:
+    """Return a stable dataset key for cross-clone checkpoint compatibility.
+
+    Priority:
+    1) suffix after '/data/' when present (most specific and intentful)
+    2) last 2 path segments as a generic fallback
+    """
+    if not isinstance(path, str) or not path:
+        return None
+    norm = os.path.normpath(path).replace("\\", "/")
+    marker = "/data/"
+    if marker in norm:
+        return norm.split(marker, 1)[1]
+    parts = [p for p in norm.split("/") if p]
+    if len(parts) >= 2:
+        return "/".join(parts[-2:])
+    return parts[0] if parts else None
+
+
 def _now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -102,6 +138,21 @@ def _validate_checkpoint_state(state: Any, *, expected_meta: dict[str, Any]) -> 
         if k == "data_path":
             ckpt_p = meta.get(k)
             exp_p = expected_meta.get(k)
+
+            # Preferred: compare repo-relative normalized paths so different
+            # clone prefixes do not invalidate compatible checkpoints.
+            ckpt_rel = _normalize_repo_relative_path(ckpt_p)
+            exp_rel = _normalize_repo_relative_path(exp_p)
+            if ckpt_rel is not None and exp_rel is not None and ckpt_rel == exp_rel:
+                continue
+
+            # Generic cross-clone fallback: compare dataset-specific suffix key.
+            ckpt_key = _dataset_path_key(ckpt_p)
+            exp_key = _dataset_path_key(exp_p)
+            if ckpt_key is not None and exp_key is not None and ckpt_key == exp_key:
+                continue
+
+            # Fallback: if both absolute paths exist and are same inode, accept.
             try:
                 if (
                     isinstance(ckpt_p, str)
@@ -501,6 +552,7 @@ class Experiment(ABC):
         remaining_ids = [sid for sid in all_sample_ids if sid not in completed_ids]
         logger.info(f"Checkpoint progress: {len(completed_ids)}/{len(all_sample_ids)} samples complete; remaining={len(remaining_ids)}")
         logger.info(f"Checkpoint file: {ckpt_path}")
+        resume_no_chunk = os.environ.get("EXPERIMENT_RESUME_NO_CHUNK") == "1"
 
         def _extract_chunk_correctness(eval_log0, *, chunk_id_set: set[str]) -> dict[str, list[int]]:
             per_chunk: dict[str, list[int]] = defaultdict(list)
@@ -531,6 +583,14 @@ class Experiment(ABC):
             return out
 
         # Run remaining samples in chunks, checkpointing after each chunk.
+        if resume_no_chunk:
+            # Finish all remaining samples in one eval call while still honoring existing checkpoint progress.
+            chunk_size = max(1, len(remaining_ids))
+            logger.info(
+                "Resume-no-chunk mode: finishing in one run (remaining_samples=%d, remaining_instances=%d)",
+                len(remaining_ids),
+                len(remaining_ids) * int(epochs),
+            )
         while remaining_ids:
             chunk = remaining_ids[:chunk_size]
             remaining_ids = remaining_ids[chunk_size:]

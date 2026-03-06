@@ -35,7 +35,7 @@ class SubmitConfig:
 
     # GPU/resource config
     gpus_per_job: int | None = None
-    cpus_per_task: int = 4
+    cpus_per_task: int = 16
     mem_gb: int = 64
     time_hours: int = 60
     constraint: str | None = None  # SLURM --constraint (e.g. for sc-loprio GPU selection)
