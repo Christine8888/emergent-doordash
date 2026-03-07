@@ -119,6 +119,20 @@ def _restrict_models_to_cluster(models: list[ModelSpec], cluster: str) -> list[M
     return restricted
 
 
+def _filter_models(models: list[ModelSpec], model: str | None) -> list[ModelSpec]:
+    """Filter models by full path or basename (e.g., Qwen/Qwen3-8B or Qwen3-8B)."""
+    if model is None:
+        return models
+    selected = [m for m in models if m.path == model or os.path.basename(m.path) == model]
+    if selected:
+        return selected
+    available = sorted({os.path.basename(m.path) for m in models})
+    raise ValueError(
+        f"Unknown model {model!r}. Pass full path (e.g. 'Qwen/Qwen3-8B') "
+        f"or basename from: {available}"
+    )
+
+
 def _output_path(
     experiment_class: type[Experiment],
     results_dir: str,
@@ -194,7 +208,9 @@ def _read_ckpt_progress(ckpt_path: Path, *, expected_data_path: str | None = Non
 def plan_runs(
     experiment_names: list[str],
     results_dir: str,
+    model: str | None = None,
 ):
+    models = _filter_models(MODELS, model)
     total_jobs = 0
     total_existing = 0
     total_missing = 0
@@ -205,8 +221,8 @@ def plan_runs(
         exp_existing = 0
         exp_missing = 0
 
-        for model in MODELS:
-            model_name = os.path.basename(model.path)
+        for model_spec in models:
+            model_name = os.path.basename(model_spec.path)
             missing_hint_fractions: list[float] = []
             existing_for_model = 0
             missing_for_model = 0
@@ -261,13 +277,13 @@ def plan_runs(
 
         total_existing += exp_existing
         total_missing += exp_missing
-        print(f"{exp_name}: existing={exp_existing} missing={exp_missing} (models_counted={len(MODELS)})")
+        print(f"{exp_name}: existing={exp_existing} missing={exp_missing} (models_counted={len(models)})")
 
     overall_pct = 100 * total_progress_jobs / total_jobs if total_jobs else 0
     print(
         f"TOTAL: {total_progress_jobs:.1f} / {total_jobs} jobs completed "
         f"({overall_pct:.1f}%) | done={total_existing} missing={total_missing} "
-        f"(models_counted={len(MODELS)})"
+        f"(models_counted={len(models)})"
     )
 
 
@@ -285,12 +301,14 @@ def run_experiment(
     cluster: str | None = None,
     low_prio: bool = False,
     sc_loprio: bool = False,
+    model: str | None = None,
 ):
     """Run a single experiment with full retry logic."""
     logger.info(f"Starting {exp_name}...")
     hint_type, solver_type, mode = EXPERIMENT_SPECS[exp_name]
     experiment_cls = make_experiment(hint_type, solver_type, mode)
-    models = _restrict_models_to_cluster(MODELS, cluster) if cluster is not None else MODELS
+    models = _filter_models(MODELS, model)
+    models = _restrict_models_to_cluster(models, cluster) if cluster is not None else models
     config_overrides = {}
     # Ensure submitit workers source this repo's setup script (activates conda env "ed").
     config_overrides["setup_commands"] = [f"source {SETUP_ENV_SCRIPT}"]
@@ -306,6 +324,9 @@ def run_experiment(
             config_overrides["time_hours"] = _CLUSTER_TIME_HOURS[cluster]
     if sc_loprio:
         models = _apply_sc_loprio(models)
+        # sc-loprio nodes are preemptible and often have less free VRAM at startup.
+        # Use a safer vLLM target to reduce startup failures.
+        config_overrides["gpu_memory_utilization"] = 0.88
     elif low_prio:
         models = _apply_low_prio(models)
     job_config = DEFAULT_CONFIG.override(**config_overrides)
@@ -419,6 +440,12 @@ if __name__ == "__main__":
     parser.add_argument("--cluster", choices=["sphinx", "miso", "jag"], default=None, help="Restrict job scheduling to a specific cluster (default: all clusters)")
     parser.add_argument("--low_prio", action="store_true", help="Submit jobs at low priority QOS (default: standard)")
     parser.add_argument("--sc_loprio", action="store_true", help="Submit pre-emptible jobs to sc-loprio partition using GPU constraints (overrides --cluster/--low_prio routing)")
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Launch only one model (full path or basename, e.g. Qwen/Qwen3-8B or Qwen3-8B).",
+    )
     args = parser.parse_args()
 
     experiments_to_run = list(EXPERIMENTS.keys()) if args.experiment == "all" else [args.experiment]
@@ -427,6 +454,7 @@ if __name__ == "__main__":
         plan_runs(
             experiments_to_run,
             args.results_dir,
+            model=args.model,
         )
     else:
         mode_flags = int(args.enable_checkpoint) + int(args.resume_no_chunk) + int(args.disable_checkpoint)
@@ -462,6 +490,7 @@ if __name__ == "__main__":
                     cluster=args.cluster,
                     low_prio=args.low_prio,
                     sc_loprio=args.sc_loprio,
+                    model=args.model,
                 )
                 for exp_name in experiments_to_run
             ]

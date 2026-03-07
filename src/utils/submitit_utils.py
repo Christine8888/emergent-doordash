@@ -298,10 +298,7 @@ def _run_throttled(
             active_jobs.remove(job)
             completed_jobs.append(job)
 
-        for job in status_map.get('cancelled', []):
-            active_jobs.remove(job)
-
-        for job in status_map.get('failed', []) + status_map.get('timeout', []):
+        for job in status_map.get('failed', []) + status_map.get('timeout', []) + status_map.get('cancelled', []):
             jid = str(job.job_id)
             active_jobs.remove(job)
             meta = job_meta[jid]
@@ -332,7 +329,7 @@ def _wait_with_retries(
         time.sleep(poll_interval)
         status_map = check_job_status(all_jobs, job_meta)
 
-        for job in status_map.get('failed', []) + status_map.get('timeout', []):
+        for job in status_map.get('failed', []) + status_map.get('timeout', []) + status_map.get('cancelled', []):
             jid = str(job.job_id)
             if retry_counts.get(jid, 0) < max_retries:
                 meta = job_meta[jid]
@@ -347,7 +344,11 @@ def _wait_with_retries(
         active = len(status_map.get('pending', [])) + len(status_map.get('running', []))
         if active == 0:
             done = len(status_map.get('done', []))
-            failed = len(status_map.get('failed', [])) + len(status_map.get('timeout', []))
+            failed = (
+                len(status_map.get('failed', []))
+                + len(status_map.get('timeout', []))
+                + len(status_map.get('cancelled', []))
+            )
             logger.info(f"complete: {done} done, {failed} failed")
             return all_jobs
 
@@ -456,15 +457,26 @@ def _get_running_job_configs(submitit_folder: str) -> set[tuple]:
     
     # Get list of actually running/pending job IDs from SLURM
     try:
+        user = os.environ.get("USER", "")
+        cmd = ["squeue", "-h", "-o", "%i"]
+        if user:
+            cmd[1:1] = ["-u", user]
         result = subprocess.run(
-            ["squeue", "-u", os.environ.get("USER", ""), "-h", "-o", "%i"],
+            cmd,
             capture_output=True, text=True, timeout=5
         )
-        if result.returncode == 0:
-            active_job_ids = set(result.stdout.strip().split())
-        else:
-            logger.warning("Failed to get SLURM queue, will not skip running jobs")
-            return running_configs
+        if result.returncode != 0:
+            # Some environments don't map $USER to a valid SLURM username.
+            # Fall back to all queue entries and filter to local submitit files.
+            fallback = subprocess.run(
+                ["squeue", "-h", "-o", "%i"],
+                capture_output=True, text=True, timeout=5
+            )
+            if fallback.returncode != 0:
+                logger.warning("Failed to get SLURM queue, will not skip running jobs")
+                return running_configs
+            result = fallback
+        active_job_ids = set(result.stdout.strip().split())
     except Exception as e:
         logger.warning(f"Failed to check SLURM queue: {e}, will not skip running jobs")
         return running_configs
