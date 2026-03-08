@@ -19,6 +19,7 @@ SC_LOPRIO_PARTITION = "sc-loprio"
 SMALL_MODEL_CONSTRAINT  = "80G|141G|40G|48G"  # ≤4B:  weights ≤8GB,  fits anywhere
 MEDIUM_MODEL_CONSTRAINT = "80G|141G|48G"       # 7–27B (tp≥1): weights ≤27GB/GPU, fits on 48G+
 LARGE_MODEL_CONSTRAINT  = "80G|141G"           # 14B:  weights ~28GB, 48G too tight at 32K ctx
+GEMMA_12B_CONSTRAINT    = "80G|141G"           # 12B Gemma at 32K ctx: avoid 48G KV-cache startup failures
 H200_CONSTRAINT         = "141G"               # 32B/70B: weights exceed 80G usable VRAM
 
 MODEL_PREFILL_TOKENS = {
@@ -100,6 +101,6 @@ LLAMA_MODELS = [
 GEMMA_MODELS = [
     # ModelSpec("google/gemma-3-1b-it", partitions=LARGE_MODEL_PARTITIONS, nodelist=LARGE_MODEL_NODES, constraint=SMALL_MODEL_CONSTRAINT), # doesn't run inference well
     ModelSpec("google/gemma-3-4b-it", partitions=LARGE_MODEL_PARTITIONS, nodelist=LARGE_MODEL_NODES, constraint=SMALL_MODEL_CONSTRAINT),
-    ModelSpec("google/gemma-3-12b-it", partitions=LARGE_MODEL_PARTITIONS, nodelist=LARGE_MODEL_NODES, constraint=MEDIUM_MODEL_CONSTRAINT),
+    ModelSpec("google/gemma-3-12b-it", partitions=LARGE_MODEL_PARTITIONS, nodelist=LARGE_MODEL_NODES, constraint=GEMMA_12B_CONSTRAINT),
     ModelSpec("google/gemma-3-27b-it", tp=2, partitions=LARGE_MODEL_PARTITIONS, nodelist=LARGE_MODEL_NODES, constraint=MEDIUM_MODEL_CONSTRAINT),
 ]

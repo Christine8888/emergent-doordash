@@ -205,16 +205,90 @@ def _read_ckpt_progress(ckpt_path: Path, *, expected_data_path: str | None = Non
     return None
 
 
+def _normalize_results_dir(path: str | None) -> str | None:
+    """Normalize a results_dir path into a stable absolute string."""
+    if not isinstance(path, str) or not path:
+        return None
+    p = Path(path)
+    if not p.is_absolute():
+        p = REPO_ROOT / p
+    try:
+        return str(p.resolve())
+    except Exception:
+        return str(p)
+
+
+def _get_active_experiment_configs() -> set[tuple[str, str, int, float, str | None]]:
+    """Return active (exp_name, model_name, fewshot, hint_fraction, results_dir) tuples."""
+    import pickle
+    import subprocess
+
+    active_configs: set[tuple[str, str, int, float, str | None]] = set()
+    submitit_folder = Path(DEFAULT_CONFIG.submitit_folder)
+    if not submitit_folder.is_absolute():
+        submitit_folder = REPO_ROOT / submitit_folder
+
+    try:
+        user = os.environ.get("USER", "")
+        cmd = ["squeue", "-h", "-o", "%i"]
+        if user:
+            cmd[1:1] = ["-u", user]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            fallback = subprocess.run(["squeue", "-h", "-o", "%i"], capture_output=True, text=True, timeout=5)
+            if fallback.returncode != 0:
+                logger.warning("Failed to get SLURM queue, proceeding without running/queued filter")
+                return active_configs
+            result = fallback
+        active_job_ids = set(result.stdout.strip().split())
+    except Exception as exc:
+        logger.warning(f"Failed to query SLURM queue ({exc}); proceeding without running/queued filter")
+        return active_configs
+
+    for job_id in active_job_ids:
+        submitted_file = submitit_folder / f"{job_id}_submitted.pkl"
+        if not submitted_file.exists():
+            continue
+        try:
+            with open(submitted_file, "rb") as f:
+                job_info = pickle.load(f)
+            if not hasattr(job_info, "kwargs"):
+                continue
+            kwargs = job_info.kwargs
+            model_path = kwargs.get("model_path", "")
+            model_name = os.path.basename(model_path)
+            fewshot = kwargs.get("fewshot")
+            hint_fraction = kwargs.get("hint_fraction")
+            experiment_class = kwargs.get("experiment_class")
+            exp_name = getattr(experiment_class, "name", None)
+            results_dir = _normalize_results_dir(kwargs.get("results_dir"))
+            if (
+                exp_name
+                and model_name
+                and isinstance(fewshot, int)
+                and isinstance(hint_fraction, (float, int))
+            ):
+                active_configs.add((exp_name, model_name, fewshot, float(hint_fraction), results_dir))
+        except Exception:
+            # Best effort only; ignore unreadable pickle entries.
+            pass
+
+    return active_configs
+
+
 def plan_runs(
     experiment_names: list[str],
     results_dir: str,
     model: str | None = None,
 ):
     models = _filter_models(MODELS, model)
+    normalized_results_dir = _normalize_results_dir(results_dir)
+    active_configs = _get_active_experiment_configs()
     total_jobs = 0
     total_existing = 0
     total_missing = 0
     total_progress_jobs = 0.0  # each done job = 1.0, each in-progress job = fraction done
+    actionable_missing: dict[str, dict[str, list[float]]] = {}
 
     for exp_name in experiment_names:
         exp_cls = EXPERIMENTS[exp_name]
@@ -248,6 +322,9 @@ def plan_runs(
                         exp_missing += 1
                         missing_for_model += 1
                         missing_hint_fractions.append(hint_fraction)
+                        key = (exp_name, model_name, fewshot, float(hint_fraction), normalized_results_dir)
+                        if key not in active_configs:
+                            actionable_missing.setdefault(exp_name, {}).setdefault(model_name, []).append(hint_fraction)
                         progress = _read_ckpt_progress(
                             _ckpt_path(out),
                             expected_data_path=exp_cls.data_path,
@@ -285,6 +362,20 @@ def plan_runs(
         f"({overall_pct:.1f}%) | done={total_existing} missing={total_missing} "
         f"(models_counted={len(models)})"
     )
+
+    print()
+    print("MISSING AND NOT RUNNING/QUEUED:")
+    if not actionable_missing:
+        print("None.")
+        return
+    for exp_name in experiment_names:
+        exp_missing = actionable_missing.get(exp_name, {})
+        for model_name in sorted(exp_missing.keys()):
+            hints = sorted(set(exp_missing[model_name]))
+            print(
+                f"{exp_name} / {model_name}: "
+                f"missing_not_running_hint_fractions={hints}"
+            )
 
 
 def run_experiment(
@@ -500,71 +591,6 @@ if __name__ == "__main__":
 
 
 """
-python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results --plan
-
-TOTAL: 156.8 / 336 jobs completed (46.7%) | done=151 missing=185 (models_counted=16) at feb 18, 23:22
-
-
-TESTING
-python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results \
-  --max_jobs 1 \
-  --max_connections 12 \
-  --checkpoint_chunk_instances 128
-
-DEBUG
-python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results \
-  --max_jobs 1 \
-  --checkpoint_chunk_instances 128 \
-  --debug
-
-LOW PRIORITY SPHINX
-python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results \
-  --max_jobs 2 \
-  --max_connections 12 \
-  --checkpoint_chunk_instances 128 \
-  --low_prio \
-  --cluster sphinx
-
-
-MISO
-python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results \
-  --max_jobs 8 \
-  --max_connections 16 \
-  --checkpoint_chunk_instances 128 \
-  --cluster miso
-
-
-SC-LOPRIO (pre-emptible, any cluster, GPU constraint routing)
-python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results \
-  --max_jobs 200 \
-  --max_connections 16 \
-  --checkpoint_chunk_instances 128 \
-  --sc_loprio
-
-
-
-sacctmgr show assoc user=suzeva format=user,account,partition,qos
-"""
-
-"""
 SC LOPRIO
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
@@ -580,7 +606,7 @@ python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 4 \
+  --max_jobs 10 \
   --max_connections 196 \
   --cluster miso \
   --num_gpus 8 \
@@ -598,6 +624,7 @@ python suze_experiments/20260213/aime_experiments.py \
   --max_jobs 5 \
   --cluster sphinx \
   --enable_checkpoint \
+  --model Qwen3-14B \
   --checkpoint_chunk_instances 500 
 
 python suze_experiments/20260213/aime_experiments.py \
