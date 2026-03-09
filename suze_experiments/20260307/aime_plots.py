@@ -144,6 +144,61 @@ def plot_accuracy_vs_eci_raw_by_hint(
     return out_path
 
 
+def plot_accuracy_vs_hint_by_model_raw_points(
+    *,
+    df: pd.DataFrame,
+    output_dir: Path,
+    out_name: str = "accuracy_vs_hint_by_model.png",
+    title: str = "AIME: accuracy vs hint by model (raw points only)",
+) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    model_eci = (
+        df[["model", "eci"]]
+        .drop_duplicates()
+        .sort_values("eci")
+    )
+    models_sorted = model_eci["model"].tolist()
+    n_models = len(models_sorted)
+    n_cols = 4
+    n_rows = (n_models + n_cols - 1) // n_cols
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.5 * n_rows))
+    axes = axes.flatten() if hasattr(axes, "flatten") else [axes]
+
+    model_cmap = plt.cm.coolwarm
+    model_colors = {m: model_cmap(i / max(n_models - 1, 1)) for i, m in enumerate(models_sorted)}
+
+    for i, model in enumerate(models_sorted):
+        ax = axes[i]
+        model_df = df[df["model"] == model].sort_values("hint")
+        eci = float(model_df["eci"].iloc[0])
+
+        ax.scatter(
+            model_df["hint"],
+            model_df["accuracy"],
+            color=model_colors[model],
+            alpha=0.85,
+            s=45,
+        )
+        ax.set_title(f"{model}\neci={eci:.2f}", fontsize=8)
+        ax.set_xlabel("hint")
+        ax.set_ylabel("accuracy")
+        ax.grid(True, alpha=0.3)
+        ax.set_ylim(-0.05, 1.05)
+        ax.set_xlim(-0.05, 1.05)
+
+    for i in range(n_models, len(axes)):
+        axes[i].set_visible(False)
+
+    fig.suptitle(title, fontsize=12)
+    plt.tight_layout()
+    out_path = output_dir / out_name
+    fig.savefig(out_path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
 def run_aime_raw_sanity_plot(
     *,
     base_folder: Path,
@@ -154,7 +209,7 @@ def run_aime_raw_sanity_plot(
     output_dir: Path,
     all_models: list[str] | None = None,
     hint_fractions: list[float] | None = None,
-) -> Path:
+) -> tuple[Path, Path]:
     df = load_results_df(
         base_folder=base_folder,
         eci_file=eci_file,
@@ -188,19 +243,21 @@ def run_aime_raw_sanity_plot(
     detailed_long = df[["model", "hint", "eci", "accuracy"]].sort_values(["model", "hint"])
     detailed_long.to_csv(output_dir / "accuracy_per_model_per_hint_long.csv", index=False)
 
-    return plot_accuracy_vs_eci_raw_by_hint(df=df, output_dir=output_dir)
+    out_eci = plot_accuracy_vs_eci_raw_by_hint(df=df, output_dir=output_dir)
+    out_by_model = plot_accuracy_vs_hint_by_model_raw_points(df=df, output_dir=output_dir)
+    return out_eci, out_by_model
 
 
 def main() -> None:
     project_root = Path(__file__).resolve().parents[2]
 
-    out = run_aime_raw_sanity_plot(
+    out_eci, out_by_model = run_aime_raw_sanity_plot(
         base_folder=project_root / "christine_experiments/20251113/results",
         eci_file=project_root / "christine_experiments/20260129_fitting/eci_model_capabilities.csv",
         eval_name="aime",
         solver="solution_intext_masked",
         condition="0shot",
-        output_dir=project_root / "suze_experiments/20260202/results/joint_scaling_aime_train_on_all_march_7",
+        output_dir=Path(__file__).resolve().parent,
         all_models=[
             "Qwen2.5-1.5B-Instruct",
             "Qwen2.5-3B-Instruct",
@@ -221,7 +278,8 @@ def main() -> None:
         ],
         hint_fractions=[round(i / 20.0, 2) for i in range(21)],
     )
-    print(f"Wrote: {out}")
+    print(f"Wrote: {out_eci}")
+    print(f"Wrote: {out_by_model}")
 
 
 if __name__ == "__main__":

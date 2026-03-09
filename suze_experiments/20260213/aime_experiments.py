@@ -607,7 +607,7 @@ python suze_experiments/20260213/aime_experiments.py \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
   --max_jobs 10 \
-  --max_connections 196 \
+  --max_connections 100 \
   --cluster miso \
   --num_gpus 8 \
   --cpus_per_task 100 \
@@ -621,7 +621,7 @@ python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 7 \
+  --max_jobs 1 \
   --cluster sphinx \
   --enable_checkpoint \
   --checkpoint_chunk_instances 666 
