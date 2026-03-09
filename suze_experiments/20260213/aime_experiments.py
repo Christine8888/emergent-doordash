@@ -621,11 +621,10 @@ python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 5 \
+  --max_jobs 7 \
   --cluster sphinx \
   --enable_checkpoint \
-  --model Qwen3-14B \
-  --checkpoint_chunk_instances 500 
+  --checkpoint_chunk_instances 666 
 
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
