@@ -396,12 +396,7 @@ def generate(
         if timeout is not None:
             gen_kwargs["timeout"] = timeout
 
-        # Leave generation params (temperature/top_p/top_k/etc.) unset
-        # so vLLM uses HF generation_config.json defaults.
-        # continue_final_message is auto-detected by vLLM provider.
-        state = await gen(state, **gen_kwargs)
-
-        # Warn if estimated input tokens exceed 80% of the context window.
+        # Warn based on pre-generation input only (exclude generated assistant output).
         try:
             max_model_len_str = os.environ.get("VLLM_MAX_MODEL_LEN")
             if max_model_len_str:
@@ -428,6 +423,11 @@ def generate(
                     )
         except Exception:
             pass
+
+        # Leave generation params (temperature/top_p/top_k/etc.) unset
+        # so vLLM uses HF generation_config.json defaults.
+        # continue_final_message is auto-detected by vLLM provider.
+        state = await gen(state, **gen_kwargs)
 
         # Best-effort warning if generation appears to have been truncated by max_tokens.
         try:
