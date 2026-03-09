@@ -10,9 +10,12 @@ This script makes a raw accuracy-vs-ECI plot by hint level:
 from __future__ import annotations
 
 import sys
+import json
 from pathlib import Path
+from zipfile import BadZipFile, ZipFile
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -76,6 +79,63 @@ def load_results_df(
         raise ValueError("No rows remain after model/hint/ECI filtering.")
 
     return df
+
+
+def _combos_with_local_eval(
+    *,
+    base_folder: Path,
+    eval_name: str,
+    solver: str,
+    condition: str,
+) -> set[tuple[str, float]]:
+    eval_root = base_folder / eval_name / solver / condition
+    combos: set[tuple[str, float]] = set()
+    if not eval_root.exists():
+        return combos
+
+    for model_dir in eval_root.iterdir():
+        if not model_dir.is_dir():
+            continue
+        model_name = model_dir.name
+        for eval_file in model_dir.glob("*.eval"):
+            try:
+                with ZipFile(eval_file) as zf:
+                    start = json.loads(zf.read("_journal/start.json"))
+            except (BadZipFile, KeyError, ValueError, OSError):
+                continue
+
+            eval_info = start.get("eval", {})
+            hint = eval_info.get("metadata", {}).get("hint_fraction")
+            if hint is None:
+                continue
+            combos.add((model_name, round(float(hint), 2)))
+    return combos
+
+
+def add_inference_owner(
+    *,
+    df: pd.DataFrame,
+    base_folder: Path,
+    eval_name: str,
+    solver: str,
+    condition: str,
+) -> pd.DataFrame:
+    local_eval_combos = _combos_with_local_eval(
+        base_folder=base_folder,
+        eval_name=eval_name,
+        solver=solver,
+        condition=condition,
+    )
+    out = df.copy()
+    out["inference_owner"] = out.apply(
+        lambda r: (
+            "mine"
+            if (r["model"], round(float(r["hint"]), 2)) in local_eval_combos
+            else "christine"
+        ),
+        axis=1,
+    )
+    return out
 
 
 def assert_unique_model_hint(df: pd.DataFrame, *, output_dir: Path | None = None) -> None:
@@ -199,6 +259,72 @@ def plot_accuracy_vs_hint_by_model_raw_points(
     return out_path
 
 
+def plot_accuracy_vs_hint_by_model_raw_points_by_owner(
+    *,
+    df: pd.DataFrame,
+    output_dir: Path,
+    out_name: str = "accuracy_vs_hint_by_model_owner_debug.png",
+    title: str = "AIME: accuracy vs hint by model (owner-colored debug)",
+) -> Path:
+    if "inference_owner" not in df.columns:
+        raise ValueError("Missing 'inference_owner' column. Call add_inference_owner(...) first.")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    model_eci = (
+        df[["model", "eci"]]
+        .drop_duplicates()
+        .sort_values("eci")
+    )
+    models_sorted = model_eci["model"].tolist()
+    n_models = len(models_sorted)
+    n_cols = 4
+    n_rows = (n_models + n_cols - 1) // n_cols
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.5 * n_rows))
+    axes = axes.flatten() if hasattr(axes, "flatten") else [axes]
+
+    owner_colors = {"mine": "#1f77b4", "christine": "#ff7f0e"}
+
+    for i, model in enumerate(models_sorted):
+        ax = axes[i]
+        model_df = df[df["model"] == model].sort_values("hint")
+        eci = float(model_df["eci"].iloc[0])
+
+        for owner in ["mine", "christine"]:
+            owner_df = model_df[model_df["inference_owner"] == owner]
+            if owner_df.empty:
+                continue
+            ax.scatter(
+                owner_df["hint"],
+                owner_df["accuracy"],
+                color=owner_colors[owner],
+                alpha=0.85,
+                s=45,
+            )
+        ax.set_title(f"{model}\neci={eci:.2f}", fontsize=8)
+        ax.set_xlabel("hint")
+        ax.set_ylabel("accuracy")
+        ax.grid(True, alpha=0.3)
+        ax.set_ylim(-0.05, 1.05)
+        ax.set_xlim(-0.05, 1.05)
+
+    for i in range(n_models, len(axes)):
+        axes[i].set_visible(False)
+
+    legend_handles = [
+        Line2D([], [], marker="o", linestyle="", color=owner_colors["mine"], label="mine"),
+        Line2D([], [], marker="o", linestyle="", color=owner_colors["christine"], label="christine"),
+    ]
+    fig.legend(handles=legend_handles, loc="upper right", fontsize=9)
+    fig.suptitle(title, fontsize=12)
+    plt.tight_layout()
+    out_path = output_dir / out_name
+    fig.savefig(out_path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
 def run_aime_raw_sanity_plot(
     *,
     base_folder: Path,
@@ -250,36 +376,64 @@ def run_aime_raw_sanity_plot(
 
 def main() -> None:
     project_root = Path(__file__).resolve().parents[2]
+    base_folder = project_root / "christine_experiments/20251113/results"
+    eci_file = project_root / "christine_experiments/20260129_fitting/eci_model_capabilities.csv"
+    output_dir = Path(__file__).resolve().parent
+    all_models = [
+        "Qwen2.5-1.5B-Instruct",
+        "Qwen2.5-3B-Instruct",
+        "Qwen2.5-7B-Instruct",
+        "Qwen2.5-14B-Instruct",
+        "Qwen2.5-32B-Instruct",
+        "Qwen3-0.6B",
+        "Qwen3-1.7B",
+        "Qwen3-4B",
+        "Qwen3-8B",
+        "Qwen3-14B",
+        "Qwen3-32B",
+        "Llama-3.1-8B-Instruct",
+        "Llama-3.1-70B-Instruct",
+        "gemma-3-4b-it",
+        "gemma-3-12b-it",
+        "gemma-3-27b-it",
+    ]
+    hint_fractions = [round(i / 20.0, 2) for i in range(21)]
 
     out_eci, out_by_model = run_aime_raw_sanity_plot(
-        base_folder=project_root / "christine_experiments/20251113/results",
-        eci_file=project_root / "christine_experiments/20260129_fitting/eci_model_capabilities.csv",
+        base_folder=base_folder,
+        eci_file=eci_file,
         eval_name="aime",
         solver="solution_intext_masked",
         condition="0shot",
-        output_dir=Path(__file__).resolve().parent,
-        all_models=[
-            "Qwen2.5-1.5B-Instruct",
-            "Qwen2.5-3B-Instruct",
-            "Qwen2.5-7B-Instruct",
-            "Qwen2.5-14B-Instruct",
-            "Qwen2.5-32B-Instruct",
-            "Qwen3-0.6B",
-            "Qwen3-1.7B",
-            "Qwen3-4B",
-            "Qwen3-8B",
-            "Qwen3-14B",
-            "Qwen3-32B",
-            "Llama-3.1-8B-Instruct",
-            "Llama-3.1-70B-Instruct",
-            "gemma-3-4b-it",
-            "gemma-3-12b-it",
-            "gemma-3-27b-it",
-        ],
-        hint_fractions=[round(i / 20.0, 2) for i in range(21)],
+        output_dir=output_dir,
+        all_models=all_models,
+        hint_fractions=hint_fractions,
     )
+
+    debug_df = load_results_df(
+        base_folder=base_folder,
+        eci_file=eci_file,
+        eval_name="aime",
+        solver="solution_intext_masked",
+        condition="0shot",
+        all_models=all_models,
+        hint_fractions=hint_fractions,
+    )
+    debug_df = add_inference_owner(
+        df=debug_df,
+        base_folder=base_folder,
+        eval_name="aime",
+        solver="solution_intext_masked",
+        condition="0shot",
+    )
+    out_by_owner = plot_accuracy_vs_hint_by_model_raw_points_by_owner(
+        df=debug_df,
+        output_dir=output_dir,
+    )
+
     print(f"Wrote: {out_eci}")
     print(f"Wrote: {out_by_model}")
+    print(f"Wrote: {out_by_owner}")
 
 
 if __name__ == "__main__":
