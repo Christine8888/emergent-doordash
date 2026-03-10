@@ -83,7 +83,12 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--results_dir", type=str, default="./results")
     parser.add_argument("--debug", action="store_true", help="Enable Inspect HTTP debug logging")
+    parser.add_argument("--chunk_size", type=int, default=None,
+                        help="Checkpoint chunk size in instances (sample*epoch)")
     args = parser.parse_args()
+
+    if args.chunk_size is not None:
+        os.environ["EXPERIMENT_CHECKPOINT_CHUNK_INSTANCES"] = str(args.chunk_size)
 
     experiments_to_run = list(EXPERIMENTS.keys()) if args.experiment == "all" else [args.experiment]
 
