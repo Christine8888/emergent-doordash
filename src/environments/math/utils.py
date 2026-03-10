@@ -227,6 +227,33 @@ def extract_answer(completion: str) -> str:
     return completion.strip()
 
 
+def extract_answer_fixed(completion: str) -> str:
+    r"""
+    Improved answer extraction for math-style tasks.
+
+    Differences from extract_answer():
+    - Supports markdown-decorated answer lines such as "**ANSWER: $432$**"
+    - Supports boxed answers inside answer lines, e.g. "ANSWER: $\boxed{432}$"
+    - Applies latex/markdown cleanup consistently to boxed fallbacks
+    """
+    # Match answer lines, allowing leading markdown decoration.
+    pattern = r'(?im)(?:^|\n)\s*(?:[\*\-_`>#]+\s*)?ANSWER[ \t]*:[ \t]*([^\n]+)'
+    matches = list(re.finditer(pattern, completion, re.MULTILINE))
+    if matches:
+        raw_answer = matches[-1].group(1)
+        boxed_answer = last_boxed_only_string(raw_answer)
+        if boxed_answer:
+            return clean_latex_and_markdown(remove_boxed(boxed_answer))
+        return clean_latex_and_markdown(raw_answer)
+
+    # Fall back to last boxed expression in the completion.
+    boxed_answer = last_boxed_only_string(completion)
+    if boxed_answer:
+        return clean_latex_and_markdown(remove_boxed(boxed_answer))
+
+    return completion.strip()
+
+
 def record_to_sample(record: dict[str, Any]) -> Sample:
     return Sample(
         id=record.get("id"),
