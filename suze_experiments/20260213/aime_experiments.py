@@ -613,7 +613,8 @@ python suze_experiments/20260213/aime_experiments.py \
   --cpus_per_task 100 \
   --mem_gb 1000 \
   --enable_checkpoint \
-  --checkpoint_chunk_instances 1000
+  --model Llama-3.1-70B-Instruct \
+  --checkpoint_chunk_instances 900
 
 
 USE THIS FOR NON-PREEMPTIBLE

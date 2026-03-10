@@ -25,6 +25,7 @@ core
 *.jsonl
 wandb/*
 *.json
+suze_experiments/20260303_finding_defaults/compare_outliers_cache.json
 !aime_cot.json
 !aime_hints.json
 
