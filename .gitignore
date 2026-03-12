@@ -36,3 +36,7 @@ submitit_logs/
 christine_experiments/20251010_data/openthoughts_sonnet45.jsonl
 
 *.ckpt.json
+
+# Regrade/collection outputs
+suze_experiments/20260312/corpus/
+suze_experiments/20260312/corpus_smoke/

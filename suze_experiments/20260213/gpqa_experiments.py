@@ -165,7 +165,7 @@ def run_experiment(
         config=DEFAULT_CONFIG.override(max_connections=max_connections),
         wait=True,
         poll_interval=300,
-        max_retries=3,
+        max_retries=1,
         debug=debug,
         max_jobs=max_jobs,
     )

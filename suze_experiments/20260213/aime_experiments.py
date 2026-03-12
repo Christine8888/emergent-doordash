@@ -431,7 +431,7 @@ def run_experiment(
             config=job_config,
             wait=True,
             poll_interval=300,
-            max_retries=3,
+            max_retries=1,
             debug=debug,
             submit=False,
             num_gpus=num_gpus,
@@ -442,7 +442,7 @@ def run_experiment(
             max_concurrent=max_jobs,
             config=job_config,
             poll_interval=300,
-            max_retries=3,
+            max_retries=1,
         )
     else:
         launch_experiment(
@@ -454,7 +454,7 @@ def run_experiment(
             config=job_config,
             wait=True,
             poll_interval=300,
-            max_retries=3,
+            max_retries=1,
             debug=debug,
             num_gpus=num_gpus,
         )
@@ -598,23 +598,24 @@ python suze_experiments/20260213/aime_experiments.py \
   --results_dir christine_experiments/20251113/results \
   --max_jobs 200 \
   --enable_checkpoint \
-  --checkpoint_chunk_instances 130 \
-  --sc_loprio
+  --checkpoint_chunk_instances 100 \
+  --sc_loprio \
+  --max_connections 48 
 
 MISO NON-PREEMPTIBLE, DP=8
 python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results \
-  --max_jobs 10 \
-  --max_connections 100 \
-  --cluster miso \
-  --num_gpus 8 \
-  --cpus_per_task 100 \
-  --mem_gb 1000 \
-  --enable_checkpoint \
-  --model Llama-3.1-70B-Instruct \
-  --checkpoint_chunk_instances 900
+      --experiment all \
+      --epochs 10 \
+      --results_dir christine_experiments/20251113/results \
+      --max_jobs 10 \
+      --max_connections 90 \
+      --cluster miso \
+      --num_gpus 8 \
+      --cpus_per_task 100 \
+      --mem_gb 1000 \
+      --enable_checkpoint \
+      --model  Qwen3-14B \
+      --checkpoint_chunk_instances 600
 
 
 USE THIS FOR NON-PREEMPTIBLE
@@ -622,10 +623,11 @@ python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 1 \
+  --max_jobs 10 \
   --cluster sphinx \
   --enable_checkpoint \
-  --checkpoint_chunk_instances 666 
+  --checkpoint_chunk_instances 100 \
+  --max_connections 48 
 
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
