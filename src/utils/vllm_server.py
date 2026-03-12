@@ -13,6 +13,7 @@ import socket
 import logging
 import signal
 import threading
+from collections import deque
 from typing import Optional
 import requests
 
@@ -104,6 +105,19 @@ class vLLMServer:
 
         self.process: Optional[subprocess.Popen] = None
         self._stop_monitor = threading.Event()
+        self._log_tail_lock = threading.Lock()
+        tail_lines_env = os.environ.get("EXPERIMENT_VLLM_LOG_TAIL_LINES", "400")
+        try:
+            tail_lines = max(50, int(tail_lines_env))
+        except Exception:
+            tail_lines = 400
+        self._stdout_tail = deque(maxlen=tail_lines)
+        self._stderr_tail = deque(maxlen=tail_lines)
+        # Keep legacy hard-exit behavior opt-in to aid debugging by default.
+        self._force_exit_on_unexpected_death = (
+            os.environ.get("EXPERIMENT_VLLM_FORCE_EXIT_ON_DEATH", "0").strip().lower()
+            in {"1", "true", "yes"}
+        )
 
     def _find_free_port(self) -> int:
         """Find a free port."""
@@ -116,8 +130,12 @@ class vLLMServer:
         """Monitor server process, force exit if server dies."""
         while not self._stop_monitor.is_set():
             if self.process and self.process.poll() is not None:
-                logger.error(f"vLLM server died with exit code {self.process.returncode}")
-                _force_exit()
+                rc = self.process.returncode
+                logger.error(f"vLLM server died with exit code {rc}")
+                self.log_recent_output(max_lines=120)
+                if self._force_exit_on_unexpected_death:
+                    _force_exit()
+                return
             self._stop_monitor.wait(5)
 
     def start(self, health_timeout: int = 1200):
@@ -172,7 +190,13 @@ class vLLMServer:
         def stream_output(pipe, prefix):
             for line in iter(pipe.readline, ''):
                 if line:
-                    logger.info(f"[vLLM {prefix}] {line.rstrip()}")
+                    text = line.rstrip()
+                    with self._log_tail_lock:
+                        if prefix == "stdout":
+                            self._stdout_tail.append(text)
+                        else:
+                            self._stderr_tail.append(text)
+                    logger.info(f"[vLLM {prefix}] {text}")
 
         # Stream stdout
         stdout_thread = threading.Thread(
@@ -243,6 +267,20 @@ class vLLMServer:
             self.process.wait()
 
         self.process = None
+
+    def log_recent_output(self, max_lines: int = 80):
+        """Log a recent tail of vLLM stdout/stderr for crash diagnosis."""
+        with self._log_tail_lock:
+            out_lines = list(self._stdout_tail)[-max_lines:]
+            err_lines = list(self._stderr_tail)[-max_lines:]
+        if out_lines:
+            logger.error("Recent vLLM stdout tail (%d lines):", len(out_lines))
+            for line in out_lines:
+                logger.error("  [stdout] %s", line)
+        if err_lines:
+            logger.error("Recent vLLM stderr tail (%d lines):", len(err_lines))
+            for line in err_lines:
+                logger.error("  [stderr] %s", line)
 
     def __enter__(self):
         """Context manager entry."""

@@ -15,6 +15,7 @@ from inspect_ai import eval as inspect_eval
 from utils.inspect_utils import extract_scores_from_log, compute_bootstrap_over_epochs, compute_pass_at_k
 
 logger = logging.getLogger(__name__)
+_LAST_CONFIGURED_OPENAI_TIMEOUT: float | None = None
 
 
 class _TimestampStepsStream:
@@ -124,11 +125,78 @@ def _timestamp_steps_stdout(enabled: bool = True, label: str = ""):
         sys.stdout = old_stdout
 
 
-def setup_vllm_env(port: int, model_name: str = None):
-    """Set vLLM environment variables."""
+def _configure_inspect_openai_http_timeout(timeout_seconds: float) -> None:
+    """Patch Inspect/OpenAI default HTTP timeout for OpenAI-compatible clients."""
+    global _LAST_CONFIGURED_OPENAI_TIMEOUT
+    if (
+        _LAST_CONFIGURED_OPENAI_TIMEOUT is not None
+        and abs(_LAST_CONFIGURED_OPENAI_TIMEOUT - timeout_seconds) < 1e-9
+    ):
+        return
+    try:
+        import httpx
+        import inspect_ai.model._openai as inspect_openai
+
+        timeout_obj = httpx.Timeout(timeout=timeout_seconds, connect=5.0)
+        inspect_openai.DEFAULT_TIMEOUT = timeout_obj
+
+        # Keep OpenAI constants aligned for easier debugging output.
+        try:
+            import openai._constants as openai_constants
+
+            openai_constants.DEFAULT_TIMEOUT = timeout_obj
+        except Exception:
+            pass
+
+        _LAST_CONFIGURED_OPENAI_TIMEOUT = timeout_seconds
+        logger.info(
+            "Configured Inspect/OpenAI HTTP client timeout to %.1fs",
+            timeout_seconds,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to configure Inspect/OpenAI HTTP timeout (timeout=%.1fs): %s",
+            timeout_seconds,
+            exc,
+        )
+
+
+def _resolve_openai_timeout_seconds(explicit_timeout: int | float | None) -> float:
+    if explicit_timeout is not None:
+        try:
+            timeout = float(explicit_timeout)
+            if timeout > 0:
+                return timeout
+        except Exception:
+            pass
+
+    raw = os.environ.get("OPENAI_TIMEOUT")
+    if raw is not None:
+        try:
+            timeout = float(raw)
+            if timeout > 0:
+                return timeout
+            logger.warning("OPENAI_TIMEOUT=%r must be > 0; using 3600", raw)
+        except Exception:
+            logger.warning("Invalid OPENAI_TIMEOUT=%r; using 3600", raw)
+
+    return 3600.0
+
+
+def setup_vllm_env(
+    port: int,
+    model_name: str = None,
+    *,
+    openai_client_timeout: int | float | None = None,
+):
+    """Set vLLM environment variables and configure OpenAI-compatible HTTP timeout."""
     os.environ["VLLM_BASE_URL"] = f"http://localhost:{port}/v1"
     os.environ["VLLM_API_KEY"] = "local"
-    os.environ.setdefault("OPENAI_TIMEOUT", "3600")
+
+    timeout_seconds = _resolve_openai_timeout_seconds(openai_client_timeout)
+    os.environ["OPENAI_TIMEOUT"] = str(timeout_seconds)
+    _configure_inspect_openai_http_timeout(timeout_seconds)
+
     if model_name:
         os.environ["INSPECT_EVAL_MODEL"] = f"vllm/{model_name}"
 
@@ -280,7 +348,11 @@ def run_eval_with_vllm(
         max_num_batched_tokens=config.max_num_batched_tokens,
         n_gpus=n_gpus,
     ) as server:
-        setup_vllm_env(server.port, model_name)
+        setup_vllm_env(
+            server.port,
+            model_name,
+            openai_client_timeout=config.timeout,
+        )
         os.environ["VLLM_MAX_MODEL_LEN"] = str(config.max_model_len)
 
         # Create task after env is set (some evals like niah call get_model() at creation)

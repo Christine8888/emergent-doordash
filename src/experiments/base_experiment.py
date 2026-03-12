@@ -351,7 +351,7 @@ class Experiment(ABC):
         self.timeout = timeout
         self.max_connections = max_connections
 
-        setup_vllm_env(vllm_port)
+        setup_vllm_env(vllm_port, openai_client_timeout=timeout)
 
     @abstractmethod
     def build_task(self, hint_fraction: float, sample_ids: set[str]):
@@ -652,8 +652,11 @@ class Experiment(ABC):
         )
         resume_no_chunk = os.environ.get("EXPERIMENT_RESUME_NO_CHUNK") == "1"
 
-        def _extract_chunk_correctness(eval_log0, *, chunk_id_set: set[str]) -> tuple[dict[str, list[int]], set[str], dict[str, int]]:
+        def _extract_chunk_correctness(
+            eval_log0, *, chunk_id_set: set[str]
+        ) -> tuple[dict[str, list[int]], set[str], dict[str, int], dict[str, str]]:
             per_chunk: dict[str, list[int]] = defaultdict(list)
+            failed_error_messages: dict[str, str] = {}
             for sample in getattr(eval_log0, "samples", []) or []:
                 sid = getattr(sample, "id", None)
                 if sid is None:
@@ -661,6 +664,19 @@ class Experiment(ABC):
                 sid = str(sid)
                 if sid not in chunk_id_set:
                     continue
+
+                err_obj = getattr(sample, "error", None)
+                if err_obj:
+                    if isinstance(err_obj, dict):
+                        msg = err_obj.get("message") or str(err_obj)
+                        tb = err_obj.get("traceback")
+                        if isinstance(tb, str) and tb:
+                            tb_first = tb.strip().splitlines()[-1].strip()
+                            msg = f"{msg} | trace_tail={tb_first}"
+                    else:
+                        msg = str(err_obj)
+                    failed_error_messages.setdefault(sid, str(msg))
+
                 scores = getattr(sample, "scores", None)
                 if not isinstance(scores, dict) or not scores:
                     continue
@@ -680,7 +696,7 @@ class Experiment(ABC):
             failed = chunk_id_set - set(out.keys())
             for sid in failed:
                 incomplete_counts.setdefault(sid, 0)
-            return out, failed, incomplete_counts
+            return out, failed, incomplete_counts, failed_error_messages
 
         def _enqueue_failed(ids: list[str]) -> int:
             added = 0
@@ -725,7 +741,7 @@ class Experiment(ABC):
             chunk: list[str],
             max_connections: int,
             remaining_regular: int,
-        ) -> tuple[dict[str, list[int]], set[str], dict[str, int]]:
+        ) -> tuple[dict[str, list[int]], set[str], dict[str, int], dict[str, str]]:
             chunk_set = set(chunk)
             logger.info(
                 "Running chunk: queue=%s samples=%d instances=%d remaining_regular=%d remaining_failed=%d max_connections=%d",
@@ -752,11 +768,11 @@ class Experiment(ABC):
                     retry_on_error=eval_retry_on_error,  # sample-level retries
                     metadata=metadata,
                 )
-            chunk_correct, failed_ids, failed_epoch_counts = _extract_chunk_correctness(
+            chunk_correct, failed_ids, failed_epoch_counts, failed_error_messages = _extract_chunk_correctness(
                 eval_log[0], chunk_id_set=chunk_set
             )
             per.update(chunk_correct)
-            return chunk_correct, failed_ids, failed_epoch_counts
+            return chunk_correct, failed_ids, failed_epoch_counts, failed_error_messages
 
         # Run remaining samples in chunks, checkpointing after each chunk.
         if resume_no_chunk:
@@ -787,7 +803,7 @@ class Experiment(ABC):
             )
             while batch_pending:
                 round_idx += 1
-                _, failed_ids, failed_epoch_counts = _run_chunk(
+                _, failed_ids, failed_epoch_counts, failed_error_messages = _run_chunk(
                     queue_type=f"regular[{round_idx}]",
                     chunk=batch_pending,
                     max_connections=self.max_connections,
@@ -805,34 +821,38 @@ class Experiment(ABC):
                     attempts = sample_retry_counts.get(sid, 0) + 1
                     sample_retry_counts[sid] = attempts
                     seen_epochs = failed_epoch_counts.get(sid, 0)
+                    err_msg = failed_error_messages.get(sid)
                     if attempts <= max_sample_retries and needs_more:
                         retry_now.append(sid)
                         logger.warning(
-                            "Sample %s incomplete (%d/%d epochs); retrying in regular batch (%d/%d)",
+                            "Sample %s incomplete (%d/%d epochs); retrying in regular batch (%d/%d)%s",
                             sid,
                             seen_epochs,
                             epochs,
                             attempts,
                             max_sample_retries,
+                            f"; last_error={err_msg}" if err_msg else "",
                         )
                     elif attempts <= max_sample_retries:
                         deferred_now.append(sid)
                         logger.warning(
-                            "Sample %s incomplete (%d/%d epochs); deferring to bad-sample queue (%d/%d)",
+                            "Sample %s incomplete (%d/%d epochs); deferring to bad-sample queue (%d/%d)%s",
                             sid,
                             seen_epochs,
                             epochs,
                             attempts,
                             max_sample_retries,
+                            f"; last_error={err_msg}" if err_msg else "",
                         )
                     else:
                         exhausted_ids.append(sid)
                         logger.error(
-                            "Sample %s incomplete (%d/%d epochs) after %d retries; marking exhausted",
+                            "Sample %s incomplete (%d/%d epochs) after %d retries; marking exhausted%s",
                             sid,
                             seen_epochs,
                             epochs,
                             attempts,
+                            f"; last_error={err_msg}" if err_msg else "",
                         )
 
                 if needs_more and retry_now and newly_completed == 0:
@@ -879,7 +899,7 @@ class Experiment(ABC):
             )
         while deferred_failed_queue:
             failed_chunk = _pop_failed_chunk(failed_retry_batch_size)
-            _, failed_ids, failed_epoch_counts = _run_chunk(
+            _, failed_ids, failed_epoch_counts, failed_error_messages = _run_chunk(
                 queue_type="failed_retry",
                 chunk=failed_chunk,
                 max_connections=failed_retry_max_connections,
@@ -892,24 +912,27 @@ class Experiment(ABC):
                 attempts = sample_retry_counts.get(sid, 0) + 1
                 sample_retry_counts[sid] = attempts
                 seen_epochs = failed_epoch_counts.get(sid, 0)
+                err_msg = failed_error_messages.get(sid)
                 if attempts <= max_sample_retries:
                     requeued_ids.append(sid)
                     logger.warning(
-                        "Bad-sample %s incomplete (%d/%d epochs); requeueing retry %d/%d",
+                        "Bad-sample %s incomplete (%d/%d epochs); requeueing retry %d/%d%s",
                         sid,
                         seen_epochs,
                         epochs,
                         attempts,
                         max_sample_retries,
+                        f"; last_error={err_msg}" if err_msg else "",
                     )
                 else:
                     exhausted_ids.append(sid)
                     logger.error(
-                        "Bad-sample %s incomplete (%d/%d epochs) after %d retries; marking exhausted",
+                        "Bad-sample %s incomplete (%d/%d epochs) after %d retries; marking exhausted%s",
                         sid,
                         seen_epochs,
                         epochs,
                         attempts,
+                        f"; last_error={err_msg}" if err_msg else "",
                     )
 
             _enqueue_failed(requeued_ids)

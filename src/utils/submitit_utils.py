@@ -404,6 +404,13 @@ def run_single_experiment(
         )
         try:
             return experiment.run(hint_fraction=hint_fraction, fewshot=fewshot, epochs=epochs, results_dir=results_dir)
+        except Exception:
+            logger.exception("Experiment run failed; dumping recent vLLM logs for diagnosis")
+            try:
+                server.log_recent_output(max_lines=160)
+            except Exception:
+                logger.exception("Failed to dump recent vLLM logs")
+            raise
         finally:
             if stop_event is not None and poller is not None:
                 stop_event.set()
