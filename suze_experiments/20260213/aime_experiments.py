@@ -511,6 +511,27 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--regular_completion_fraction",
+        type=float,
+        default=0.9,
+        help=(
+            "During regular batches, keep retrying only until this fraction of the batch is complete; "
+            "remaining stragglers are deferred to a bad-sample queue."
+        ),
+    )
+    parser.add_argument(
+        "--failed_retry_batch_size",
+        type=int,
+        default=5,
+        help="Batch size for deferred bad-sample retries (tail phase).",
+    )
+    parser.add_argument(
+        "--failed_retry_max_connections",
+        type=int,
+        default=4,
+        help="Max connections to use during deferred bad-sample retries (tail phase).",
+    )
+    parser.add_argument(
         "--enable_checkpoint",
         action="store_true",
         help="Enable resumable checkpointing/chunking (default: disabled).",
@@ -564,6 +585,9 @@ if __name__ == "__main__":
         else:
             os.environ["EXPERIMENT_DISABLE_CHECKPOINT"] = "1"
             os.environ.pop("EXPERIMENT_RESUME_NO_CHUNK", None)
+        os.environ["EXPERIMENT_REGULAR_CHUNK_COMPLETION_FRACTION"] = str(args.regular_completion_fraction)
+        os.environ["EXPERIMENT_FAILED_RETRY_BATCH_SIZE"] = str(max(1, args.failed_retry_batch_size))
+        os.environ["EXPERIMENT_FAILED_RETRY_MAX_CONNECTIONS"] = str(max(1, args.failed_retry_max_connections))
 
         with ThreadPoolExecutor(max_workers=len(experiments_to_run)) as executor:
             futures = [
@@ -608,14 +632,17 @@ python suze_experiments/20260213/aime_experiments.py \
       --epochs 10 \
       --results_dir christine_experiments/20251113/results \
       --max_jobs 10 \
-      --max_connections 90 \
+      --max_connections 100 \
       --cluster miso \
       --num_gpus 8 \
-      --cpus_per_task 100 \
+      --cpus_per_task 120 \
       --mem_gb 1000 \
       --enable_checkpoint \
-      --model  Qwen3-14B \
-      --checkpoint_chunk_instances 600
+      --checkpoint_chunk_instances 1200 \
+      --model Qwen3-32B \
+      --regular_completion_fraction 0.85 \
+      --failed_retry_batch_size 20 \
+      --failed_retry_max_connections 20
 
 
 USE THIS FOR NON-PREEMPTIBLE
@@ -626,8 +653,11 @@ python suze_experiments/20260213/aime_experiments.py \
   --max_jobs 10 \
   --cluster sphinx \
   --enable_checkpoint \
-  --checkpoint_chunk_instances 100 \
-  --max_connections 48 
+  --checkpoint_chunk_instances 200 \
+  --max_connections 48 \
+  --regular_completion_fraction 0.85 \
+  --failed_retry_batch_size 10 \
+  --failed_retry_max_connections 10
 
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \

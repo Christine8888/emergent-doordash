@@ -36,6 +36,8 @@ _EVAL_HTTP_MAX_RETRIES = 1
 _EVAL_SAMPLE_RETRY_ON_ERROR = 1
 _MAX_SAMPLE_RETRIES = 3
 _FAILED_RETRY_BATCH_SIZE = 5
+_FAILED_RETRY_MAX_CONNECTIONS = 4
+_REGULAR_CHUNK_COMPLETION_FRACTION = 0.9
 
 
 def _normalize_repo_relative_path(path: str | None) -> str | None:
@@ -552,7 +554,59 @@ class Experiment(ABC):
                 continue
 
         max_sample_retries = _MAX_SAMPLE_RETRIES
-        failed_retry_batch_size = _FAILED_RETRY_BATCH_SIZE
+
+        failed_retry_batch_size_env = os.environ.get("EXPERIMENT_FAILED_RETRY_BATCH_SIZE")
+        try:
+            failed_retry_batch_size = (
+                int(failed_retry_batch_size_env)
+                if failed_retry_batch_size_env is not None
+                else _FAILED_RETRY_BATCH_SIZE
+            )
+            if failed_retry_batch_size < 1:
+                raise ValueError
+        except Exception:
+            logger.warning(
+                "Invalid EXPERIMENT_FAILED_RETRY_BATCH_SIZE=%r; using %d",
+                failed_retry_batch_size_env,
+                _FAILED_RETRY_BATCH_SIZE,
+            )
+            failed_retry_batch_size = _FAILED_RETRY_BATCH_SIZE
+
+        regular_completion_fraction_env = os.environ.get("EXPERIMENT_REGULAR_CHUNK_COMPLETION_FRACTION")
+        try:
+            regular_completion_fraction = (
+                float(regular_completion_fraction_env)
+                if regular_completion_fraction_env is not None
+                else _REGULAR_CHUNK_COMPLETION_FRACTION
+            )
+            if not (0.0 < regular_completion_fraction <= 1.0):
+                raise ValueError
+        except Exception:
+            logger.warning(
+                "Invalid EXPERIMENT_REGULAR_CHUNK_COMPLETION_FRACTION=%r; using %.2f",
+                regular_completion_fraction_env,
+                _REGULAR_CHUNK_COMPLETION_FRACTION,
+            )
+            regular_completion_fraction = _REGULAR_CHUNK_COMPLETION_FRACTION
+
+        failed_retry_max_connections_env = os.environ.get("EXPERIMENT_FAILED_RETRY_MAX_CONNECTIONS")
+        default_failed_retry_max_connections = max(1, min(self.max_connections, _FAILED_RETRY_MAX_CONNECTIONS))
+        try:
+            failed_retry_max_connections = (
+                int(failed_retry_max_connections_env)
+                if failed_retry_max_connections_env is not None
+                else default_failed_retry_max_connections
+            )
+            if failed_retry_max_connections < 1:
+                raise ValueError
+        except Exception:
+            logger.warning(
+                "Invalid EXPERIMENT_FAILED_RETRY_MAX_CONNECTIONS=%r; using %d",
+                failed_retry_max_connections_env,
+                default_failed_retry_max_connections,
+            )
+            failed_retry_max_connections = default_failed_retry_max_connections
+        failed_retry_max_connections = min(self.max_connections, failed_retry_max_connections)
 
         # Sanitize checkpoint entries (drop malformed / wrong-length / no-longer-needed).
         sanitized: dict[str, list[int]] = {}
@@ -567,14 +621,35 @@ class Experiment(ABC):
                 continue
         per = sanitized
 
+        deferred_retry_raw = state.get("deferred_failed_sample_ids", []) or []
+        deferred_failed_set: set[str] = set()
+        deferred_failed_queue: deque[str] = deque()
+        for sid in deferred_retry_raw:
+            if not isinstance(sid, str):
+                continue
+            if sid not in sample_ids_set or sid in per or sid in deferred_failed_set:
+                continue
+            deferred_failed_queue.append(sid)
+            deferred_failed_set.add(sid)
+
         completed_ids = set(per.keys())
-        remaining_ids = [sid for sid in all_sample_ids if sid not in completed_ids]
-        failed_retry_ids: list[str] = []
+        remaining_ids = [
+            sid
+            for sid in all_sample_ids
+            if sid not in completed_ids and sid not in deferred_failed_set
+        ]
         logger.info(f"Checkpoint progress: {len(completed_ids)}/{len(all_sample_ids)} samples complete; remaining={len(remaining_ids)}")
         logger.info(f"Checkpoint file: {ckpt_path}")
         logger.info(f"Per-sample retry budget: {max_sample_retries}")
         logger.info(f"Eval retry knobs: max_retries={eval_max_retries}, retry_on_error={eval_retry_on_error}")
-        logger.info(f"Failed-sample retry batch size: {failed_retry_batch_size}")
+        logger.info(
+            "Chunk policy: regular_batch=%d target_fraction=%.2f "
+            "failed_batch=%d failed_max_connections=%d",
+            chunk_size,
+            regular_completion_fraction,
+            failed_retry_batch_size,
+            failed_retry_max_connections,
+        )
         resume_no_chunk = os.environ.get("EXPERIMENT_RESUME_NO_CHUNK") == "1"
 
         def _extract_chunk_correctness(eval_log0, *, chunk_id_set: set[str]) -> tuple[dict[str, list[int]], set[str], dict[str, int]]:
@@ -607,36 +682,61 @@ class Experiment(ABC):
                 incomplete_counts.setdefault(sid, 0)
             return out, failed, incomplete_counts
 
-        # Run remaining samples in chunks, checkpointing after each chunk.
-        if resume_no_chunk:
-            # Finish all remaining samples in one eval call while still honoring existing checkpoint progress.
-            chunk_size = max(1, len(remaining_ids))
-            logger.info(
-                "Resume-no-chunk mode: finishing in one run (remaining_samples=%d, remaining_instances=%d)",
-                len(remaining_ids),
-                len(remaining_ids) * int(epochs),
-            )
-        while remaining_ids or failed_retry_ids:
-            if failed_retry_ids:
-                chunk = failed_retry_ids[:failed_retry_batch_size]
-                failed_retry_ids = failed_retry_ids[failed_retry_batch_size:]
-                queue_type = "failed_retry"
-            else:
-                chunk = remaining_ids[:chunk_size]
-                remaining_ids = remaining_ids[chunk_size:]
-                queue_type = "regular"
-            chunk_set = set(chunk)
+        def _enqueue_failed(ids: list[str]) -> int:
+            added = 0
+            for sid in ids:
+                if sid in per or sid in deferred_failed_set:
+                    continue
+                deferred_failed_queue.append(sid)
+                deferred_failed_set.add(sid)
+                added += 1
+            return added
 
+        def _pop_failed_chunk(limit: int) -> list[str]:
+            out: list[str] = []
+            take = min(limit, len(deferred_failed_queue))
+            for _ in range(take):
+                sid = deferred_failed_queue.popleft()
+                deferred_failed_set.discard(sid)
+                out.append(sid)
+            return out
+
+        def _save_checkpoint() -> None:
+            state["updated_at"] = _now_iso()
+            state["per_sample_epoch_correct"] = per
+            state["completed_sample_ids"] = sorted(per.keys())
+            state["completed_samples"] = int(len(per) * epochs)
+            state["sample_retry_counts"] = sample_retry_counts
+            state["deferred_failed_sample_ids"] = list(deferred_failed_queue)
+            _atomic_write_json(ckpt_path, state)
+
+            msg = (
+                f"[{_now_iso()}] Checkpoint saved: "
+                f"completed={len(per)}/{len(all_sample_ids)} samples "
+                f"deferred_failed={len(deferred_failed_queue)} "
+                f"-> {ckpt_path}"
+            )
+            logger.info(msg)
+            print(msg, flush=True)
+
+        def _run_chunk(
+            *,
+            queue_type: str,
+            chunk: list[str],
+            max_connections: int,
+            remaining_regular: int,
+        ) -> tuple[dict[str, list[int]], set[str], dict[str, int]]:
+            chunk_set = set(chunk)
             logger.info(
-                "Running chunk: queue=%s samples=%d instances=%d remaining_regular=%d remaining_failed=%d",
+                "Running chunk: queue=%s samples=%d instances=%d remaining_regular=%d remaining_failed=%d max_connections=%d",
                 queue_type,
                 len(chunk),
                 len(chunk) * int(epochs),
-                len(remaining_ids),
-                len(failed_retry_ids),
+                remaining_regular,
+                len(deferred_failed_queue),
+                max_connections,
             )
             task = self.build_task(hint_fraction=hint_fraction, sample_ids=chunk_set)
-
             _label = f"{self.model_name} | hint={hint_fraction:.2f}"
             with _timestamp_steps_stdout(enabled=True, label=_label):
                 eval_log = eval(
@@ -645,16 +745,146 @@ class Experiment(ABC):
                     log_dir=str(output_dir),
                     epochs=epochs,
                     limit=None,
-                    max_connections=self.max_connections,
+                    max_connections=max_connections,
                     max_retries=eval_max_retries,  # HTTP-level retries
                     display="plain",
                     fail_on_error=False,
                     retry_on_error=eval_retry_on_error,  # sample-level retries
                     metadata=metadata,
                 )
-
-            chunk_correct, failed_ids, failed_epoch_counts = _extract_chunk_correctness(eval_log[0], chunk_id_set=chunk_set)
+            chunk_correct, failed_ids, failed_epoch_counts = _extract_chunk_correctness(
+                eval_log[0], chunk_id_set=chunk_set
+            )
             per.update(chunk_correct)
+            return chunk_correct, failed_ids, failed_epoch_counts
+
+        # Run remaining samples in chunks, checkpointing after each chunk.
+        if resume_no_chunk:
+            # Finish all remaining samples in one eval call while still honoring existing checkpoint progress.
+            chunk_size = max(1, len(remaining_ids))
+            regular_completion_fraction = 1.0
+            logger.info(
+                "Resume-no-chunk mode: finishing in one run (remaining_samples=%d, remaining_instances=%d)",
+                len(remaining_ids),
+                len(remaining_ids) * int(epochs),
+            )
+        while remaining_ids:
+            regular_batch = remaining_ids[:chunk_size]
+            remaining_ids = remaining_ids[chunk_size:]
+            batch_target = min(
+                len(regular_batch),
+                max(1, math.floor(len(regular_batch) * regular_completion_fraction)),
+            )
+            batch_completed = 0
+            batch_pending = list(regular_batch)
+            round_idx = 0
+
+            logger.info(
+                "Starting regular batch: size=%d target=%d (fraction=%.2f)",
+                len(regular_batch),
+                batch_target,
+                regular_completion_fraction,
+            )
+            while batch_pending:
+                round_idx += 1
+                _, failed_ids, failed_epoch_counts = _run_chunk(
+                    queue_type=f"regular[{round_idx}]",
+                    chunk=batch_pending,
+                    max_connections=self.max_connections,
+                    remaining_regular=len(remaining_ids),
+                )
+                failed_ids_sorted = sorted(failed_ids)
+                newly_completed = len(batch_pending) - len(failed_ids_sorted)
+                batch_completed += newly_completed
+                needs_more = batch_completed < batch_target
+
+                retry_now: list[str] = []
+                deferred_now: list[str] = []
+                exhausted_ids: list[str] = []
+                for sid in failed_ids_sorted:
+                    attempts = sample_retry_counts.get(sid, 0) + 1
+                    sample_retry_counts[sid] = attempts
+                    seen_epochs = failed_epoch_counts.get(sid, 0)
+                    if attempts <= max_sample_retries and needs_more:
+                        retry_now.append(sid)
+                        logger.warning(
+                            "Sample %s incomplete (%d/%d epochs); retrying in regular batch (%d/%d)",
+                            sid,
+                            seen_epochs,
+                            epochs,
+                            attempts,
+                            max_sample_retries,
+                        )
+                    elif attempts <= max_sample_retries:
+                        deferred_now.append(sid)
+                        logger.warning(
+                            "Sample %s incomplete (%d/%d epochs); deferring to bad-sample queue (%d/%d)",
+                            sid,
+                            seen_epochs,
+                            epochs,
+                            attempts,
+                            max_sample_retries,
+                        )
+                    else:
+                        exhausted_ids.append(sid)
+                        logger.error(
+                            "Sample %s incomplete (%d/%d epochs) after %d retries; marking exhausted",
+                            sid,
+                            seen_epochs,
+                            epochs,
+                            attempts,
+                        )
+
+                if needs_more and retry_now and newly_completed == 0:
+                    logger.warning(
+                        "Regular batch made no progress with %d pending retries; deferring them to bad-sample queue",
+                        len(retry_now),
+                    )
+                    deferred_now.extend(retry_now)
+                    retry_now = []
+
+                _enqueue_failed(deferred_now)
+                _save_checkpoint()
+
+                if failed_ids:
+                    logger.warning(
+                        "Regular batch round: completed_in_batch=%d/%d failed=%d retry_now=%d deferred=%d exhausted=%d",
+                        batch_completed,
+                        batch_target,
+                        len(failed_ids),
+                        len(retry_now),
+                        len(deferred_now),
+                        len(exhausted_ids),
+                    )
+                if exhausted_ids:
+                    raise RuntimeError(
+                        f"Exceeded retry budget for {len(exhausted_ids)} samples "
+                        f"(e.g. {exhausted_ids[:5]}). Increase _MAX_SAMPLE_RETRIES in "
+                        "src/experiments/base_experiment.py or lower load "
+                        "(e.g. max_connections/chunk size)."
+                    )
+
+                if batch_completed >= batch_target:
+                    break
+                if not retry_now:
+                    break
+                batch_pending = retry_now
+
+        if deferred_failed_queue:
+            logger.info(
+                "Starting bad-sample phase: queued=%d batch_size=%d max_connections=%d",
+                len(deferred_failed_queue),
+                failed_retry_batch_size,
+                failed_retry_max_connections,
+            )
+        while deferred_failed_queue:
+            failed_chunk = _pop_failed_chunk(failed_retry_batch_size)
+            _, failed_ids, failed_epoch_counts = _run_chunk(
+                queue_type="failed_retry",
+                chunk=failed_chunk,
+                max_connections=failed_retry_max_connections,
+                remaining_regular=len(remaining_ids),
+            )
 
             exhausted_ids: list[str] = []
             requeued_ids: list[str] = []
@@ -663,10 +893,9 @@ class Experiment(ABC):
                 sample_retry_counts[sid] = attempts
                 seen_epochs = failed_epoch_counts.get(sid, 0)
                 if attempts <= max_sample_retries:
-                    failed_retry_ids.append(sid)
                     requeued_ids.append(sid)
                     logger.warning(
-                        "Sample %s incomplete (%d/%d epochs); requeueing retry %d/%d",
+                        "Bad-sample %s incomplete (%d/%d epochs); requeueing retry %d/%d",
                         sid,
                         seen_epochs,
                         epochs,
@@ -676,34 +905,23 @@ class Experiment(ABC):
                 else:
                     exhausted_ids.append(sid)
                     logger.error(
-                        "Sample %s incomplete (%d/%d epochs) after %d retries; marking exhausted",
+                        "Bad-sample %s incomplete (%d/%d epochs) after %d retries; marking exhausted",
                         sid,
                         seen_epochs,
                         epochs,
                         attempts,
                     )
 
-            state["updated_at"] = _now_iso()
-            state["per_sample_epoch_correct"] = per
-            state["completed_sample_ids"] = sorted(per.keys())
-            state["completed_samples"] = int(len(per) * epochs)
-            state["sample_retry_counts"] = sample_retry_counts
-            _atomic_write_json(ckpt_path, state)
-
-            msg = (
-                f"[{_now_iso()}] Checkpoint saved: "
-                f"completed={len(per)}/{len(all_sample_ids)} samples "
-                f"-> {ckpt_path}"
-            )
-            logger.info(msg)
-            print(msg, flush=True)
+            _enqueue_failed(requeued_ids)
+            _save_checkpoint()
 
             if failed_ids:
                 logger.warning(
-                    "Chunk had %d incomplete samples; %d requeued, %d exhausted",
+                    "Bad-sample chunk had %d incomplete samples; %d requeued, %d exhausted, remaining_bad=%d",
                     len(failed_ids),
                     len(requeued_ids),
                     len(exhausted_ids),
+                    len(deferred_failed_queue),
                 )
             if exhausted_ids:
                 raise RuntimeError(
