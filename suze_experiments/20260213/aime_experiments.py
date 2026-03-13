@@ -119,6 +119,20 @@ def _restrict_models_to_cluster(models: list[ModelSpec], cluster: str) -> list[M
     return restricted
 
 
+def _filter_models(models: list[ModelSpec], model: str | None) -> list[ModelSpec]:
+    """Filter models by full path or basename (e.g., Qwen/Qwen3-8B or Qwen3-8B)."""
+    if model is None:
+        return models
+    selected = [m for m in models if m.path == model or os.path.basename(m.path) == model]
+    if selected:
+        return selected
+    available = sorted({os.path.basename(m.path) for m in models})
+    raise ValueError(
+        f"Unknown model {model!r}. Pass full path (e.g. 'Qwen/Qwen3-8B') "
+        f"or basename from: {available}"
+    )
+
+
 def _output_path(
     experiment_class: type[Experiment],
     results_dir: str,
@@ -191,22 +205,98 @@ def _read_ckpt_progress(ckpt_path: Path, *, expected_data_path: str | None = Non
     return None
 
 
+def _normalize_results_dir(path: str | None) -> str | None:
+    """Normalize a results_dir path into a stable absolute string."""
+    if not isinstance(path, str) or not path:
+        return None
+    p = Path(path)
+    if not p.is_absolute():
+        p = REPO_ROOT / p
+    try:
+        return str(p.resolve())
+    except Exception:
+        return str(p)
+
+
+def _get_active_experiment_configs() -> set[tuple[str, str, int, float, str | None]]:
+    """Return active (exp_name, model_name, fewshot, hint_fraction, results_dir) tuples."""
+    import pickle
+    import subprocess
+
+    active_configs: set[tuple[str, str, int, float, str | None]] = set()
+    submitit_folder = Path(DEFAULT_CONFIG.submitit_folder)
+    if not submitit_folder.is_absolute():
+        submitit_folder = REPO_ROOT / submitit_folder
+
+    try:
+        user = os.environ.get("USER", "")
+        cmd = ["squeue", "-h", "-o", "%i"]
+        if user:
+            cmd[1:1] = ["-u", user]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            fallback = subprocess.run(["squeue", "-h", "-o", "%i"], capture_output=True, text=True, timeout=5)
+            if fallback.returncode != 0:
+                logger.warning("Failed to get SLURM queue, proceeding without running/queued filter")
+                return active_configs
+            result = fallback
+        active_job_ids = set(result.stdout.strip().split())
+    except Exception as exc:
+        logger.warning(f"Failed to query SLURM queue ({exc}); proceeding without running/queued filter")
+        return active_configs
+
+    for job_id in active_job_ids:
+        submitted_file = submitit_folder / f"{job_id}_submitted.pkl"
+        if not submitted_file.exists():
+            continue
+        try:
+            with open(submitted_file, "rb") as f:
+                job_info = pickle.load(f)
+            if not hasattr(job_info, "kwargs"):
+                continue
+            kwargs = job_info.kwargs
+            model_path = kwargs.get("model_path", "")
+            model_name = os.path.basename(model_path)
+            fewshot = kwargs.get("fewshot")
+            hint_fraction = kwargs.get("hint_fraction")
+            experiment_class = kwargs.get("experiment_class")
+            exp_name = getattr(experiment_class, "name", None)
+            results_dir = _normalize_results_dir(kwargs.get("results_dir"))
+            if (
+                exp_name
+                and model_name
+                and isinstance(fewshot, int)
+                and isinstance(hint_fraction, (float, int))
+            ):
+                active_configs.add((exp_name, model_name, fewshot, float(hint_fraction), results_dir))
+        except Exception:
+            # Best effort only; ignore unreadable pickle entries.
+            pass
+
+    return active_configs
+
+
 def plan_runs(
     experiment_names: list[str],
     results_dir: str,
+    model: str | None = None,
 ):
+    models = _filter_models(MODELS, model)
+    normalized_results_dir = _normalize_results_dir(results_dir)
+    active_configs = _get_active_experiment_configs()
     total_jobs = 0
     total_existing = 0
     total_missing = 0
     total_progress_jobs = 0.0  # each done job = 1.0, each in-progress job = fraction done
+    actionable_missing: dict[str, dict[str, list[float]]] = {}
 
     for exp_name in experiment_names:
         exp_cls = EXPERIMENTS[exp_name]
         exp_existing = 0
         exp_missing = 0
 
-        for model in MODELS:
-            model_name = os.path.basename(model.path)
+        for model_spec in models:
+            model_name = os.path.basename(model_spec.path)
             missing_hint_fractions: list[float] = []
             existing_for_model = 0
             missing_for_model = 0
@@ -232,6 +322,9 @@ def plan_runs(
                         exp_missing += 1
                         missing_for_model += 1
                         missing_hint_fractions.append(hint_fraction)
+                        key = (exp_name, model_name, fewshot, float(hint_fraction), normalized_results_dir)
+                        if key not in active_configs:
+                            actionable_missing.setdefault(exp_name, {}).setdefault(model_name, []).append(hint_fraction)
                         progress = _read_ckpt_progress(
                             _ckpt_path(out),
                             expected_data_path=exp_cls.data_path,
@@ -261,14 +354,28 @@ def plan_runs(
 
         total_existing += exp_existing
         total_missing += exp_missing
-        print(f"{exp_name}: existing={exp_existing} missing={exp_missing} (models_counted={len(MODELS)})")
+        print(f"{exp_name}: existing={exp_existing} missing={exp_missing} (models_counted={len(models)})")
 
     overall_pct = 100 * total_progress_jobs / total_jobs if total_jobs else 0
     print(
         f"TOTAL: {total_progress_jobs:.1f} / {total_jobs} jobs completed "
         f"({overall_pct:.1f}%) | done={total_existing} missing={total_missing} "
-        f"(models_counted={len(MODELS)})"
+        f"(models_counted={len(models)})"
     )
+
+    print()
+    print("MISSING AND NOT RUNNING/QUEUED:")
+    if not actionable_missing:
+        print("None.")
+        return
+    for exp_name in experiment_names:
+        exp_missing = actionable_missing.get(exp_name, {})
+        for model_name in sorted(exp_missing.keys()):
+            hints = sorted(set(exp_missing[model_name]))
+            print(
+                f"{exp_name} / {model_name}: "
+                f"missing_not_running_hint_fractions={hints}"
+            )
 
 
 def run_experiment(
@@ -285,12 +392,14 @@ def run_experiment(
     cluster: str | None = None,
     low_prio: bool = False,
     sc_loprio: bool = False,
+    model: str | None = None,
 ):
     """Run a single experiment with full retry logic."""
     logger.info(f"Starting {exp_name}...")
     hint_type, solver_type, mode = EXPERIMENT_SPECS[exp_name]
     experiment_cls = make_experiment(hint_type, solver_type, mode)
-    models = _restrict_models_to_cluster(MODELS, cluster) if cluster is not None else MODELS
+    models = _filter_models(MODELS, model)
+    models = _restrict_models_to_cluster(models, cluster) if cluster is not None else models
     config_overrides = {}
     # Ensure submitit workers source this repo's setup script (activates conda env "ed").
     config_overrides["setup_commands"] = [f"source {SETUP_ENV_SCRIPT}"]
@@ -306,6 +415,9 @@ def run_experiment(
             config_overrides["time_hours"] = _CLUSTER_TIME_HOURS[cluster]
     if sc_loprio:
         models = _apply_sc_loprio(models)
+        # sc-loprio nodes are preemptible and often have less free VRAM at startup.
+        # Use a safer vLLM target to reduce startup failures.
+        config_overrides["gpu_memory_utilization"] = 0.88
     elif low_prio:
         models = _apply_low_prio(models)
     job_config = DEFAULT_CONFIG.override(**config_overrides)
@@ -319,7 +431,7 @@ def run_experiment(
             config=job_config,
             wait=True,
             poll_interval=300,
-            max_retries=3,
+            max_retries=1,
             debug=debug,
             submit=False,
             num_gpus=num_gpus,
@@ -330,7 +442,7 @@ def run_experiment(
             max_concurrent=max_jobs,
             config=job_config,
             poll_interval=300,
-            max_retries=3,
+            max_retries=1,
         )
     else:
         launch_experiment(
@@ -342,7 +454,7 @@ def run_experiment(
             config=job_config,
             wait=True,
             poll_interval=300,
-            max_retries=3,
+            max_retries=1,
             debug=debug,
             num_gpus=num_gpus,
         )
@@ -419,6 +531,12 @@ if __name__ == "__main__":
     parser.add_argument("--cluster", choices=["sphinx", "miso", "jag"], default=None, help="Restrict job scheduling to a specific cluster (default: all clusters)")
     parser.add_argument("--low_prio", action="store_true", help="Submit jobs at low priority QOS (default: standard)")
     parser.add_argument("--sc_loprio", action="store_true", help="Submit pre-emptible jobs to sc-loprio partition using GPU constraints (overrides --cluster/--low_prio routing)")
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Launch only one model (full path or basename, e.g. Qwen/Qwen3-8B or Qwen3-8B).",
+    )
     args = parser.parse_args()
 
     experiments_to_run = list(EXPERIMENTS.keys()) if args.experiment == "all" else [args.experiment]
@@ -427,6 +545,7 @@ if __name__ == "__main__":
         plan_runs(
             experiments_to_run,
             args.results_dir,
+            model=args.model,
         )
     else:
         mode_flags = int(args.enable_checkpoint) + int(args.resume_no_chunk) + int(args.disable_checkpoint)
@@ -462,6 +581,7 @@ if __name__ == "__main__":
                     cluster=args.cluster,
                     low_prio=args.low_prio,
                     sc_loprio=args.sc_loprio,
+                    model=args.model,
                 )
                 for exp_name in experiments_to_run
             ]
@@ -471,71 +591,6 @@ if __name__ == "__main__":
 
 
 """
-python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results --plan
-
-TOTAL: 156.8 / 336 jobs completed (46.7%) | done=151 missing=185 (models_counted=16) at feb 18, 23:22
-
-
-TESTING
-python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results \
-  --max_jobs 1 \
-  --max_connections 12 \
-  --checkpoint_chunk_instances 128
-
-DEBUG
-python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results \
-  --max_jobs 1 \
-  --checkpoint_chunk_instances 128 \
-  --debug
-
-LOW PRIORITY SPHINX
-python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results \
-  --max_jobs 2 \
-  --max_connections 12 \
-  --checkpoint_chunk_instances 128 \
-  --low_prio \
-  --cluster sphinx
-
-
-MISO
-python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results \
-  --max_jobs 8 \
-  --max_connections 16 \
-  --checkpoint_chunk_instances 128 \
-  --cluster miso
-
-
-SC-LOPRIO (pre-emptible, any cluster, GPU constraint routing)
-python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results \
-  --max_jobs 200 \
-  --max_connections 16 \
-  --checkpoint_chunk_instances 128 \
-  --sc_loprio
-
-
-
-sacctmgr show assoc user=suzeva format=user,account,partition,qos
-"""
-
-"""
 SC LOPRIO
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
@@ -543,22 +598,24 @@ python suze_experiments/20260213/aime_experiments.py \
   --results_dir christine_experiments/20251113/results \
   --max_jobs 200 \
   --enable_checkpoint \
-  --checkpoint_chunk_instances 130 \
-  --sc_loprio
+  --checkpoint_chunk_instances 100 \
+  --sc_loprio \
+  --max_connections 48 
 
 MISO NON-PREEMPTIBLE, DP=8
 python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results \
-  --max_jobs 4 \
-  --max_connections 196 \
-  --cluster miso \
-  --num_gpus 8 \
-  --cpus_per_task 100 \
-  --mem_gb 1000 \
-  --enable_checkpoint \
-  --checkpoint_chunk_instances 1000
+      --experiment all \
+      --epochs 10 \
+      --results_dir christine_experiments/20251113/results \
+      --max_jobs 10 \
+      --max_connections 90 \
+      --cluster miso \
+      --num_gpus 8 \
+      --cpus_per_task 100 \
+      --mem_gb 1000 \
+      --enable_checkpoint \
+      --model  Qwen3-14B \
+      --checkpoint_chunk_instances 600
 
 
 USE THIS FOR NON-PREEMPTIBLE
@@ -566,10 +623,11 @@ python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
   --epochs 10 \
   --results_dir christine_experiments/20251113/results \
-  --max_jobs 5 \
+  --max_jobs 10 \
   --cluster sphinx \
   --enable_checkpoint \
-  --checkpoint_chunk_instances 500 
+  --checkpoint_chunk_instances 100 \
+  --max_connections 48 
 
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \

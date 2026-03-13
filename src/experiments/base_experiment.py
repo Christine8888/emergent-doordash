@@ -32,6 +32,10 @@ import json
 logger = setup_logging()
 
 _CHECKPOINT_VERSION = 1
+_EVAL_HTTP_MAX_RETRIES = 1
+_EVAL_SAMPLE_RETRY_ON_ERROR = 1
+_MAX_SAMPLE_RETRIES = 3
+_FAILED_RETRY_BATCH_SIZE = 5
 
 
 def _normalize_repo_relative_path(path: str | None) -> str | None:
@@ -456,6 +460,9 @@ class Experiment(ABC):
             "solver_name": self.name,
         }
 
+        eval_max_retries = _EVAL_HTTP_MAX_RETRIES
+        eval_retry_on_error = _EVAL_SAMPLE_RETRY_ON_ERROR
+
         # Optional escape hatch to preserve previous single-shot behavior.
         if os.environ.get("EXPERIMENT_DISABLE_CHECKPOINT") == "1":
             task = self.build_task(hint_fraction=hint_fraction, sample_ids=sample_ids_set)
@@ -468,10 +475,10 @@ class Experiment(ABC):
                     epochs=epochs,
                     limit=None,
                     max_connections=self.max_connections,
-                    max_retries=3,  # HTTP-level retries
+                    max_retries=eval_max_retries,  # HTTP-level retries
                     display="plain",
                     fail_on_error=False,
-                    retry_on_error=3,  # sample-level retries
+                    retry_on_error=eval_retry_on_error,  # sample-level retries
                     metadata=metadata,
                 )
 
@@ -534,6 +541,18 @@ class Experiment(ABC):
 
         state["total_samples"] = int(total_instances)
         per: dict[str, list[int]] = dict(state.get("per_sample_epoch_correct", {}) or {})
+        retry_counts_raw = dict(state.get("sample_retry_counts", {}) or {})
+        sample_retry_counts: dict[str, int] = {}
+        for sid, val in retry_counts_raw.items():
+            if sid not in sample_ids_set:
+                continue
+            try:
+                sample_retry_counts[sid] = max(0, int(val))
+            except Exception:
+                continue
+
+        max_sample_retries = _MAX_SAMPLE_RETRIES
+        failed_retry_batch_size = _FAILED_RETRY_BATCH_SIZE
 
         # Sanitize checkpoint entries (drop malformed / wrong-length / no-longer-needed).
         sanitized: dict[str, list[int]] = {}
@@ -550,11 +569,15 @@ class Experiment(ABC):
 
         completed_ids = set(per.keys())
         remaining_ids = [sid for sid in all_sample_ids if sid not in completed_ids]
+        failed_retry_ids: list[str] = []
         logger.info(f"Checkpoint progress: {len(completed_ids)}/{len(all_sample_ids)} samples complete; remaining={len(remaining_ids)}")
         logger.info(f"Checkpoint file: {ckpt_path}")
+        logger.info(f"Per-sample retry budget: {max_sample_retries}")
+        logger.info(f"Eval retry knobs: max_retries={eval_max_retries}, retry_on_error={eval_retry_on_error}")
+        logger.info(f"Failed-sample retry batch size: {failed_retry_batch_size}")
         resume_no_chunk = os.environ.get("EXPERIMENT_RESUME_NO_CHUNK") == "1"
 
-        def _extract_chunk_correctness(eval_log0, *, chunk_id_set: set[str]) -> dict[str, list[int]]:
+        def _extract_chunk_correctness(eval_log0, *, chunk_id_set: set[str]) -> tuple[dict[str, list[int]], set[str], dict[str, int]]:
             per_chunk: dict[str, list[int]] = defaultdict(list)
             for sample in getattr(eval_log0, "samples", []) or []:
                 sid = getattr(sample, "id", None)
@@ -572,15 +595,17 @@ class Experiment(ABC):
                 per_chunk[sid].append(correct)
 
             out: dict[str, list[int]] = {}
+            incomplete_counts: dict[str, int] = {}
             for sid, arr in per_chunk.items():
-                if len(arr) != epochs:
-                    raise RuntimeError(f"Unexpected epoch count for sample {sid}: got {len(arr)} expected {epochs}")
-                out[sid] = list(arr)
+                if len(arr) == epochs:
+                    out[sid] = list(arr)
+                else:
+                    incomplete_counts[sid] = len(arr)
 
-            missing = chunk_id_set - set(out.keys())
-            if missing:
-                raise RuntimeError(f"Missing scores for {len(missing)} samples in chunk (e.g. {sorted(list(missing))[:5]})")
-            return out
+            failed = chunk_id_set - set(out.keys())
+            for sid in failed:
+                incomplete_counts.setdefault(sid, 0)
+            return out, failed, incomplete_counts
 
         # Run remaining samples in chunks, checkpointing after each chunk.
         if resume_no_chunk:
@@ -591,12 +616,25 @@ class Experiment(ABC):
                 len(remaining_ids),
                 len(remaining_ids) * int(epochs),
             )
-        while remaining_ids:
-            chunk = remaining_ids[:chunk_size]
-            remaining_ids = remaining_ids[chunk_size:]
+        while remaining_ids or failed_retry_ids:
+            if failed_retry_ids:
+                chunk = failed_retry_ids[:failed_retry_batch_size]
+                failed_retry_ids = failed_retry_ids[failed_retry_batch_size:]
+                queue_type = "failed_retry"
+            else:
+                chunk = remaining_ids[:chunk_size]
+                remaining_ids = remaining_ids[chunk_size:]
+                queue_type = "regular"
             chunk_set = set(chunk)
 
-            logger.info(f"Running chunk: samples={len(chunk)} instances={len(chunk) * int(epochs)} remaining_after={len(remaining_ids)}")
+            logger.info(
+                "Running chunk: queue=%s samples=%d instances=%d remaining_regular=%d remaining_failed=%d",
+                queue_type,
+                len(chunk),
+                len(chunk) * int(epochs),
+                len(remaining_ids),
+                len(failed_retry_ids),
+            )
             task = self.build_task(hint_fraction=hint_fraction, sample_ids=chunk_set)
 
             _label = f"{self.model_name} | hint={hint_fraction:.2f}"
@@ -608,20 +646,48 @@ class Experiment(ABC):
                     epochs=epochs,
                     limit=None,
                     max_connections=self.max_connections,
-                    max_retries=3,  # HTTP-level retries
+                    max_retries=eval_max_retries,  # HTTP-level retries
                     display="plain",
                     fail_on_error=False,
-                    retry_on_error=3,  # sample-level retries
+                    retry_on_error=eval_retry_on_error,  # sample-level retries
                     metadata=metadata,
                 )
 
-            chunk_correct = _extract_chunk_correctness(eval_log[0], chunk_id_set=chunk_set)
+            chunk_correct, failed_ids, failed_epoch_counts = _extract_chunk_correctness(eval_log[0], chunk_id_set=chunk_set)
             per.update(chunk_correct)
+
+            exhausted_ids: list[str] = []
+            requeued_ids: list[str] = []
+            for sid in sorted(failed_ids):
+                attempts = sample_retry_counts.get(sid, 0) + 1
+                sample_retry_counts[sid] = attempts
+                seen_epochs = failed_epoch_counts.get(sid, 0)
+                if attempts <= max_sample_retries:
+                    failed_retry_ids.append(sid)
+                    requeued_ids.append(sid)
+                    logger.warning(
+                        "Sample %s incomplete (%d/%d epochs); requeueing retry %d/%d",
+                        sid,
+                        seen_epochs,
+                        epochs,
+                        attempts,
+                        max_sample_retries,
+                    )
+                else:
+                    exhausted_ids.append(sid)
+                    logger.error(
+                        "Sample %s incomplete (%d/%d epochs) after %d retries; marking exhausted",
+                        sid,
+                        seen_epochs,
+                        epochs,
+                        attempts,
+                    )
 
             state["updated_at"] = _now_iso()
             state["per_sample_epoch_correct"] = per
             state["completed_sample_ids"] = sorted(per.keys())
             state["completed_samples"] = int(len(per) * epochs)
+            state["sample_retry_counts"] = sample_retry_counts
             _atomic_write_json(ckpt_path, state)
 
             msg = (
@@ -631,6 +697,21 @@ class Experiment(ABC):
             )
             logger.info(msg)
             print(msg, flush=True)
+
+            if failed_ids:
+                logger.warning(
+                    "Chunk had %d incomplete samples; %d requeued, %d exhausted",
+                    len(failed_ids),
+                    len(requeued_ids),
+                    len(exhausted_ids),
+                )
+            if exhausted_ids:
+                raise RuntimeError(
+                    f"Exceeded retry budget for {len(exhausted_ids)} samples "
+                    f"(e.g. {exhausted_ids[:5]}). Increase _MAX_SAMPLE_RETRIES in "
+                    "src/experiments/base_experiment.py or lower load "
+                    "(e.g. max_connections/chunk size)."
+                )
 
         # Compute final results from checkpointed correctness data.
         per_ordered = {sid: per[sid] for sid in all_sample_ids if sid in per}

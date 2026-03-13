@@ -25,6 +25,7 @@ core
 *.jsonl
 wandb/*
 *.json
+suze_experiments/20260303_finding_defaults/compare_outliers_cache.json
 !aime_cot.json
 !aime_hints.json
 
@@ -35,3 +36,7 @@ submitit_logs/
 christine_experiments/20251010_data/openthoughts_sonnet45.jsonl
 
 *.ckpt.json
+
+# Regrade/collection outputs
+suze_experiments/20260312/corpus/
+suze_experiments/20260312/corpus_smoke/
