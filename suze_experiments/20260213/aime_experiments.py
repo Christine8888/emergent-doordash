@@ -639,8 +639,9 @@ python suze_experiments/20260213/aime_experiments.py \
   --results_dir christine_experiments/20251113/results \
   --max_jobs 200 \
   --enable_checkpoint \
-  --checkpoint_chunk_instances 100 \
+  --checkpoint_chunk_instances 200 \
   --sc_loprio \
+  --gpu_memory_utilization 0.9 \
   --max_connections 48 
 
 MISO NON-PREEMPTIBLE, DP=8
@@ -649,13 +650,13 @@ python suze_experiments/20260213/aime_experiments.py \
       --epochs 10 \
       --results_dir christine_experiments/20251113/results \
       --max_jobs 10 \
-      --max_connections 196 \
+      --max_connections 256 \
       --cluster miso \
       --num_gpus 8 \
       --cpus_per_task 120 \
       --mem_gb 1000 \
       --enable_checkpoint \
-      --checkpoint_chunk_instances 1200 
+      --checkpoint_chunk_instances 1400 
 
 
 USE THIS FOR NON-PREEMPTIBLE
@@ -668,10 +669,7 @@ python suze_experiments/20260213/aime_experiments.py \
     --enable_checkpoint \
     --checkpoint_chunk_instances 200 \
     --max_connections 32 \
-    --regular_completion_fraction 0.85 \
-    --gpu_memory_utilization 0.9 \
-    --failed_retry_batch_size 10 \
-    --failed_retry_max_connections 4
+    --gpu_memory_utilization 0.9 
 
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \

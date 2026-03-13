@@ -461,6 +461,11 @@ class GroupWriterPool:
         filename = f"{group.run_type}__{group.benchmark}.jsonl"
         return self.output_dir / filename
 
+    def _close_group_handle(self, group_key: str) -> None:
+        handle = self.handles.pop(group_key, None)
+        if handle is not None:
+            handle.close()
+
     def write_rollout(self, group: GroupInfo, row: dict[str, Any]) -> None:
         key = group.group_key
         handle = self.handles.get(key)
@@ -476,6 +481,52 @@ class GroupWriterPool:
         handle = self.handles.get(group.group_key)
         if handle is not None:
             handle.flush()
+
+    def replace_eval_rows(
+        self,
+        *,
+        group: GroupInfo,
+        eval_id: str,
+        new_rows: list[dict[str, Any]],
+    ) -> None:
+        key = group.group_key
+        out_path = self._path_for_group(group)
+        self.output_paths[key] = out_path
+
+        self._close_group_handle(key)
+
+        tmp_path = out_path.with_name(out_path.name + ".tmp")
+        kept_lines = 0
+        removed_lines = 0
+
+        with tmp_path.open("w", encoding="utf-8") as out_f:
+            if out_path.exists():
+                with out_path.open("r", encoding="utf-8") as in_f:
+                    for line in in_f:
+                        raw = line.strip()
+                        if not raw:
+                            continue
+                        keep_line = True
+                        try:
+                            row = json.loads(raw)
+                            if row.get("eval_id") == eval_id:
+                                keep_line = False
+                        except json.JSONDecodeError:
+                            # Keep unparsable historical lines rather than drop data unexpectedly.
+                            keep_line = True
+
+                        if keep_line:
+                            out_f.write(line if line.endswith("\n") else line + "\n")
+                            kept_lines += 1
+                        else:
+                            removed_lines += 1
+
+            for row in new_rows:
+                out_f.write(jsonl_line(row))
+
+        os.replace(tmp_path, out_path)
+        self.handles[key] = out_path.open("a", encoding="utf-8")
+        self.rows_written_by_group[key] += len(new_rows)
 
     def close(self) -> None:
         for handle in self.handles.values():
@@ -552,7 +603,7 @@ def preflight_resume_status(
         "already_processed_ok": 0,
         "already_seen_error": 0,
         "left_to_process": 0,
-        "immutability_mismatches": 0,
+        "changed_since_last_ingest": 0,
     }
 
     for owner, eval_path in eval_files:
@@ -576,7 +627,8 @@ def preflight_resume_status(
             and prior.get("file_size") == stat.st_size
         )
         if not same_file:
-            stats["immutability_mismatches"] += 1
+            stats["changed_since_last_ingest"] += 1
+            stats["left_to_process"] += 1
             continue
 
         if prior.get("parse_status") == "ok":
@@ -616,21 +668,23 @@ def consolidate(config: ConsolidateConfig) -> dict[str, Any]:
         f"[{ts_now()}] preflight resume status: "
         f"already_processed_ok={preflight['already_processed_ok']} "
         f"already_seen_error={preflight['already_seen_error']} "
+        f"changed_since_last_ingest={preflight['changed_since_last_ingest']} "
         f"left_to_process={preflight['left_to_process']} "
         f"total={preflight['total_discovered']}",
         flush=True,
     )
-    if preflight["immutability_mismatches"] > 0:
+    if preflight["changed_since_last_ingest"] > 0:
         print(
             f"[{ts_now()}] preflight warning: "
-            f"immutability_mismatches={preflight['immutability_mismatches']} "
-            f"(run will error when first mismatch is encountered)",
+            f"changed_since_last_ingest={preflight['changed_since_last_ingest']} "
+            f"(these evals will be reprocessed and replaced in output JSONL)",
             flush=True,
         )
 
     counts: dict[str, int] = {
         "eval_files_discovered": len(eval_files),
         "eval_files_processed": 0,
+        "eval_files_reprocessed_changed": 0,
         "eval_files_failed": 0,
         "eval_files_skipped_unchanged": 0,
         "eval_files_skipped_non_target_path": 0,
@@ -671,6 +725,7 @@ def consolidate(config: ConsolidateConfig) -> dict[str, Any]:
             file_size = stat.st_size
 
             prior = state_index.get(eval_id)
+            is_changed_reprocess = False
             if prior is not None:
                 prior_mtime_ns = prior.get("mtime_ns")
                 prior_file_size = prior.get("file_size")
@@ -684,11 +739,13 @@ def consolidate(config: ConsolidateConfig) -> dict[str, Any]:
                             flush=True,
                         )
                     continue
-                raise RuntimeError(
-                    "immutability violation: previously-ingested eval changed: "
-                    f"eval_id={eval_id} path={eval_path} "
-                    f"old_mtime_ns={prior_mtime_ns} new_mtime_ns={mtime_ns} "
-                    f"old_file_size={prior_file_size} new_file_size={file_size}"
+                is_changed_reprocess = True
+                counts["eval_files_reprocessed_changed"] += 1
+                print(
+                    f"[{ts_now()}] reprocessing changed eval: benchmark={group.benchmark} "
+                    f"model={group.model_path} eval_id={eval_id} "
+                    f"old_file_size={prior_file_size} new_file_size={file_size}",
+                    flush=True,
                 )
 
             try:
@@ -714,6 +771,10 @@ def consolidate(config: ConsolidateConfig) -> dict[str, Any]:
                 }
                 parse_errors_f.write(jsonl_line(error_row))
                 parse_errors_f.flush()
+
+                if is_changed_reprocess:
+                    writer_pool.replace_eval_rows(group=group, eval_id=eval_id, new_rows=[])
+                    writer_pool.flush_group(group)
 
                 state_row = {
                     "ts": ts_now(),
@@ -749,13 +810,24 @@ def consolidate(config: ConsolidateConfig) -> dict[str, Any]:
                 )
                 continue
 
-            for rollout_row in rollouts:
-                writer_pool.write_rollout(group, rollout_row)
+            if is_changed_reprocess:
+                writer_pool.replace_eval_rows(group=group, eval_id=eval_id, new_rows=rollouts)
+            else:
+                for rollout_row in rollouts:
+                    writer_pool.write_rollout(group, rollout_row)
             # Flush per eval so resume state and group JSONL stay aligned on interruptions.
             writer_pool.flush_group(group)
             counts["rollouts_written"] += len(rollouts)
             counts["questions_scored_total"] += int(eval_summary["num_questions_scored"])
             counts["eval_files_processed"] += 1
+
+            if is_changed_reprocess:
+                print(
+                    f"[{ts_now()}] replaced eval rows: benchmark={group.benchmark} "
+                    f"model={eval_summary.get('model') or group.model_path} "
+                    f"eval_id={eval_id} new_rollouts={len(rollouts)}",
+                    flush=True,
+                )
 
             state_row = {
                 "ts": ts_now(),

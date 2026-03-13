@@ -6,18 +6,12 @@ import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-import sys
 from typing import Any, TextIO
 from collections import defaultdict
 from zipfile import ZipFile, BadZipFile
 from inspect_ai.log import read_eval_log
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SRC_DIR = PROJECT_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-from corpus.ingest import IngestConfig
 
 
 # --------------------------
