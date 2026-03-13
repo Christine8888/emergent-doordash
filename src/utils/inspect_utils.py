@@ -175,9 +175,7 @@ def compute_bootstrap_over_epochs_from_correctness(
     scores_grouped = list(per_sample_epoch_correct.values())
     if not scores_grouped:
         raise ValueError("No correctness data provided (empty checkpoint?)")
-    n_epochs = len(scores_grouped[0])
-    if any(len(s) != n_epochs for s in scores_grouped):
-        raise ValueError("Inconsistent epoch lengths in correctness data")
+    n_epochs = max(len(s) for s in scores_grouped)
 
     bootstraps = np.zeros(n_bootstrap, dtype=np.float64)
     for i in range(n_bootstrap):
@@ -200,15 +198,13 @@ def compute_pass_at_k_from_correctness(
     scores_grouped = list(per_sample_epoch_correct.values())
     if not scores_grouped:
         raise ValueError("No correctness data provided (empty checkpoint?)")
-    n_epochs = len(scores_grouped[0])
-    if any(len(s) != n_epochs for s in scores_grouped):
-        raise ValueError("Inconsistent epoch lengths in correctness data")
 
     result: Dict[str, Dict[str, float]] = {}
+    min_epochs = min(len(s) for s in scores_grouped)
 
-    for k in range(1, n_epochs + 1):
-        if k == n_epochs:
-            accuracy = float(np.mean([max(scores) for scores in scores_grouped]))
+    for k in range(1, min_epochs + 1):
+        if k == min_epochs:
+            accuracy = float(np.mean([max(scores[:min_epochs]) for scores in scores_grouped]))
             stderr = 0.0
         else:
             bootstraps = np.zeros(n_bootstrap, dtype=np.float64)
