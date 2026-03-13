@@ -1,0 +1,18 @@
+
+=== repro run started 2026-03-12T22:02:14Z ===
+---------------------------------------------------------                                                                                                                                             
+aime (1 x 10 samples): vllm/Qwen3-4B                                                                                                                                                                  
+max_retries: 1, max_connections: 48, epochs: 10, fail_on_error: False, retry_on_error: 1, sample_ids: set, solver: {'type': 'solver', 'name': 'instructions',..., dataset: di-zhang-fdu/AIME_1983_2024
+---------------------------------------------------------                                                                                                                                             
+                                                                                                                                                                                                      
+[03/12/26 15:03:32] INFO     [vLLM stdout] (APIServer pid=3252087) INFO 03-12 15:03:32 [chat_utils.py:574] Detected the chat template content format to be 'string'. You can set                 vllm_server.py:199
+                             `--chat-template-content-format` to override this.                                                                                                                                    
+[03/12/26 15:03:41] INFO     [vLLM stdout] (APIServer pid=3252087) INFO 03-12 15:03:41 [loggers.py:236] Engine 000: Avg prompt throughput: 163.0 tokens/s, Avg generation throughput: 683.1      vllm_server.py:199
+                             tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 2.8%, Prefix cache hit rate: 88.3%                                                                                   
+[03/12/26 15:03:51] INFO     [vLLM stdout] (APIServer pid=3252087) INFO 03-12 15:03:51 [loggers.py:236] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 730.0        vllm_server.py:199
+                             tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 5.6%, Prefix cache hit rate: 88.3%                                                                                   
+[03/12/26 15:04:01] INFO     [vLLM stdout] (APIServer pid=3252087) INFO 03-12 15:04:01 [loggers.py:236] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 668.0        vllm_server.py:199
+                             tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 8.3%, Prefix cache hit rate: 88.3%                                                                                   
+[03/12/26 15:04:11] INFO     [vLLM stdout] (APIServer pid=3252087) INFO 03-12 15:04:11 [loggers.py:236] Engine 000: Avg prompt throughput: 0.0 tokens/s, Avg generation throughput: 618.0        vllm_server.py:199
+                             tokens/s, Running: 10 reqs, Waiting: 0 reqs, GPU KV cache usage: 10.7%, Prefix cache hit rate: 88.3%                                                                                  
+[03/12/26 15:04:20] INFO     Force exiting with code 130                                                                                                                                          vllm_server.py:26

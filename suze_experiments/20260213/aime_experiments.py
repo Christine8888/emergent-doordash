@@ -386,6 +386,7 @@ def run_experiment(
     max_jobs: int | None = None,
     *,
     max_connections: int | None = None,
+    gpu_memory_utilization: float | None = None,
     num_gpus: int | None = None,
     cpus_per_task: int | None = None,
     mem_gb: int | None = None,
@@ -420,6 +421,12 @@ def run_experiment(
         config_overrides["gpu_memory_utilization"] = 0.88
     elif low_prio:
         models = _apply_low_prio(models)
+    if gpu_memory_utilization is not None:
+        if not (0.0 < gpu_memory_utilization <= 1.0):
+            raise ValueError(
+                f"--gpu_memory_utilization must be in (0, 1], got {gpu_memory_utilization}"
+            )
+        config_overrides["gpu_memory_utilization"] = gpu_memory_utilization
     job_config = DEFAULT_CONFIG.override(**config_overrides)
     if max_jobs is not None:
         specs = launch_experiment(
@@ -478,6 +485,15 @@ if __name__ == "__main__":
         help=(
             "Inspect max concurrent connections per job. "
             "Default (when omitted): auto by GPU (H200/H100=96, other=64)."
+        ),
+    )
+    parser.add_argument(
+        "--gpu_memory_utilization",
+        type=float,
+        default=None,
+        help=(
+            "vLLM GPU memory utilization target in (0, 1]. "
+            "Default (when omitted): SubmitConfig default."
         ),
     )
     parser.add_argument(
@@ -599,6 +615,7 @@ if __name__ == "__main__":
                     args.debug,
                     args.max_jobs,
                     max_connections=args.max_connections,
+                    gpu_memory_utilization=args.gpu_memory_utilization,
                     num_gpus=args.num_gpus,
                     cpus_per_task=args.cpus_per_task,
                     mem_gb=args.mem_gb,
@@ -632,32 +649,29 @@ python suze_experiments/20260213/aime_experiments.py \
       --epochs 10 \
       --results_dir christine_experiments/20251113/results \
       --max_jobs 10 \
-      --max_connections 100 \
+      --max_connections 196 \
       --cluster miso \
       --num_gpus 8 \
       --cpus_per_task 120 \
       --mem_gb 1000 \
       --enable_checkpoint \
-      --checkpoint_chunk_instances 1200 \
-      --model Qwen3-32B \
-      --regular_completion_fraction 0.85 \
-      --failed_retry_batch_size 20 \
-      --failed_retry_max_connections 20
+      --checkpoint_chunk_instances 1200 
 
 
 USE THIS FOR NON-PREEMPTIBLE
 python suze_experiments/20260213/aime_experiments.py \
-  --experiment all \
-  --epochs 10 \
-  --results_dir christine_experiments/20251113/results \
-  --max_jobs 10 \
-  --cluster sphinx \
-  --enable_checkpoint \
-  --checkpoint_chunk_instances 200 \
-  --max_connections 48 \
-  --regular_completion_fraction 0.85 \
-  --failed_retry_batch_size 10 \
-  --failed_retry_max_connections 10
+    --experiment all \
+    --epochs 10 \
+    --results_dir christine_experiments/20251113/results \
+    --max_jobs 10 \
+    --cluster sphinx \
+    --enable_checkpoint \
+    --checkpoint_chunk_instances 200 \
+    --max_connections 32 \
+    --regular_completion_fraction 0.85 \
+    --gpu_memory_utilization 0.9 \
+    --failed_retry_batch_size 10 \
+    --failed_retry_max_connections 4
 
 python suze_experiments/20260213/aime_experiments.py \
   --experiment all \
