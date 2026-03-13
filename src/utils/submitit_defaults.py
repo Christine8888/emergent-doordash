@@ -30,7 +30,7 @@ class SubmitConfig:
     qos: str | None = None
     account: str = "nlp"
     job_name_prefix: str = "exp"
-    exclude_nodes: str = ""
+    exclude_nodes: str = "sphinx2"
     nodelist: str | None = None
 
     # GPU/resource config
