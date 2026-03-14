@@ -16,8 +16,9 @@ CHRISTINE_EVAL_FILES_QWEN_14B = "/sphinx/u/cye/emergent-doordash/christine_exper
 CACHE_PATH = Path(__file__).with_name("compare_outliers_cache.json")
 EVAL_FILES_BY_HINT = {
     "0.0": "2026-01-12T15-02-22-08-00_aime_Yy2oCxE4DZCdXtc7hdAzuT.eval", # 0.0
-    "0.05":"2026-01-13T19-04-00-08-00_aime_hN2ThxL6jcWU5qTASexdXj.eval", # 0.05
-    "1.0": "2026-01-13T16-40-11-08-00_aime_5aV7cnYwQyXhpashnHxQKr.eval", # 1.0
+    # "0.05":"2026-01-13T19-04-00-08-00_aime_hN2ThxL6jcWU5qTASexdXj.eval", # 0.05
+    # "1.0": "2026-01-13T16-40-11-08-00_aime_5aV7cnYwQyXhpashnHxQKr.eval", # 1.0
+    "0.9": "2026-01-13T15-14-13-08-00_aime_Pxg9HHfPUj7F7PUC7GWbwr.eval",
 }
 
 def to_dict(x):
@@ -270,7 +271,7 @@ def print_1_right_0_wrong_examples(cache, eval_file_0, eval_file_1, limit=2):
 def look_at_chosen_examples():
     eval_files = list(EVAL_FILES_BY_HINT.values())
     # sample_ids = ['1988-14', '2006-I-14', '2009-II-9', '2012-I-4', '2012-II-6', '2007-I-15', '2012-I-5', '1999-6', '2024-II-7', '1999-8', '1998-14', '2022-I-4', '2017-II-2', '1996-2', '1984-6', '2007-II-13', '2001-II-2', '2011-II-4']
-    sample_ids = ['1988-14']
+    sample_ids = ['2024-II-7']
     cache = load_or_build_cache(eval_files)
     
     # now look at these eval files; are 0.0 and 1.0 from the same run?
@@ -293,8 +294,11 @@ def main():
     # 2026-01-12T15-02-22-08-00_aime_Yy2oCxE4DZCdXtc7hdAzuT.eval -> hint_fraction: 0.0
     # 2026-01-13T19-04-00-08-00_aime_hN2ThxL6jcWU5qTASexdXj.eval -> hint_fraction: 0.05
     # 2026-01-13T16-40-11-08-00_aime_5aV7cnYwQyXhpashnHxQKr.eval -> hint_fraction: 1.0
+    # 2026-01-13T15-14-13-08-00_aime_Pxg9HHfPUj7F7PUC7GWbwr.eval -> hint_fraction: 0.9
+    # raise ValueError('a')
 
-    # look_at_chosen_examples()
+    look_at_chosen_examples()
+    raise ValueError('a')
     
     
     # New helper: find cases where hint=0 beats hint=1.
