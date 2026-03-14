@@ -578,6 +578,8 @@ def run_model_sweep(
         rms_indiv_train = compute_rms_individual(individual_by_hint_train, df, eci_map, train_models)
         rms_indiv_test = compute_rms_individual(individual_by_hint_train, df, eci_map, test_models) if test_models else float("nan")
         rms_indiv_all = compute_rms_individual(individual_by_hint_train, df, eci_map, None)
+        rms_indiv_h0_test = compute_rms_individual(individual_by_hint_train, df[df["hint"] == 0.0], eci_map, test_models) if test_models else float("nan")
+        rms_indiv_h0_all = compute_rms_individual(individual_by_hint_train, df[df["hint"] == 0.0], eci_map, None)
 
         # Midpoint errors vs ground truth (individual fit on all data).
         # Joint midpoint error: |joint_midpoint - indiv_all_midpoint|
@@ -592,9 +594,12 @@ def run_model_sweep(
             "rms_train": rms_train, "rms_test": rms_test, "rms_all": rms_all,
             "rms_h0_all": rms_h0_all, "rms_h0_test": rms_h0_test,
             "rms_indiv_train": rms_indiv_train, "rms_indiv_test": rms_indiv_test, "rms_indiv_all": rms_indiv_all,
+            "rms_indiv_h0_test": rms_indiv_h0_test, "rms_indiv_h0_all": rms_indiv_h0_all,
             "delta_rms_train": rms_train - rms_indiv_train,
             "delta_rms_test": rms_test - rms_indiv_test,
             "delta_rms_all": rms_all - rms_indiv_all,
+            "delta_rms_h0_test": rms_h0_test - rms_indiv_h0_test,
+            "delta_rms_h0_all": rms_h0_all - rms_indiv_h0_all,
         }
         for h in eval_hints:
             row[f"midpoint_h_{h:.1f}"] = float(midpoint_errors_joint.get(h, float("nan")))
@@ -1243,6 +1248,30 @@ def fit_individual_sigmoids_by_hint_capability(
     return results
 
 
+def compute_rms_individual_capability(
+    *,
+    individual_by_hint: dict[float, dict],
+    df: pd.DataFrame,
+    models: set[str] | None,
+) -> float:
+    """Compute RMSE for per-hint individual capability fits on selected models."""
+    eval_df = df if models is None else df[df["model"].isin(models)]
+    if len(eval_df) == 0:
+        return float("nan")
+
+    preds: list[float] = []
+    actuals: list[float] = []
+    for _, row in eval_df.iterrows():
+        hint = float(row["hint"])
+        if hint not in individual_by_hint:
+            continue
+        preds.append(float(individual_by_hint[hint]["predict"](float(row["capability"]))))
+        actuals.append(float(row["accuracy"]))
+    if not preds:
+        return float("nan")
+    return float(np.sqrt(np.mean((np.array(actuals, dtype=float) - np.array(preds, dtype=float)) ** 2)))
+
+
 def fit_individual_sigmoids_by_model_hint_space(
     df: pd.DataFrame,
     *,
@@ -1696,6 +1725,37 @@ def run_model_sweep_capability(
             models=test_models,
         ) if test_models else float("nan")
 
+        individual_by_hint_train = fit_individual_sigmoids_by_hint_capability(
+            df_tmp,
+            fit_models=train_models,
+            lower=lower_asymptote,
+        )
+        rms_indiv_train = compute_rms_individual_capability(
+            individual_by_hint=individual_by_hint_train,
+            df=df_tmp,
+            models=train_models,
+        )
+        rms_indiv_test = compute_rms_individual_capability(
+            individual_by_hint=individual_by_hint_train,
+            df=df_tmp,
+            models=test_models,
+        ) if test_models else float("nan")
+        rms_indiv_all = compute_rms_individual_capability(
+            individual_by_hint=individual_by_hint_train,
+            df=df_tmp,
+            models=None,
+        )
+        rms_indiv_h0_test = compute_rms_individual_capability(
+            individual_by_hint=individual_by_hint_train,
+            df=df_tmp[df_tmp["hint"] == 0.0],
+            models=test_models,
+        ) if test_models else float("nan")
+        rms_indiv_h0_all = compute_rms_individual_capability(
+            individual_by_hint=individual_by_hint_train,
+            df=df_tmp[df_tmp["hint"] == 0.0],
+            models=None,
+        )
+
         midpoint_errors = compute_midpoint_errors_capability(
             beta=fit.beta,
             gamma=fit.gamma,
@@ -1706,7 +1766,24 @@ def run_model_sweep_capability(
             hint_transform=hint_transform,
         )
 
-        row: dict[str, float] = {"n_models": float(n), "rms_train": rms_train, "rms_test": rms_test, "rms_all": rms_all, "rms_h0_all": rms_h0_all, "rms_h0_test": rms_h0_test}
+        row: dict[str, float] = {
+            "n_models": float(n),
+            "rms_train": rms_train,
+            "rms_test": rms_test,
+            "rms_all": rms_all,
+            "rms_h0_all": rms_h0_all,
+            "rms_h0_test": rms_h0_test,
+            "rms_indiv_train": rms_indiv_train,
+            "rms_indiv_test": rms_indiv_test,
+            "rms_indiv_all": rms_indiv_all,
+            "rms_indiv_h0_test": rms_indiv_h0_test,
+            "rms_indiv_h0_all": rms_indiv_h0_all,
+            "delta_rms_train": rms_train - rms_indiv_train,
+            "delta_rms_test": rms_test - rms_indiv_test,
+            "delta_rms_all": rms_all - rms_indiv_all,
+            "delta_rms_h0_test": rms_h0_test - rms_indiv_h0_test,
+            "delta_rms_h0_all": rms_h0_all - rms_indiv_h0_all,
+        }
         for h in eval_hints:
             row[f"midpoint_h_{h:.1f}"] = float(midpoint_errors.get(float(h), float("nan")))
         rows.append(row)
@@ -2283,31 +2360,41 @@ def plot_comparison_model_sweep(
         lo, hi = int(n_models_range[0]), int(n_models_range[1])
         return df[(df["n_models"] >= lo) & (df["n_models"] <= hi)]
 
-    # ---- Figure 1: RMS 2x2 grid ----
-    # Rows: all models / test models only
-    # Cols: all hints / hint=0 only
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-
-    panels = [
-        (axes[0, 0], "rms_all",     "all models, all hints"),
-        (axes[0, 1], "rms_h0_all",  "all models, hint = 0 only"),
-        (axes[1, 0], "rms_test",    "test models only, all hints"),
-        (axes[1, 1], "rms_h0_test", "test models only, hint = 0 only"),
-    ]
-    for ax, col, subtitle in panels:
-        for i, m in enumerate(method_sweeps):
-            df = _filter(m["sweep_df"])
-            if col in df.columns:
-                ax.plot(df["n_models"], df[col], "o-", label=m["name"], color=method_colors[i])
-        ax.set_xlabel("number of train models")
-        ax.set_ylabel("RMS")
-        ax.set_title(subtitle)
-        ax.legend()
-        ax.grid(True, alpha=0.3)
+    # ---- Figure 1: RMS on test models (hint=0 only) ----
+    # Also include train-only individual fits (no joint scaling law) for comparison.
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for i, m in enumerate(method_sweeps):
+        df = _filter(m["sweep_df"])
+        color = method_colors[i]
+        if "rms_h0_test" in df.columns:
+            ax.plot(df["n_models"], df["rms_h0_test"], "o-", label=f'{m["name"]} joint', color=color)
+        if "rms_indiv_h0_test" in df.columns:
+            ax.plot(df["n_models"], df["rms_indiv_h0_test"], "x--", label=f'{m["name"]} indiv(train-only)', color=color, alpha=0.9)
+    ax.set_xlabel("number of train models")
+    ax.set_ylabel("RMS")
+    ax.set_title("test models only, hint = 0 only")
+    ax.legend(fontsize=8, ncol=2)
+    ax.grid(True, alpha=0.3)
 
     fig.suptitle(f"{label}: RMS vs number of train models", fontsize=13)
     plt.tight_layout()
     save_figure(fig, output_dir / "comparison_model_sweep_rms.png")
+
+    # ---- Figure 1b: Delta RMS (joint - individual) on test models (hint=0 only) ----
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for i, m in enumerate(method_sweeps):
+        df = _filter(m["sweep_df"])
+        if "delta_rms_h0_test" in df.columns:
+            ax.plot(df["n_models"], df["delta_rms_h0_test"], "o-", label=m["name"], color=method_colors[i])
+    ax.axhline(0, color="black", linestyle="--", alpha=0.5)
+    ax.set_xlabel("number of train models")
+    ax.set_ylabel("delta RMS (joint - individual)")
+    ax.set_title("test models only, hint = 0 only")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    fig.suptitle(f"{label}: Delta RMS vs number of train models", fontsize=13)
+    plt.tight_layout()
+    save_figure(fig, output_dir / "comparison_model_sweep_delta_rms.png")
 
     # ---- Figure 2: midpoint error vs n_train_models ----
     # ECI midpoints are in ECI units; PC midpoints are in native capability units.

@@ -41,8 +41,53 @@ def make_run_dir(*, run_name: str) -> Path:
 
 # ------------------------------ experiments ------------------------------
 
+def joint_scaling_gpqa_train_on_all_truncation() -> None:
+    # python suze_experiments/20260202/experiments.py -e joint_scaling_gpqa_train_on_all_truncation
+    _ensure_project_root_on_path()
+
+    # User-defined run name: edit here per experiment.
+    run_name = "joint_scaling_gpqa_train_on_all_truncation" + "_march_14"
+    run_dir = make_run_dir(run_name=run_name)
+
+
+    run_joint_scaling_plots(
+        base_folder=PROJECT_ROOT / "christine_experiments/20251113/results",
+        eci_file=PROJECT_ROOT / "christine_experiments/20260129_fitting/eci_model_capabilities.csv",
+        eval_name="gpqa",
+        solver="solution_intext_sequential",
+        condition="0shot",
+        label="GPQA solution Truncation",
+        all_models=[
+            "Qwen2.5-1.5B-Instruct",
+            "Qwen2.5-3B-Instruct",
+            "Qwen2.5-7B-Instruct",
+            "Qwen2.5-14B-Instruct",
+            "Qwen2.5-32B-Instruct",
+            "Qwen3-0.6B",
+            "Qwen3-1.7B",
+            "Qwen3-4B",
+            "Qwen3-8B",
+            "Qwen3-14B",
+            "Qwen3-32B",
+            "Llama-3.1-8B-Instruct",
+            "Llama-3.1-70B-Instruct",
+            "gemma-3-4b-it",
+            "gemma-3-12b-it",
+            "gemma-3-27b-it",
+        ],
+        num_holdout_models=0,
+        hint_fractions=[round(i / 20.0, 2) for i in range(21)],
+        eval_hints_for_sweep=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+        include_cross=True,
+        lower_asymptote=0.2,
+        hint_transform="identity",
+        output_dir=run_dir,
+    )
+
+
+
 def joint_scaling_gpqa_train_on_all() -> None:
-    # python experiments.py -e joint_scaling_gpqa_train_on_all
+    # python suze_experiments/20260202/experiments.py -e joint_scaling_gpqa_train_on_all
     _ensure_project_root_on_path()
 
     # User-defined run name: edit here per experiment.
@@ -360,6 +405,59 @@ def compare_eci_vs_pcs_gpqa_solution_intext_masked() -> None:
         ],
     )
 
+def compare_eci_vs_pcs_gpqa_solution_truncation() -> None:
+    # python suze_experiments/20260202/experiments.py -e compare_eci_vs_pcs_gpqa_solution_truncation
+    _ensure_project_root_on_path()
+
+    run_name = "compare_eci_vs_pcs_gpqa_solution_truncation" + "_march_14"
+    run_dir = make_run_dir(run_name=run_name)
+
+    compare_capability_approaches(
+        base_folder=PROJECT_ROOT / "christine_experiments/20251113/results",
+        baseline_folder=PROJECT_ROOT / "christine_experiments/20251113/baseline",
+        eci_file=PROJECT_ROOT / "christine_experiments/20260129_fitting/eci_model_capabilities.csv",
+        eval_name="gpqa",
+        solver="solution_intext_sequential",
+        condition="0shot",
+        label="GPQA solution intext sequential",
+        all_models=[
+            "Qwen2.5-1.5B-Instruct",
+            "Qwen2.5-3B-Instruct",
+            "Qwen2.5-7B-Instruct",
+            "Qwen2.5-14B-Instruct",
+            "Qwen2.5-32B-Instruct",
+            "Qwen3-0.6B",
+            "Qwen3-1.7B",
+            "Qwen3-4B",
+            "Qwen3-8B",
+            "Qwen3-14B",
+            "Qwen3-32B",
+            "Llama-3.1-8B-Instruct",
+            "Llama-3.1-70B-Instruct",
+            "gemma-3-4b-it",
+            "gemma-3-12b-it",
+            "gemma-3-27b-it",
+        ],
+        num_holdout_models=9,
+        hint_fractions=[round(i / 20.0, 2) for i in range(21)],
+        eval_hints_for_sweep=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+        include_cross=True,
+        lower_asymptote=0.2,
+        hint_transform="identity",
+        output_dir=run_dir,
+        pc_ns=[1, 2, 3],
+        sweep_n_models_range=(2, 16),
+        # Baseline eval folders to use when building PCs via PCA.
+        # (Matches `christine_experiments/20260129_fitting/fit_eci.py`.)
+        eval_benchmarks=[
+            "hellaswag",
+            "piqa",
+            "mmlu_5_shot_cot",
+            "bbh",
+            "arc_challenge",
+            "winogrande",
+        ],
+    )
 
 
 EXPERIMENTS = {
@@ -369,7 +467,9 @@ EXPERIMENTS = {
     "joint_scaling_learned_hint_free_endpoints": joint_scaling_learned_hint_free_endpoints,
     "joint_scaling_learned_hint_fixed_endpoints_train_on_some": joint_scaling_learned_hint_fixed_endpoints_train_on_some,
     "joint_scaling_learned_hint_fixed_endpoints_sequential_solution": joint_scaling_learned_hint_fixed_endpoints_sequential_solution,
-    "compare_eci_vs_pcs_gpqa_solution_intext_masked": compare_eci_vs_pcs_gpqa_solution_intext_masked, # NOT USED
+    "compare_eci_vs_pcs_gpqa_solution_intext_masked": compare_eci_vs_pcs_gpqa_solution_intext_masked, 
+    "compare_eci_vs_pcs_gpqa_solution_truncation": compare_eci_vs_pcs_gpqa_solution_truncation,
+    "joint_scaling_gpqa_train_on_all_truncation": joint_scaling_gpqa_train_on_all_truncation,
 }
 
 

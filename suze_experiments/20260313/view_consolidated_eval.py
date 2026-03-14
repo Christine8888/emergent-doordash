@@ -27,13 +27,23 @@ def ts_now() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
 
-@st.cache_resource(show_spinner=False)
 def get_connection(db_path: str) -> duckdb.DuckDBPyConnection:
+    # Use a fresh connection per rerun/session interaction to avoid stale
+    # result handles on some duckdb+streamlit combinations.
     conn = duckdb.connect(db_path)
     conn.execute("PRAGMA threads=4;")
     conn.execute("PRAGMA enable_progress_bar=false;")
     initialize_schema(conn)
     return conn
+
+
+def _query_df(
+    conn: duckdb.DuckDBPyConnection,
+    query: str,
+    params: list[Any] | None = None,
+) -> pd.DataFrame:
+    cur = conn.cursor()
+    return cur.execute(query, params or []).df()
 
 
 def initialize_schema(conn: duckdb.DuckDBPyConnection) -> None:
@@ -148,6 +158,13 @@ def _to_float(value: Any) -> float | None:
         return float(value)
     except Exception:
         return None
+
+
+def _format_hint_level(value: Any) -> str:
+    x = _to_float(value)
+    if x is None:
+        return "NA"
+    return f"{x:.2f}"
 
 
 def _batched_insert(
@@ -391,7 +408,8 @@ def sync_database(
 def _where_clause(
     run_types: list[str],
     benchmarks: list[str],
-    hint_levels: list[str],
+    hint_types: list[str],
+    hint_levels: list[float],
     models: list[str],
 ) -> tuple[str, list[Any]]:
     clauses: list[str] = []
@@ -403,8 +421,11 @@ def _where_clause(
     if benchmarks:
         clauses.append(f"r.benchmark IN ({','.join(['?'] * len(benchmarks))})")
         params.extend(benchmarks)
+    if hint_types:
+        clauses.append(f"r.path_hint_level IN ({','.join(['?'] * len(hint_types))})")
+        params.extend(hint_types)
     if hint_levels:
-        clauses.append(f"r.path_hint_level IN ({','.join(['?'] * len(hint_levels))})")
+        clauses.append(f"r.hint_fraction IN ({','.join(['?'] * len(hint_levels))})")
         params.extend(hint_levels)
     if models:
         clauses.append(f"r.model IN ({','.join(['?'] * len(models))})")
@@ -415,16 +436,18 @@ def _where_clause(
     return "WHERE " + " AND ".join(clauses), params
 
 
-def load_filter_options(conn: duckdb.DuckDBPyConnection) -> dict[str, list[str]]:
+def load_filter_options(conn: duckdb.DuckDBPyConnection) -> dict[str, list[Any]]:
     run_types = [r[0] for r in conn.execute("SELECT DISTINCT run_type FROM rollouts ORDER BY 1").fetchall() if r[0] is not None]
     benchmarks = [r[0] for r in conn.execute("SELECT DISTINCT benchmark FROM rollouts ORDER BY 1").fetchall() if r[0] is not None]
-    hints = [r[0] for r in conn.execute("SELECT DISTINCT path_hint_level FROM rollouts ORDER BY 1").fetchall() if r[0] is not None]
+    hint_types = [r[0] for r in conn.execute("SELECT DISTINCT path_hint_level FROM rollouts ORDER BY 1").fetchall() if r[0] is not None]
+    hint_levels = [float(r[0]) for r in conn.execute("SELECT DISTINCT hint_fraction FROM rollouts WHERE hint_fraction IS NOT NULL ORDER BY 1").fetchall()]
     models = [r[0] for r in conn.execute("SELECT DISTINCT model FROM rollouts ORDER BY 1").fetchall() if r[0] is not None]
     scorers = [r[0] for r in conn.execute("SELECT DISTINCT scorer_name FROM rollout_scorers ORDER BY 1").fetchall() if r[0] is not None]
     return {
         "run_types": run_types,
         "benchmarks": benchmarks,
-        "hints": hints,
+        "hint_types": hint_types,
+        "hint_levels": hint_levels,
         "models": models,
         "scorers": scorers,
     }
@@ -434,13 +457,14 @@ def query_problem_summary(
     conn: duckdb.DuckDBPyConnection,
     run_types: list[str],
     benchmarks: list[str],
-    hint_levels: list[str],
+    hint_types: list[str],
+    hint_levels: list[float],
     models: list[str],
     scorer_name: str,
     score_labels: list[str],
     limit: int,
 ) -> pd.DataFrame:
-    where_sql, params = _where_clause(run_types, benchmarks, hint_levels, models)
+    where_sql, params = _where_clause(run_types, benchmarks, hint_types, hint_levels, models)
     if not score_labels:
         score_labels = ["C", "I", "U"]
 
@@ -450,7 +474,8 @@ def query_problem_summary(
             r.run_type,
             r.benchmark,
             r.model,
-            r.path_hint_level,
+            r.path_hint_level AS hint_type,
+            r.hint_fraction AS hint_level,
             r.sample_id,
             r.epoch,
             COALESCE(rs.score_normalized, 'U') AS score_label
@@ -467,7 +492,8 @@ def query_problem_summary(
         run_type,
         benchmark,
         model,
-        path_hint_level,
+        hint_type,
+        hint_level,
         sample_id,
         COUNT(*) AS epochs,
         MIN(epoch) AS min_epoch,
@@ -476,8 +502,8 @@ def query_problem_summary(
         SUM(CASE WHEN score_label = 'I' THEN 1 ELSE 0 END) AS i_count,
         SUM(CASE WHEN score_label = 'U' THEN 1 ELSE 0 END) AS u_count
     FROM filtered
-    GROUP BY run_type, benchmark, model, path_hint_level, sample_id
-    ORDER BY benchmark, model, path_hint_level, sample_id
+    GROUP BY run_type, benchmark, model, hint_type, hint_level, sample_id
+    ORDER BY benchmark, model, hint_type, hint_level, sample_id
     LIMIT ?
     """
 
@@ -486,7 +512,7 @@ def query_problem_summary(
     q_params.extend(score_labels)
     q_params.append(limit)
 
-    return conn.execute(query, q_params).df()
+    return _query_df(conn, query, q_params)
 
 
 def query_problem_epochs(
@@ -496,6 +522,7 @@ def query_problem_epochs(
     benchmark: str,
     model: str,
     path_hint_level: str,
+    hint_fraction: float | None,
     sample_id: str,
 ) -> pd.DataFrame:
     query = """
@@ -519,13 +546,15 @@ def query_problem_epochs(
       AND r.benchmark = ?
       AND r.model = ?
       AND r.path_hint_level = ?
+      AND ((r.hint_fraction IS NULL AND ? IS NULL) OR r.hint_fraction = ?)
       AND r.sample_id = ?
     ORDER BY r.epoch, r.rollout_id
     """
-    return conn.execute(
+    return _query_df(
+        conn,
         query,
-        [scorer_name, run_type, benchmark, model, path_hint_level, sample_id],
-    ).df()
+        [scorer_name, run_type, benchmark, model, path_hint_level, hint_fraction, hint_fraction, sample_id],
+    )
 
 
 def hydrate_epoch_text_from_source(
@@ -536,6 +565,7 @@ def hydrate_epoch_text_from_source(
     benchmark: str,
     model: str,
     path_hint_level: str,
+    hint_fraction: float | None,
     sample_id: str,
 ) -> pd.DataFrame:
     if df_epochs.empty:
@@ -572,6 +602,14 @@ def hydrate_epoch_text_from_source(
                     continue
                 if str(row.get("path_hint_level")) != path_hint_level:
                     continue
+                row_hint_fraction = _to_float(row.get("hint_fraction"))
+                if row_hint_fraction is None and hint_fraction is not None:
+                    continue
+                if row_hint_fraction is not None and hint_fraction is None:
+                    continue
+                if row_hint_fraction is not None and hint_fraction is not None:
+                    if abs(row_hint_fraction - hint_fraction) > 1e-12:
+                        continue
                 if str(row.get("sample_id")) != sample_id:
                     continue
 
@@ -635,7 +673,7 @@ def render_epoch_details(df_epochs: pd.DataFrame) -> None:
 
     summary_cols = ["epoch", "score_label", "is_correct", "extracted_answer", "target", "rollout_id"]
     st.markdown("### Epoch Performance")
-    st.dataframe(df_epochs[summary_cols], use_container_width=True, hide_index=True)
+    st.dataframe(df_epochs[summary_cols], width="stretch", hide_index=True)
 
     st.markdown("### Epoch Details")
     for _, row in df_epochs.iterrows():
@@ -739,7 +777,7 @@ def main() -> None:
         return
 
     st.subheader("Filters")
-    c1, c2, c3, c4, c5 = st.columns([1.0, 1.2, 1.6, 1.8, 1.0])
+    c1, c2, c3, c4, c5, c6 = st.columns([1.0, 1.2, 1.3, 1.1, 1.8, 1.0])
     with c1:
         run_types = st.multiselect(
             "Run Type",
@@ -753,42 +791,66 @@ def main() -> None:
             default=opts["benchmarks"],
         )
     with c3:
-        hint_levels = st.multiselect(
-            "Hint Level",
-            options=opts["hints"],
-            default=opts["hints"],
+        hint_types = st.multiselect(
+            "Hint Type",
+            options=opts["hint_types"],
+            default=opts["hint_types"],
         )
     with c4:
+        hint_levels = st.multiselect(
+            "Hint Level",
+            options=opts["hint_levels"],
+            default=opts["hint_levels"],
+            format_func=_format_hint_level,
+        )
+    with c5:
         models = st.multiselect(
             "Model",
             options=opts["models"],
             default=[],
             help="Leave empty to include all models.",
         )
-    with c5:
+    with c6:
         scorer_name = st.selectbox("Scorer", options=opts["scorers"], index=0)
 
-    c6, c7 = st.columns([2.5, 1.0])
-    with c6:
+    c7, c8 = st.columns([2.5, 1.0])
+    with c7:
         score_labels = st.multiselect(
             "Correctness",
             options=["C", "I", "U"],
             default=["C", "I", "U"],
             help="C=correct, I=incorrect, U=not graded/unknown for selected scorer.",
         )
-    with c7:
+    with c8:
         row_limit = st.number_input("Problem rows limit", min_value=50, max_value=20000, value=1000, step=50)
 
-    df_summary = query_problem_summary(
-        conn=conn,
-        run_types=run_types,
-        benchmarks=benchmarks,
-        hint_levels=hint_levels,
-        models=models,
-        scorer_name=scorer_name,
-        score_labels=score_labels,
-        limit=int(row_limit),
-    )
+    try:
+        df_summary = query_problem_summary(
+            conn=conn,
+            run_types=run_types,
+            benchmarks=benchmarks,
+            hint_types=hint_types,
+            hint_levels=hint_levels,
+            models=models,
+            scorer_name=scorer_name,
+            score_labels=score_labels,
+            limit=int(row_limit),
+        )
+    except duckdb.InvalidInputException as exc:
+        if "result closed" not in str(exc).lower():
+            raise
+        conn = get_connection(str(db_path))
+        df_summary = query_problem_summary(
+            conn=conn,
+            run_types=run_types,
+            benchmarks=benchmarks,
+            hint_types=hint_types,
+            hint_levels=hint_levels,
+            models=models,
+            scorer_name=scorer_name,
+            score_labels=score_labels,
+            limit=int(row_limit),
+        )
 
     st.subheader("Problem Summary")
     st.caption(
@@ -806,7 +868,9 @@ def main() -> None:
         + " | "
         + df_choices["model"].astype(str)
         + " | "
-        + df_choices["path_hint_level"].astype(str)
+        + df_choices["hint_type"].astype(str)
+        + " | level="
+        + df_choices["hint_level"].apply(_format_hint_level)
         + " | sample_id="
         + df_choices["sample_id"].astype(str)
     )
@@ -822,7 +886,7 @@ def main() -> None:
     try:
         event = st.dataframe(
             df_summary,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row",
@@ -839,7 +903,7 @@ def main() -> None:
             selected_idx = int(selected_rows[0])
     except TypeError:
         interactive_supported = False
-        st.dataframe(df_summary, use_container_width=True, hide_index=True)
+        st.dataframe(df_summary, width="stretch", hide_index=True)
 
     if selected_idx is None:
         if interactive_supported:
@@ -861,25 +925,44 @@ def main() -> None:
 
     st.caption(
         f"Selected: run_type={selected_row['run_type']} benchmark={selected_row['benchmark']} "
-        f"model={selected_row['model']} hint={selected_row['path_hint_level']} sample_id={selected_row['sample_id']}"
+        f"model={selected_row['model']} hint_type={selected_row['hint_type']} "
+        f"hint_level={_format_hint_level(selected_row['hint_level'])} sample_id={selected_row['sample_id']}"
     )
 
-    df_epochs = query_problem_epochs(
-        conn=conn,
-        scorer_name=scorer_name,
-        run_type=str(selected_row["run_type"]),
-        benchmark=str(selected_row["benchmark"]),
-        model=str(selected_row["model"]),
-        path_hint_level=str(selected_row["path_hint_level"]),
-        sample_id=str(selected_row["sample_id"]),
-    )
+    selected_hint_level = _to_float(selected_row["hint_level"])
+    try:
+        df_epochs = query_problem_epochs(
+            conn=conn,
+            scorer_name=scorer_name,
+            run_type=str(selected_row["run_type"]),
+            benchmark=str(selected_row["benchmark"]),
+            model=str(selected_row["model"]),
+            path_hint_level=str(selected_row["hint_type"]),
+            hint_fraction=selected_hint_level,
+            sample_id=str(selected_row["sample_id"]),
+        )
+    except duckdb.InvalidInputException as exc:
+        if "result closed" not in str(exc).lower():
+            raise
+        conn = get_connection(str(db_path))
+        df_epochs = query_problem_epochs(
+            conn=conn,
+            scorer_name=scorer_name,
+            run_type=str(selected_row["run_type"]),
+            benchmark=str(selected_row["benchmark"]),
+            model=str(selected_row["model"]),
+            path_hint_level=str(selected_row["hint_type"]),
+            hint_fraction=selected_hint_level,
+            sample_id=str(selected_row["sample_id"]),
+        )
     df_epochs = hydrate_epoch_text_from_source(
         df_epochs,
         scorer_name=scorer_name,
         run_type=str(selected_row["run_type"]),
         benchmark=str(selected_row["benchmark"]),
         model=str(selected_row["model"]),
-        path_hint_level=str(selected_row["path_hint_level"]),
+        path_hint_level=str(selected_row["hint_type"]),
+        hint_fraction=selected_hint_level,
         sample_id=str(selected_row["sample_id"]),
     )
     render_epoch_details(df_epochs)
