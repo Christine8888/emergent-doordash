@@ -233,12 +233,13 @@ def ingest_file(
 
     rows_total = 0
     scorers_total = 0
+    bad_json_lines = 0
     bytes_seen = 0
     line_count = 0
     started = time.time()
     last_log = started
 
-    with src.path.open("r", encoding="utf-8") as f:
+    with src.path.open("r", encoding="utf-8", errors="replace") as f:
         for raw_line in f:
             line_count += 1
             bytes_seen += len(raw_line.encode("utf-8", errors="ignore"))
@@ -246,7 +247,18 @@ def ingest_file(
             if not line:
                 continue
 
-            row = json.loads(line)
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                bad_json_lines += 1
+                if bad_json_lines <= 5 or bad_json_lines % 1000 == 0:
+                    preview = line[:120].replace("\n", "\\n")
+                    print(
+                        f"[{ts_now()}] WARN {src.path.name} bad_json line={line_count:,} "
+                        f"count={bad_json_lines:,} preview={preview!r}",
+                        flush=True,
+                    )
+                continue
             if _is_scorer_sidecar_row(row):
                 rollout_id = _to_text(row.get("rollout_id"))
                 scorer_name = _to_text(row.get("scorer_name"))
@@ -373,7 +385,8 @@ def ingest_file(
     elapsed = time.time() - started
     print(
         f"[{ts_now()}] DONE {src.path.name} rows={rows_total:,} scorers={scorers_total:,} "
-        f"elapsed={elapsed/60:.1f}m avg_speed={human_size(src.size_bytes/max(1e-9, elapsed))}/s",
+        f"bad_json={bad_json_lines:,} elapsed={elapsed/60:.1f}m "
+        f"avg_speed={human_size(src.size_bytes/max(1e-9, elapsed))}/s",
         flush=True,
     )
     return rows_total, scorers_total

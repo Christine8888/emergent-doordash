@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
+import duckdb
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import pandas as pd
@@ -78,6 +79,376 @@ def load_results_df(
     if df.empty:
         raise ValueError("No rows remain after model/hint/ECI filtering.")
 
+    return df
+
+
+def _canonical_model_name(model: str | None, model_path: str | None) -> str:
+    raw = (model_path or model or "").strip()
+    if raw.startswith("vllm/"):
+        raw = raw.split("/", 1)[1]
+    if "/" in raw:
+        raw = raw.rsplit("/", 1)[-1]
+    return raw
+
+
+def _slugify(name: str) -> str:
+    out = []
+    for ch in name:
+        if ch.isalnum() or ch in {"-", "_"}:
+            out.append(ch)
+        else:
+            out.append("_")
+    return "".join(out)
+
+
+def load_regraded_results_df(
+    *,
+    db_path: Path,
+    eci_file: Path,
+    scorer_name: str,
+    run_type: str,
+    benchmark: str,
+    path_hint_level: str,
+    all_models: list[str] | None = None,
+    hint_fractions: list[float] | None = None,
+    expected_epochs: int = 10,
+    n_bootstrap: int = 1000,
+    strict_epochs: bool = True,
+) -> pd.DataFrame:
+    from src.utils.inspect_utils import compute_bootstrap_over_epochs_from_correctness
+
+    if not db_path.exists():
+        raise FileNotFoundError(f"DuckDB cache not found: {db_path}")
+
+    conn = duckdb.connect(str(db_path), read_only=True)
+    try:
+        df_rollout = conn.execute(
+            """
+            SELECT
+                r.rollout_id,
+                r.model,
+                r.model_path,
+                r.hint_fraction AS hint,
+                r.sample_id,
+                r.epoch,
+                r.created,
+                rs.score_normalized
+            FROM rollouts r
+            INNER JOIN rollout_scorers rs
+                ON rs.rollout_id = r.rollout_id
+            WHERE r.run_type = ?
+              AND r.benchmark = ?
+              AND r.path_hint_level = ?
+              AND rs.scorer_name = ?
+              AND r.hint_fraction IS NOT NULL
+              AND r.sample_id IS NOT NULL
+              AND r.epoch IS NOT NULL
+            """,
+            [run_type, benchmark, path_hint_level, scorer_name],
+        ).df()
+    finally:
+        conn.close()
+
+    if df_rollout.empty:
+        raise ValueError(
+            "No rows found for the requested scorer/filter in DuckDB cache. "
+            f"scorer={scorer_name} run_type={run_type} benchmark={benchmark} "
+            f"path_hint_level={path_hint_level}"
+        )
+
+    df_rollout = df_rollout.copy()
+    df_rollout["model"] = df_rollout.apply(
+        lambda r: _canonical_model_name(
+            str(r["model"]) if pd.notna(r["model"]) else None,
+            str(r["model_path"]) if pd.notna(r["model_path"]) else None,
+        ),
+        axis=1,
+    )
+    df_rollout["hint"] = df_rollout["hint"].astype(float).round(2)
+    df_rollout["epoch"] = df_rollout["epoch"].astype(int)
+    df_rollout["is_correct"] = (df_rollout["score_normalized"] == "C").astype(int)
+
+    # Multiple eval runs can produce duplicate rows for (model, hint, sample_id, epoch).
+    # Keep the most recent row by created timestamp, then rollout_id as tie-break.
+    before = len(df_rollout)
+    df_rollout = df_rollout.sort_values(["created", "rollout_id"])
+    df_rollout = df_rollout.drop_duplicates(
+        subset=["model", "hint", "sample_id", "epoch"],
+        keep="last",
+    )
+    dropped = before - len(df_rollout)
+    if dropped > 0:
+        print(
+            f"Dropped {dropped:,} duplicate rollout rows by (model,hint,sample_id,epoch) "
+            "keeping latest created entry."
+        )
+
+    if all_models is not None:
+        df_rollout = df_rollout[df_rollout["model"].isin(all_models)]
+    if hint_fractions is not None:
+        allowed = {round(float(h), 2) for h in hint_fractions}
+        df_rollout = df_rollout[df_rollout["hint"].isin(allowed)]
+
+    if df_rollout.empty:
+        raise ValueError("No rows remain after model/hint filtering for regraded results.")
+
+    records: list[dict[str, float | str | int]] = []
+    bad_epoch_examples: list[dict[str, str | float | int]] = []
+
+    for (model, hint), group in df_rollout.groupby(["model", "hint"], sort=True):
+        per_sample_epoch_correct: dict[str, list[int]] = {}
+
+        for sample_id, sample_group in group.groupby("sample_id", sort=False):
+            sample_group = sample_group.sort_values("epoch")
+            epoch_to_correct = {
+                int(ep): int(corr)
+                for ep, corr in zip(sample_group["epoch"].tolist(), sample_group["is_correct"].tolist())
+            }
+            expected = set(range(1, expected_epochs + 1))
+            seen = set(epoch_to_correct.keys())
+            if seen != expected:
+                bad_epoch_examples.append(
+                    {
+                        "model": str(model),
+                        "hint": float(hint),
+                        "sample_id": str(sample_id),
+                        "n_epochs_seen": len(seen),
+                    }
+                )
+                if strict_epochs:
+                    continue
+                # Skip malformed samples in non-strict mode.
+                continue
+            per_sample_epoch_correct[str(sample_id)] = [epoch_to_correct[e] for e in range(1, expected_epochs + 1)]
+
+        if strict_epochs and bad_epoch_examples:
+            example_str = bad_epoch_examples[:10]
+            raise ValueError(
+                "Expected exactly 10 epochs per sample for regraded bootstrap, but found mismatches. "
+                f"First examples: {example_str}"
+            )
+
+        if not per_sample_epoch_correct:
+            continue
+
+        bs = compute_bootstrap_over_epochs_from_correctness(
+            per_sample_epoch_correct,
+            n_bootstrap=n_bootstrap,
+        )
+        records.append(
+            {
+                "model": str(model),
+                "hint": float(hint),
+                "accuracy": float(bs["accuracy"]),
+                "stderr": float(bs["stderr"]),
+                "n_samples": int(len(per_sample_epoch_correct)),
+                "epochs": int(bs["epochs"]),
+            }
+        )
+
+    df = pd.DataFrame(records)
+    if df.empty:
+        raise ValueError("No aggregated model+hint rows produced from regraded data.")
+
+    eci_map = _load_eci_map(eci_file)
+    df["eci"] = df["model"].map(eci_map)
+    df = df.dropna(subset=["eci", "accuracy", "hint"])
+    if df.empty:
+        raise ValueError("No rows remain after ECI join for regraded data.")
+
+    return df
+
+
+def load_regraded_results_df_from_enriched_sidecar(
+    *,
+    sidecar_file: Path,
+    eci_file: Path,
+    scorer_name: str,
+    run_type: str,
+    benchmark: str,
+    path_hint_level: str,
+    all_models: list[str] | None = None,
+    hint_fractions: list[float] | None = None,
+    expected_epochs: int = 10,
+    n_bootstrap: int = 1000,
+    strict_epochs: bool = True,
+) -> pd.DataFrame:
+    from src.utils.inspect_utils import compute_bootstrap_over_epochs_from_correctness
+
+    if not sidecar_file.exists():
+        raise FileNotFoundError(f"Enriched sidecar not found: {sidecar_file}")
+
+    allowed_models = set(all_models) if all_models is not None else None
+    allowed_hints = (
+        {round(float(h), 2) for h in hint_fractions}
+        if hint_fractions is not None
+        else None
+    )
+
+    # (model, hint) -> sample_id -> (scores_by_epoch, created_by_epoch)
+    grouped: dict[tuple[str, float], dict[str, tuple[list[int | None], list[str]]]] = {}
+    bad_json_lines = 0
+    filtered_out = 0
+    kept_rows = 0
+    bad_rows = 0
+
+    print(f"amount of lines in sidecar: {sidecar_file.stat().st_size}")
+
+    with sidecar_file.open("r", encoding="utf-8", errors="replace") as f:
+        for line_num, raw in enumerate(f, start=1):
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except Exception:
+                bad_json_lines += 1
+                if bad_json_lines <= 5:
+                    print(
+                        f"WARN bad JSON in enriched sidecar line={line_num:,}",
+                        flush=True,
+                    )
+                continue
+
+            if str(row.get("scorer_name") or "") != scorer_name:
+                filtered_out += 1
+                continue
+            if str(row.get("run_type") or "") != run_type:
+                filtered_out += 1
+                continue
+            if str(row.get("benchmark") or "") != benchmark:
+                filtered_out += 1
+                continue
+            if str(row.get("path_hint_level") or "") != path_hint_level:
+                filtered_out += 1
+                continue
+
+            model = _canonical_model_name(
+                str(row.get("model")) if row.get("model") is not None else None,
+                str(row.get("model_path")) if row.get("model_path") is not None else None,
+            )
+            if not model:
+                bad_rows += 1
+                continue
+            if allowed_models is not None and model not in allowed_models:
+                filtered_out += 1
+                continue
+
+            try:
+                hint = round(float(row.get("hint_fraction")), 2)
+            except (TypeError, ValueError):
+                bad_rows += 1
+                continue
+            if allowed_hints is not None and hint not in allowed_hints:
+                filtered_out += 1
+                continue
+
+            sample_id = str(row.get("sample_id") or "")
+            if not sample_id:
+                bad_rows += 1
+                continue
+            try:
+                epoch = int(row.get("epoch"))
+            except (TypeError, ValueError):
+                bad_rows += 1
+                continue
+            if epoch < 1 or epoch > expected_epochs:
+                bad_rows += 1
+                continue
+
+            score_label = str(row.get("score_normalized") or "").strip().upper()
+            if score_label == "C":
+                score = 1
+            elif score_label == "I":
+                score = 0
+            else:
+                score = 1 if bool(row.get("is_correct")) else 0
+
+            created = str(row.get("created") or "")
+            combo = (model, hint)
+            sample_map = grouped.setdefault(combo, {})
+            entry = sample_map.get(sample_id)
+            if entry is None:
+                entry = ([None] * expected_epochs, [""] * expected_epochs)
+                sample_map[sample_id] = entry
+
+            scores_by_epoch, created_by_epoch = entry
+            idx = epoch - 1
+            # Keep most recent entry for duplicate rows.
+            if created >= created_by_epoch[idx]:
+                scores_by_epoch[idx] = score
+                created_by_epoch[idx] = created
+
+            kept_rows += 1
+
+    if kept_rows == 0:
+        raise ValueError(
+            "No matching rows found in enriched sidecar after filtering. "
+            f"scorer={scorer_name} run_type={run_type} benchmark={benchmark} "
+            f"path_hint_level={path_hint_level}"
+        )
+
+    bad_samples: list[dict[str, str | float | int]] = []
+    records: list[dict[str, float | str | int]] = []
+    for (model, hint), sample_map in sorted(grouped.items(), key=lambda x: (x[0][0], x[0][1])):
+        per_sample_epoch_correct: dict[str, list[int]] = {}
+        for sample_id, (scores_by_epoch, _created_by_epoch) in sample_map.items():
+            if any(v is None for v in scores_by_epoch):
+                bad_samples.append(
+                    {
+                        "model": model,
+                        "hint": hint,
+                        "sample_id": sample_id,
+                        "n_epochs_seen": sum(v is not None for v in scores_by_epoch),
+                    }
+                )
+                continue
+            per_sample_epoch_correct[sample_id] = [int(v) for v in scores_by_epoch if v is not None]
+
+        if not per_sample_epoch_correct:
+            continue
+
+        bs = compute_bootstrap_over_epochs_from_correctness(
+            per_sample_epoch_correct,
+            n_bootstrap=n_bootstrap,
+        )
+        records.append(
+            {
+                "model": model,
+                "hint": float(hint),
+                "accuracy": float(bs["accuracy"]),
+                "stderr": float(bs["stderr"]),
+                "n_samples": int(len(per_sample_epoch_correct)),
+                "epochs": int(bs["epochs"]),
+            }
+        )
+
+    if bad_samples:
+        strict_note = " strict_epochs=True;" if strict_epochs else ""
+        print(
+            f"WARN{strict_note} expected exactly {expected_epochs} epochs per sample, "
+            "but enriched sidecar had incomplete samples. "
+            f"n_incomplete={len(bad_samples):,} examples={bad_samples[:10]}",
+            flush=True,
+        )
+
+    df = pd.DataFrame(records)
+    if df.empty:
+        raise ValueError("No aggregated rows produced from enriched sidecar.")
+
+    eci_map = _load_eci_map(eci_file)
+    df["eci"] = df["model"].map(eci_map)
+    df = df.dropna(subset=["eci", "accuracy", "hint"])
+    if df.empty:
+        raise ValueError("No rows remain after ECI join for enriched sidecar data.")
+
+    print(
+        "Loaded regraded enriched sidecar: "
+        f"rows_kept={kept_rows:,} filtered_out={filtered_out:,} "
+        f"bad_json={bad_json_lines:,} bad_rows={bad_rows:,} "
+        f"incomplete_samples={len(bad_samples):,}",
+        flush=True,
+    )
     return df
 
 
@@ -374,11 +745,149 @@ def run_aime_raw_sanity_plot(
     return out_eci, out_by_model
 
 
+def run_aime_raw_sanity_plot_from_regraded_cache(
+    *,
+    db_path: Path,
+    eci_file: Path,
+    output_dir: Path,
+    scorer_name: str = "aime_scorer_extract_answer_fixed",
+    run_type: str = "results",
+    benchmark: str = "aime",
+    path_hint_level: str = "solution_intext_masked/0shot",
+    all_models: list[str] | None = None,
+    hint_fractions: list[float] | None = None,
+    expected_epochs: int = 10,
+    n_bootstrap: int = 1000,
+) -> tuple[Path, Path]:
+    df = load_regraded_results_df(
+        db_path=db_path,
+        eci_file=eci_file,
+        scorer_name=scorer_name,
+        run_type=run_type,
+        benchmark=benchmark,
+        path_hint_level=path_hint_level,
+        all_models=all_models,
+        hint_fractions=hint_fractions,
+        expected_epochs=expected_epochs,
+        n_bootstrap=n_bootstrap,
+        strict_epochs=True,
+    )
+    assert_unique_model_hint(df, output_dir=output_dir)
+
+    slug = _slugify(scorer_name)
+    summary = (
+        df.groupby(["hint"], as_index=False)
+        .agg(n_models=("model", "nunique"), mean_accuracy=("accuracy", "mean"))
+        .sort_values("hint")
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    summary.to_csv(output_dir / f"raw_hint_summary_{slug}.csv", index=False)
+
+    per_model_hint = (
+        df.pivot(index="model", columns="hint", values="accuracy")
+        .sort_index()
+        .sort_index(axis=1)
+    )
+    per_model_hint.columns = [f"hint_{float(c):.2f}" for c in per_model_hint.columns]
+    per_model_hint.to_csv(output_dir / f"accuracy_per_model_per_hint_{slug}.csv")
+
+    detailed_long = df[["model", "hint", "eci", "accuracy", "stderr", "n_samples", "epochs"]].sort_values(
+        ["model", "hint"]
+    )
+    detailed_long.to_csv(output_dir / f"accuracy_per_model_per_hint_long_{slug}.csv", index=False)
+
+    out_eci = plot_accuracy_vs_eci_raw_by_hint(
+        df=df,
+        output_dir=output_dir,
+        out_name=f"accuracy_vs_eci_by_hint_raw_points_{slug}.png",
+        title=f"AIME: accuracy vs ECI by hint ({scorer_name})",
+    )
+    out_by_model = plot_accuracy_vs_hint_by_model_raw_points(
+        df=df,
+        output_dir=output_dir,
+        out_name=f"accuracy_vs_hint_by_model_{slug}.png",
+        title=f"AIME: accuracy vs hint by model ({scorer_name})",
+    )
+    return out_eci, out_by_model
+
+
+def run_aime_raw_sanity_plot_from_regraded_enriched_sidecar(
+    *,
+    sidecar_file: Path,
+    eci_file: Path,
+    output_dir: Path,
+    scorer_name: str = "aime_scorer_extract_answer_fixed",
+    run_type: str = "results",
+    benchmark: str = "aime",
+    path_hint_level: str = "solution_intext_masked/0shot",
+    all_models: list[str] | None = None,
+    hint_fractions: list[float] | None = None,
+    expected_epochs: int = 10,
+    n_bootstrap: int = 1000,
+) -> tuple[Path, Path]:
+    df = load_regraded_results_df_from_enriched_sidecar(
+        sidecar_file=sidecar_file,
+        eci_file=eci_file,
+        scorer_name=scorer_name,
+        run_type=run_type,
+        benchmark=benchmark,
+        path_hint_level=path_hint_level,
+        all_models=all_models,
+        hint_fractions=hint_fractions,
+        expected_epochs=expected_epochs,
+        n_bootstrap=n_bootstrap,
+        strict_epochs=True,
+    )
+    print('loaded results from sidecar')
+    assert_unique_model_hint(df, output_dir=output_dir)
+
+    slug = _slugify(scorer_name)
+    summary = (
+        df.groupby(["hint"], as_index=False)
+        .agg(n_models=("model", "nunique"), mean_accuracy=("accuracy", "mean"))
+        .sort_values("hint")
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    summary.to_csv(output_dir / f"raw_hint_summary_{slug}.csv", index=False)
+
+    per_model_hint = (
+        df.pivot(index="model", columns="hint", values="accuracy")
+        .sort_index()
+        .sort_index(axis=1)
+    )
+    per_model_hint.columns = [f"hint_{float(c):.2f}" for c in per_model_hint.columns]
+    per_model_hint.to_csv(output_dir / f"accuracy_per_model_per_hint_{slug}.csv")
+
+    detailed_long = df[["model", "hint", "eci", "accuracy", "stderr", "n_samples", "epochs"]].sort_values(
+        ["model", "hint"]
+    )
+    detailed_long.to_csv(output_dir / f"accuracy_per_model_per_hint_long_{slug}.csv", index=False)
+
+    out_eci = plot_accuracy_vs_eci_raw_by_hint(
+        df=df,
+        output_dir=output_dir,
+        out_name=f"accuracy_vs_eci_by_hint_raw_points_{slug}.png",
+        title=f"AIME: accuracy vs ECI by hint ({scorer_name})",
+    )
+    out_by_model = plot_accuracy_vs_hint_by_model_raw_points(
+        df=df,
+        output_dir=output_dir,
+        out_name=f"accuracy_vs_hint_by_model_{slug}.png",
+        title=f"AIME: accuracy vs hint by model ({scorer_name})",
+    )
+    return out_eci, out_by_model
+
+
 def main() -> None:
     project_root = Path(__file__).resolve().parents[2]
     base_folder = project_root / "christine_experiments/20251113/results"
     eci_file = project_root / "christine_experiments/20260129_fitting/eci_model_capabilities.csv"
     output_dir = Path(__file__).resolve().parent
+    regraded_db = project_root / "suze_experiments/20260313/consolidated_jsonl/_viewer_cache.duckdb"
+    regraded_enriched_sidecar = (
+        project_root
+        / "suze_experiments/20260313/consolidated_jsonl/results__aime.extract_answer_fixed.scorers.enriched.jsonl"
+    )
     all_models = [
         "Qwen2.5-1.5B-Instruct",
         "Qwen2.5-3B-Instruct",
@@ -419,21 +928,60 @@ def main() -> None:
         all_models=all_models,
         hint_fractions=hint_fractions,
     )
-    debug_df = add_inference_owner(
-        df=debug_df,
-        base_folder=base_folder,
-        eval_name="aime",
-        solver="solution_intext_masked",
-        condition="0shot",
-    )
-    out_by_owner = plot_accuracy_vs_hint_by_model_raw_points_by_owner(
-        df=debug_df,
-        output_dir=output_dir,
-    )
+    print('original results loaded')
+    # debug_df = add_inference_owner(
+    #     df=debug_df,
+    #     base_folder=base_folder,
+    #     eval_name="aime",
+    #     solver="solution_intext_masked",
+    #     condition="0shot",
+    # )
+    # print('inference owner added')
+    # out_by_owner = plot_accuracy_vs_hint_by_model_raw_points_by_owner(
+    #     df=debug_df,
+    #     output_dir=output_dir,
+    # )
+    print('owner-colored plot created')
 
     print(f"Wrote: {out_eci}")
     print(f"Wrote: {out_by_model}")
-    print(f"Wrote: {out_by_owner}")
+    # print(f"Wrote: {out_by_owner}")
+
+    # Regraded scorer plots, preferring enriched sidecar (standalone) and
+    # falling back to DuckDB cache if enriched sidecar is unavailable.
+    if regraded_enriched_sidecar.exists():
+        print('regraded enriched sidecar exists')
+        out_eci_regraded, out_by_model_regraded = run_aime_raw_sanity_plot_from_regraded_enriched_sidecar(
+            sidecar_file=regraded_enriched_sidecar,
+            eci_file=eci_file,
+            output_dir=output_dir,
+            scorer_name="aime_scorer_extract_answer_fixed",
+            run_type="results",
+            benchmark="aime",
+            path_hint_level="solution_intext_masked/0shot",
+            all_models=all_models,
+            hint_fractions=hint_fractions,
+            expected_epochs=10,
+            n_bootstrap=1000,
+        )
+        print('regraded enriched sidecar plots created')
+    else:
+        print('regraded enriched sidecar does not exist; make it!')
+        # out_eci_regraded, out_by_model_regraded = run_aime_raw_sanity_plot_from_regraded_cache(
+        #     db_path=regraded_db,
+        #     eci_file=eci_file,
+        #     output_dir=output_dir,
+        #     scorer_name="aime_scorer_extract_answer_fixed",
+        #     run_type="results",
+        #     benchmark="aime",
+        #     path_hint_level="solution_intext_masked/0shot",
+        #     all_models=all_models,
+        #     hint_fractions=hint_fractions,
+        #     expected_epochs=10,
+        #     n_bootstrap=1000,
+        # )
+    print(f"Wrote: {out_eci_regraded}")
+    print(f"Wrote: {out_by_model_regraded}")
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ DEFAULT_DATA_DIR = Path(__file__).resolve().parent / "consolidated_jsonl"
 DEFAULT_DB_PATH = DEFAULT_DATA_DIR / "_viewer_cache.duckdb"
 BATCH_SIZE = 2000
 ROLLOUT_INDEX_SUFFIX = ".rollout_index.sqlite3"
+ALLOW_SEQUENTIAL_JSONL_FALLBACK = False
 
 
 @dataclass(frozen=True)
@@ -341,6 +342,7 @@ def ingest_file(
     scorer_rows: list[tuple[Any, ...]] = []
     rollout_count = 0
     scorer_count = 0
+    bad_json_lines = 0
     line_count = 0
     bytes_seen = 0
     last_report_line_count = 0
@@ -349,7 +351,7 @@ def ingest_file(
     if progress_callback is not None:
         progress_callback(0.0, rollout_count, scorer_count)
 
-    with src.path.open("r", encoding="utf-8") as f:
+    with src.path.open("r", encoding="utf-8", errors="replace") as f:
         for raw_line in f:
             line_count += 1
             bytes_seen += len(raw_line.encode("utf-8", errors="ignore"))
@@ -357,7 +359,17 @@ def ingest_file(
             if not line:
                 continue
 
-            row = json.loads(line)
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                bad_json_lines += 1
+                if bad_json_lines <= 5 or bad_json_lines % 1000 == 0:
+                    preview = line[:120].replace("\n", "\\n")
+                    st.warning(
+                        f"Bad JSON line in {src.path.name} line={line_count:,} "
+                        f"(count={bad_json_lines:,}) preview={preview!r}"
+                    )
+                continue
             if _is_scorer_sidecar_row(row):
                 rollout_id = _to_text(row.get("rollout_id"))
                 scorer_name = _to_text(row.get("scorer_name"))
@@ -473,6 +485,10 @@ def ingest_file(
     conn.commit()
     if progress_callback is not None:
         progress_callback(1.0, rollout_count, scorer_count)
+    if bad_json_lines > 0:
+        st.warning(
+            f"{src.path.name}: skipped {bad_json_lines:,} malformed JSON line(s) during ingest."
+        )
     return rollout_count, scorer_count
 
 
@@ -810,27 +826,36 @@ def hydrate_epoch_text_from_source(
             if not pending_ids:
                 break
 
-        # Fallback when index is missing/stale/incomplete.
-        pending_set = set(pending_ids)
-        with p.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                row = json.loads(line)
-                rid = str(row.get("rollout_id") or "")
-                if rid not in pending_set:
-                    continue
-                if not row_matches_scope(row, rid):
-                    continue
-                fills[rid] = row_fill_payload(row, scorer_name=scorer_name)
-                if len(fills) == len(wanted):
-                    break
-        if len(fills) == len(wanted):
-            break
+        if ALLOW_SEQUENTIAL_JSONL_FALLBACK:
+            # Fallback when index is missing/stale/incomplete.
+            pending_set = set(pending_ids)
+            with p.open("r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    row = json.loads(line)
+                    rid = str(row.get("rollout_id") or "")
+                    if rid not in pending_set:
+                        continue
+                    if not row_matches_scope(row, rid):
+                        continue
+                    fills[rid] = row_fill_payload(row, scorer_name=scorer_name)
+                    if len(fills) == len(wanted):
+                        break
+            if len(fills) == len(wanted):
+                break
 
     if not fills:
         return df_epochs
+
+    unresolved = sorted(wanted - set(fills.keys()))
+    if unresolved and not ALLOW_SEQUENTIAL_JSONL_FALLBACK:
+        st.warning(
+            "Rollout text hydration skipped for "
+            f"{len(unresolved)} row(s): rollout index missing/stale/incomplete for source file(s). "
+            "Rebuild the rollout offset index."
+        )
 
     out = df_epochs.copy()
     for i, r in out.iterrows():
