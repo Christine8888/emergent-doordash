@@ -175,7 +175,20 @@ def _flush_batch(
         conn.execute("INSERT INTO rollouts SELECT * FROM roll_batch")
         conn.unregister("roll_batch")
     if ns > 0:
-        df_score = pd.DataFrame(scorer_rows)
+        # Sidecar rescoring files can contain duplicate scorer rows for the same
+        # (rollout_id, scorer_name) due to resume/retry workflows. Deduplicate
+        # within each batch before MERGE so PK-constrained DBs do not fail.
+        deduped: dict[tuple[str, str], dict[str, Any]] = {}
+        for row in scorer_rows:
+            rid = str(row.get("rollout_id") or "")
+            scorer = str(row.get("scorer_name") or "")
+            if not rid or not scorer:
+                continue
+            deduped[(rid, scorer)] = row
+
+        df_score = pd.DataFrame(deduped.values())
+        if df_score.empty:
+            return nr, ns
         conn.register("score_batch", df_score)
         conn.execute(
             """
