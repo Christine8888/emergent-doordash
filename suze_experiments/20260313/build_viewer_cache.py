@@ -151,6 +151,17 @@ def _to_float(value: Any) -> float | None:
         return None
 
 
+def _is_scorer_sidecar_row(row: dict[str, Any]) -> bool:
+    # Sidecar rows contain one scorer payload at top-level (no scorer_outcomes map).
+    if not isinstance(row, dict):
+        return False
+    return (
+        row.get("rollout_id") is not None
+        and row.get("scorer_name") is not None
+        and row.get("scorer_outcomes") is None
+    )
+
+
 def _flush_batch(
     conn: duckdb.DuckDBPyConnection,
     rollout_rows: list[dict[str, Any]],
@@ -166,7 +177,25 @@ def _flush_batch(
     if ns > 0:
         df_score = pd.DataFrame(scorer_rows)
         conn.register("score_batch", df_score)
-        conn.execute("INSERT INTO rollout_scorers SELECT * FROM score_batch")
+        conn.execute(
+            """
+            MERGE INTO rollout_scorers AS t
+            USING score_batch AS s
+            ON t.rollout_id = s.rollout_id AND t.scorer_name = s.scorer_name
+            WHEN MATCHED THEN UPDATE SET
+                source_file = s.source_file,
+                score_normalized = s.score_normalized,
+                is_correct = s.is_correct,
+                extracted_answer = s.extracted_answer,
+                extraction_status = s.extraction_status,
+                explanation = s.explanation,
+                metadata_json = s.metadata_json
+            WHEN NOT MATCHED THEN INSERT
+                (source_file, rollout_id, scorer_name, score_normalized, is_correct, extracted_answer, extraction_status, explanation, metadata_json)
+            VALUES
+                (s.source_file, s.rollout_id, s.scorer_name, s.score_normalized, s.is_correct, s.extracted_answer, s.extraction_status, s.explanation, s.metadata_json)
+            """
+        )
         conn.unregister("score_batch")
     return nr, ns
 
@@ -205,6 +234,44 @@ def ingest_file(
                 continue
 
             row = json.loads(line)
+            if _is_scorer_sidecar_row(row):
+                rollout_id = _to_text(row.get("rollout_id"))
+                scorer_name = _to_text(row.get("scorer_name"))
+                if not rollout_id or not scorer_name:
+                    continue
+                scorer_rows.append(
+                    {
+                        "source_file": source_file,
+                        "rollout_id": rollout_id,
+                        "scorer_name": scorer_name,
+                        "score_normalized": _to_text(row.get("score_normalized")),
+                        "is_correct": row.get("is_correct") if isinstance(row.get("is_correct"), bool) else None,
+                        "extracted_answer": _to_text(row.get("extracted_answer")),
+                        "extraction_status": _to_text(row.get("extraction_status")),
+                        "explanation": _to_text(row.get("explanation")) if include_explanations else None,
+                        "metadata_json": json.dumps(row.get("metadata_json"), ensure_ascii=False, default=str),
+                    }
+                )
+                if len(scorer_rows) >= batch_size:
+                    nr, ns = _flush_batch(conn, rollout_rows, scorer_rows)
+                    rows_total += nr
+                    scorers_total += ns
+                    rollout_rows.clear()
+                    scorer_rows.clear()
+                now = time.time()
+                if now - last_log >= log_every_sec:
+                    elapsed = now - started
+                    pct = 100.0 * bytes_seen / max(1, src.size_bytes)
+                    speed = bytes_seen / max(1e-9, elapsed)
+                    print(
+                        f"[{ts_now()}] {src.path.name} progress={pct:.2f}% "
+                        f"rows={rows_total:,} scorers={scorers_total:,} "
+                        f"read={human_size(bytes_seen)} speed={human_size(speed)}/s",
+                        flush=True,
+                    )
+                    last_log = now
+                continue
+
             rollout_id = _to_text(row.get("rollout_id"))
             if not rollout_id:
                 continue
@@ -256,7 +323,7 @@ def ingest_file(
                         }
                     )
 
-            if len(rollout_rows) >= batch_size:
+            if len(rollout_rows) >= batch_size or len(scorer_rows) >= batch_size:
                 nr, ns = _flush_batch(conn, rollout_rows, scorer_rows)
                 rows_total += nr
                 scorers_total += ns

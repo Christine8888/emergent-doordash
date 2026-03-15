@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
+import re
+import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +17,7 @@ import streamlit as st
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent / "consolidated_jsonl"
 DEFAULT_DB_PATH = DEFAULT_DATA_DIR / "_viewer_cache.duckdb"
 BATCH_SIZE = 2000
+ROLLOUT_INDEX_SUFFIX = ".rollout_index.sqlite3"
 
 
 @dataclass(frozen=True)
@@ -25,6 +29,81 @@ class SourceFileStat:
 
 def ts_now() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def rollout_index_path(source_path: Path) -> Path:
+    return source_path.with_name(source_path.name + ROLLOUT_INDEX_SUFFIX)
+
+
+def index_meta(index_path: Path) -> dict[str, str]:
+    if not index_path.exists():
+        return {}
+    try:
+        with sqlite3.connect(str(index_path)) as con:
+            rows = con.execute("SELECT key, value FROM meta").fetchall()
+        return {str(k): str(v) for k, v in rows}
+    except Exception:
+        return {}
+
+
+def index_is_fresh(source_path: Path, index_path: Path) -> bool:
+    if not index_path.exists():
+        return False
+    try:
+        st_obj = source_path.stat()
+    except Exception:
+        return False
+    meta = index_meta(index_path)
+    if not meta:
+        return False
+    return (
+        meta.get("size_bytes") == str(int(st_obj.st_size))
+        and meta.get("mtime_ns") == str(int(st_obj.st_mtime_ns))
+    )
+
+
+def lookup_rollout_offsets(
+    source_path: Path,
+    rollout_ids: list[str],
+) -> dict[str, int]:
+    """Lookup rollout byte offsets from sidecar SQLite index if available/fresh."""
+    if not rollout_ids:
+        return {}
+    index_path = rollout_index_path(source_path)
+    if not index_is_fresh(source_path, index_path):
+        return {}
+    placeholders = ",".join(["?"] * len(rollout_ids))
+    query = (
+        "SELECT rollout_id, byte_offset FROM offsets "
+        f"WHERE rollout_id IN ({placeholders})"
+    )
+    try:
+        with sqlite3.connect(str(index_path)) as con:
+            rows = con.execute(query, rollout_ids).fetchall()
+        return {str(rid): int(offset) for rid, offset in rows}
+    except Exception:
+        return {}
+
+
+def fetch_rows_by_offsets(source_path: Path, offsets: dict[str, int]) -> dict[str, dict[str, Any]]:
+    """Fetch JSON rows from source file via byte offsets."""
+    if not offsets:
+        return {}
+    # Read in ascending offset order to keep disk access mostly sequential.
+    items = sorted(offsets.items(), key=lambda kv: kv[1])
+    out: dict[str, dict[str, Any]] = {}
+    with source_path.open("rb") as f:
+        for rid, off in items:
+            try:
+                f.seek(off)
+                line = f.readline()
+                if not line:
+                    continue
+                row = json.loads(line.decode("utf-8", errors="replace"))
+                out[str(rid)] = row if isinstance(row, dict) else {}
+            except Exception:
+                continue
+    return out
 
 
 def get_connection(db_path: str) -> duckdb.DuckDBPyConnection:
@@ -155,9 +234,33 @@ def _to_float(value: Any) -> float | None:
     if value is None:
         return None
     try:
-        return float(value)
+        x = float(value)
+        # Treat NaN/inf as missing so downstream SQL filtering doesn't break.
+        if not math.isfinite(x):
+            return None
+        return x
     except Exception:
         return None
+
+
+def extract_problem_text_from_prompt(prompt_text: str) -> str:
+    """Best-effort extraction of just the problem statement from a full prompt."""
+    text = (prompt_text or "").strip()
+    if not text:
+        return ""
+
+    # Common format used by math-style prompts in this repo.
+    m = re.search(r"(?is)\bPROBLEM:\s*(.*?)\s*\bSOLUTION:\s*$", text)
+    if m:
+        return m.group(1).strip()
+
+    # Fallback: if "PROBLEM:" exists but "SOLUTION:" is absent/malformed.
+    m2 = re.search(r"(?is)\bPROBLEM:\s*(.*)$", text)
+    if m2:
+        return m2.group(1).strip()
+
+    # Final fallback: return original prompt.
+    return text
 
 
 def _format_hint_level(value: Any) -> str:
@@ -165,6 +268,31 @@ def _format_hint_level(value: Any) -> str:
     if x is None:
         return "NA"
     return f"{x:.2f}"
+
+
+def _parse_sample_ids(raw: str) -> list[str]:
+    """Parse comma/newline separated sample IDs into de-duplicated exact IDs."""
+    if not raw:
+        return []
+    parts = [p.strip() for p in raw.replace("\n", ",").split(",")]
+    seen: set[str] = set()
+    out: list[str] = []
+    for p in parts:
+        if not p or p in seen:
+            continue
+        seen.add(p)
+        out.append(p)
+    return out
+
+
+def _is_scorer_sidecar_row(row: dict[str, Any]) -> bool:
+    if not isinstance(row, dict):
+        return False
+    return (
+        row.get("rollout_id") is not None
+        and row.get("scorer_name") is not None
+        and row.get("scorer_outcomes") is None
+    )
 
 
 def _batched_insert(
@@ -230,6 +358,36 @@ def ingest_file(
                 continue
 
             row = json.loads(line)
+            if _is_scorer_sidecar_row(row):
+                rollout_id = _to_text(row.get("rollout_id"))
+                scorer_name = _to_text(row.get("scorer_name"))
+                if not rollout_id or not scorer_name:
+                    continue
+                scorer_rows.append(
+                    (
+                        source_file,
+                        rollout_id,
+                        scorer_name,
+                        _to_text(row.get("score_normalized")),
+                        row.get("is_correct") if isinstance(row.get("is_correct"), bool) else None,
+                        _to_text(row.get("extracted_answer")),
+                        _to_text(row.get("extraction_status")),
+                        _to_text(row.get("explanation")) if store_full_text else None,
+                        json.dumps(row.get("metadata_json"), ensure_ascii=False, default=str),
+                    )
+                )
+
+                if len(scorer_rows) >= BATCH_SIZE:
+                    a, b = _batched_insert(conn, rollout_rows, scorer_rows)
+                    rollout_count += a
+                    scorer_count += b
+                    rollout_rows.clear()
+                    scorer_rows.clear()
+                    if progress_callback is not None:
+                        file_progress = min(1.0, bytes_seen / max(1, src.size_bytes))
+                        progress_callback(file_progress, rollout_count, scorer_count)
+                continue
+
             rollout_id = _to_text(row.get("rollout_id"))
             if not rollout_id:
                 continue
@@ -281,7 +439,7 @@ def ingest_file(
                         )
                     )
 
-            if len(rollout_rows) >= BATCH_SIZE:
+            if len(rollout_rows) >= BATCH_SIZE or len(scorer_rows) >= BATCH_SIZE:
                 a, b = _batched_insert(conn, rollout_rows, scorer_rows)
                 rollout_count += a
                 scorer_count += b
@@ -411,6 +569,7 @@ def _where_clause(
     hint_types: list[str],
     hint_levels: list[float],
     models: list[str],
+    sample_ids: list[str],
 ) -> tuple[str, list[Any]]:
     clauses: list[str] = []
     params: list[Any] = []
@@ -430,6 +589,9 @@ def _where_clause(
     if models:
         clauses.append(f"r.model IN ({','.join(['?'] * len(models))})")
         params.extend(models)
+    if sample_ids:
+        clauses.append(f"r.sample_id IN ({','.join(['?'] * len(sample_ids))})")
+        params.extend(sample_ids)
 
     if not clauses:
         return "", []
@@ -460,11 +622,12 @@ def query_problem_summary(
     hint_types: list[str],
     hint_levels: list[float],
     models: list[str],
+    sample_ids: list[str],
     scorer_name: str,
     score_labels: list[str],
     limit: int,
 ) -> pd.DataFrame:
-    where_sql, params = _where_clause(run_types, benchmarks, hint_types, hint_levels, models)
+    where_sql, params = _where_clause(run_types, benchmarks, hint_types, hint_levels, models, sample_ids)
     if not score_labels:
         score_labels = ["C", "I", "U"]
 
@@ -546,14 +709,18 @@ def query_problem_epochs(
       AND r.benchmark = ?
       AND r.model = ?
       AND r.path_hint_level = ?
-      AND ((r.hint_fraction IS NULL AND ? IS NULL) OR r.hint_fraction = ?)
+      AND (
+        (? IS NULL AND r.hint_fraction IS NULL)
+        OR
+        (? IS NOT NULL AND r.hint_fraction IS NOT NULL AND ABS(r.hint_fraction - ?) < 1e-12)
+      )
       AND r.sample_id = ?
     ORDER BY r.epoch, r.rollout_id
     """
     return _query_df(
         conn,
         query,
-        [scorer_name, run_type, benchmark, model, path_hint_level, hint_fraction, hint_fraction, sample_id],
+        [scorer_name, run_type, benchmark, model, path_hint_level, hint_fraction, hint_fraction, hint_fraction, sample_id],
     )
 
 
@@ -581,10 +748,70 @@ def hydrate_epoch_text_from_source(
     fills: dict[str, dict[str, Any]] = {}
     source_files = sorted(set(df_epochs["source_file"].astype(str).tolist()))
 
+    def row_matches_scope(row: dict[str, Any], rid: str) -> bool:
+        if str(row.get("rollout_id") or "") != rid:
+            return False
+        if str(row.get("run_type")) != run_type:
+            return False
+        if str(row.get("benchmark")) != benchmark:
+            return False
+        if str(row.get("model")) != model:
+            return False
+        if str(row.get("path_hint_level")) != path_hint_level:
+            return False
+        row_hint_fraction = _to_float(row.get("hint_fraction"))
+        if row_hint_fraction is None and hint_fraction is not None:
+            return False
+        if row_hint_fraction is not None and hint_fraction is None:
+            return False
+        if row_hint_fraction is not None and hint_fraction is not None:
+            if abs(row_hint_fraction - hint_fraction) > 1e-12:
+                return False
+        if str(row.get("sample_id")) != sample_id:
+            return False
+        return True
+
+    def row_fill_payload(row: dict[str, Any], scorer_name: str) -> dict[str, Any]:
+        explanation = None
+        so = row.get("scorer_outcomes")
+        if isinstance(so, dict):
+            payload = so.get(scorer_name)
+            if isinstance(payload, dict):
+                explanation = payload.get("explanation")
+        return {
+            "prompt_text": row.get("prompt_text"),
+            "output_text": row.get("output_text"),
+            "target": row.get("target"),
+            "explanation": explanation,
+        }
+
     for src in source_files:
         p = Path(src)
         if not p.exists():
             continue
+        pending_ids = sorted(wanted - set(fills.keys()))
+        if not pending_ids:
+            break
+
+        # Fast path: seek directly using prebuilt rollout offset index.
+        offsets = lookup_rollout_offsets(p, pending_ids)
+        if offsets:
+            rows_by_id = fetch_rows_by_offsets(p, offsets)
+            for rid, row in rows_by_id.items():
+                if not isinstance(row, dict):
+                    continue
+                if not row_matches_scope(row, rid):
+                    continue
+                fills[rid] = row_fill_payload(row, scorer_name=scorer_name)
+            if len(fills) == len(wanted):
+                break
+            # Fall through to sequential only for unresolved IDs.
+            pending_ids = sorted(wanted - set(fills.keys()))
+            if not pending_ids:
+                break
+
+        # Fallback when index is missing/stale/incomplete.
+        pending_set = set(pending_ids)
         with p.open("r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -592,40 +819,11 @@ def hydrate_epoch_text_from_source(
                     continue
                 row = json.loads(line)
                 rid = str(row.get("rollout_id") or "")
-                if rid not in wanted:
+                if rid not in pending_set:
                     continue
-                if str(row.get("run_type")) != run_type:
+                if not row_matches_scope(row, rid):
                     continue
-                if str(row.get("benchmark")) != benchmark:
-                    continue
-                if str(row.get("model")) != model:
-                    continue
-                if str(row.get("path_hint_level")) != path_hint_level:
-                    continue
-                row_hint_fraction = _to_float(row.get("hint_fraction"))
-                if row_hint_fraction is None and hint_fraction is not None:
-                    continue
-                if row_hint_fraction is not None and hint_fraction is None:
-                    continue
-                if row_hint_fraction is not None and hint_fraction is not None:
-                    if abs(row_hint_fraction - hint_fraction) > 1e-12:
-                        continue
-                if str(row.get("sample_id")) != sample_id:
-                    continue
-
-                explanation = None
-                so = row.get("scorer_outcomes")
-                if isinstance(so, dict):
-                    payload = so.get(scorer_name)
-                    if isinstance(payload, dict):
-                        explanation = payload.get("explanation")
-
-                fills[rid] = {
-                    "prompt_text": row.get("prompt_text"),
-                    "output_text": row.get("output_text"),
-                    "target": row.get("target"),
-                    "explanation": explanation,
-                }
+                fills[rid] = row_fill_payload(row, scorer_name=scorer_name)
                 if len(fills) == len(wanted):
                     break
         if len(fills) == len(wanted):
@@ -653,7 +851,7 @@ def hydrate_epoch_text_from_source(
 
 def render_epoch_details(df_epochs: pd.DataFrame) -> None:
     if df_epochs.empty:
-        st.info("No epochs found for this problem under the selected filters.")
+        st.info("No rollouts found for this problem under the selected filters.")
         return
 
     score_counts = df_epochs["score_label"].fillna("U").astype(str).value_counts()
@@ -661,25 +859,32 @@ def render_epoch_details(df_epochs: pd.DataFrame) -> None:
     i_count = int(score_counts.get("I", 0))
     u_count = int(score_counts.get("U", 0))
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Epochs", int(len(df_epochs)))
+    m1.metric("Rollouts", int(len(df_epochs)))
     m2.metric("Correct (C)", c_count)
     m3.metric("Incorrect (I)", i_count)
     m4.metric("Unknown (U)", u_count)
 
     prompt_series = df_epochs["prompt_text"].dropna()
     if not prompt_series.empty and str(prompt_series.iloc[0]).strip():
-        with st.expander("Problem / Prompt", expanded=False):
-            st.code(str(prompt_series.iloc[0]), language="text")
+        first_prompt = str(prompt_series.iloc[0])
+        problem_text = extract_problem_text_from_prompt(first_prompt)
+        st.markdown("### Problem")
+        st.code(problem_text, language="text")
+        with st.expander("Full Prompt", expanded=False):
+            st.code(first_prompt, language="text")
+    else:
+        st.warning("Problem text was not found for this selection.")
 
-    summary_cols = ["epoch", "score_label", "is_correct", "extracted_answer", "target", "rollout_id"]
-    st.markdown("### Epoch Performance")
+    summary_cols = ["rollout_id", "epoch", "score_label", "is_correct", "extracted_answer", "target"]
+    st.markdown("### Rollouts (All Epochs)")
+    st.caption("Each row below is one rollout for the selected problem.")
     st.dataframe(df_epochs[summary_cols], width="stretch", hide_index=True)
 
-    st.markdown("### Epoch Details")
+    st.markdown("### Rollout Details")
+    st.caption("Open any rollout row below to view full prompt/output.")
     for _, row in df_epochs.iterrows():
         label = (
-            f"Epoch {row['epoch']} | score={row['score_label']} | "
-            f"rollout_id={row['rollout_id']}"
+            f"rollout_id={row['rollout_id']} | epoch={row['epoch']} | score={row['score_label']}"
         )
         with st.expander(label):
             st.markdown(f"**Target:** `{row['target']}`")
@@ -824,6 +1029,13 @@ def main() -> None:
     with c8:
         row_limit = st.number_input("Problem rows limit", min_value=50, max_value=20000, value=1000, step=50)
 
+    sample_id_text = st.text_input(
+        "Sample ID filter (exact)",
+        value="",
+        help="Optional comma/newline-separated exact sample IDs (e.g. 2009-II-3, 1988-5).",
+    )
+    sample_ids = _parse_sample_ids(sample_id_text)
+
     try:
         df_summary = query_problem_summary(
             conn=conn,
@@ -832,6 +1044,7 @@ def main() -> None:
             hint_types=hint_types,
             hint_levels=hint_levels,
             models=models,
+            sample_ids=sample_ids,
             scorer_name=scorer_name,
             score_labels=score_labels,
             limit=int(row_limit),
@@ -847,6 +1060,7 @@ def main() -> None:
             hint_types=hint_types,
             hint_levels=hint_levels,
             models=models,
+            sample_ids=sample_ids,
             scorer_name=scorer_name,
             score_labels=score_labels,
             limit=int(row_limit),
@@ -901,21 +1115,24 @@ def main() -> None:
             selected_rows = getattr(selection, "rows", []) if selection is not None else []
         if isinstance(selected_rows, list) and selected_rows:
             selected_idx = int(selected_rows[0])
-    except TypeError:
+    except Exception:
         interactive_supported = False
         st.dataframe(df_summary, width="stretch", hide_index=True)
 
     if selected_idx is None:
-        if interactive_supported:
-            selected_idx = default_idx
-            st.caption("Click a row in Problem Summary to load details. Showing current selection below.")
-        else:
-            selected_idx = st.selectbox(
-                "Problem",
-                options=list(range(len(df_choices))),
-                index=default_idx,
-                format_func=lambda i: str(df_choices.iloc[int(i)]["problem_key"]),
-            )
+        selected_idx = default_idx
+
+    if interactive_supported:
+        st.caption("Click a row in Problem Summary or use the selector below.")
+    else:
+        st.caption("Row click is not available in this Streamlit build; use the selector below.")
+
+    selected_idx = st.selectbox(
+        "Problem",
+        options=list(range(len(df_choices))),
+        index=int(selected_idx),
+        format_func=lambda i: str(df_choices.iloc[int(i)]["problem_key"]),
+    )
 
     if selected_idx < 0 or selected_idx >= len(df_choices):
         selected_idx = 0
@@ -928,6 +1145,7 @@ def main() -> None:
         f"model={selected_row['model']} hint_type={selected_row['hint_type']} "
         f"hint_level={_format_hint_level(selected_row['hint_level'])} sample_id={selected_row['sample_id']}"
     )
+    st.caption("Rollouts for this selected problem are shown below under 'Rollouts (All Epochs)'.")
 
     selected_hint_level = _to_float(selected_row["hint_level"])
     try:

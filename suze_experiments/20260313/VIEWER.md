@@ -66,3 +66,29 @@ python suze_experiments/20260313/build_viewer_cache.py --files results__aime.jso
 ```
 
 After cache build finishes, open the Streamlit app and query the DB normally.
+
+## Re-Scoring via Sidecar (Safe)
+
+To add a new scorer without mutating `results__aime.jsonl`, write a scorer-only sidecar:
+
+```bash
+conda run -n ed python suze_experiments/20260313/rescore_aime_extract_answer_fixed.py
+```
+
+Default outputs:
+- input: `consolidated_jsonl/results__aime.jsonl` (read-only)
+- sidecar: `consolidated_jsonl/results__aime.extract_answer_fixed.scorers.jsonl`
+- checkpoint: `consolidated_jsonl/_state/results__aime.extract_answer_fixed.state.json`
+
+Resume behavior:
+- Re-run the same command to resume from the checkpoint.
+- Use `--restart` to start from byte offset 0 and overwrite sidecar/state.
+
+Ingest into viewer DB:
+
+```bash
+python suze_experiments/20260313/build_viewer_cache.py \
+  --files results__aime.extract_answer_fixed.scorers.jsonl
+```
+
+Or from Streamlit, click **Sync JSONL -> DuckDB** (no rebuild needed).

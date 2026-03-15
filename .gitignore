@@ -43,4 +43,5 @@ suze_experiments/20260312/corpus_smoke/
 suze_experiments/20260312/corpus_logs/
 
 *.duckdb.*
+*.rollout_index.*
 *.duckdb
