@@ -26,6 +26,15 @@ FRACTIONS = np.arange(0.0, 1.01, 0.05)
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BASE = REPO_ROOT / "christine_experiments"
 
+# Map christine's dataset name -> our label
+CHRISTINE_DATASET_MAP = {
+    "aime_solution": "AIME solution",
+    "gpqa_solution": "GPQA solution",
+    "aime_cot":      "AIME cot",
+    "gpqa_cot":      "GPQA cot",
+}
+CHRISTINE_RESULTS_PATH = BASE / "20260304/spoilage_results_masked.jsonl"
+
 def _truncate_at_stop_string(text: str, stop_string: str, fraction) -> str:
     """Truncate text before stop_string, warning if not found."""
     if stop_string not in text:
@@ -60,14 +69,6 @@ def get_masked_text(text: str, fraction: float = 0.5, mask_token: str = "[MASK]"
     rng = random.Random(seed) if seed is not None else random
     mask_indices = set(rng.sample(word_indices, num_to_mask))
     return "".join(mask_token if i in mask_indices else t for i, t in enumerate(tokens)).strip()
-
-
-def strip_answer_suffix(hint):
-    """Split at the last occurrence of 'ANSWER:' and return text before it."""
-    idx = hint.rfind("ANSWER:")
-    if idx == -1:
-        return hint
-    return hint[:idx]
 
 
 def target_is_spoiled(prefix_text, target):
@@ -175,7 +176,7 @@ def compute_spoilage_curve(entries, fractions):
                 hint = entry["hint"]
                 target = str(entry["target"])
                 # Deterministic seed for reproducible masked spoilage curves.
-                mask_seed = f"{entry['id']}_{entry.get('sample_idx', 0)}_{f:.2f}"
+                mask_seed = f"{entry['id']}_{entry.get('sample_idx', 0)}_{f}_0"
                 if not hint:
                     raise ValueError(f'hint is empty: {pprint(entry)}')
                 masked_hint = get_masked_text(
@@ -189,8 +190,67 @@ def compute_spoilage_curve(entries, fractions):
     return rates
 
 
-def main():
+def load_christine_spoilage_curves():
+    """Load Christine's pre-judged (LLM) spoilage results and aggregate per-id.
+
+    Returns:
+        dict mapping label -> (fractions_array, rates_list)
+    """
+    rows = []
+    with open(CHRISTINE_RESULTS_PATH) as f:
+        for line in f:
+            rows.append(json.loads(line))
+
+    # group by (dataset, fraction) -> {id -> [spoiled, ...]}
+    grouped = defaultdict(lambda: defaultdict(list))
+    for row in rows:
+        label = CHRISTINE_DATASET_MAP.get(row["dataset"])
+        key = (label, row["fraction"])
+        grouped[key][row["id"]].append(row["spoiled"])
+
+    # Validate rollout counts per id at fraction=1.0 (all fractions share the same ids)
+    for label in CHRISTINE_DATASET_MAP.values():
+        per_id = grouped.get((label, 1.0), {})
+        if not per_id:
+            continue
+        id_counts = Counter(len(v) for v in per_id.values())
+        unique_counts = sorted(id_counts)
+        if len(unique_counts) == 1:
+            print(f"[christine/{label}] all {len(per_id)} ids have {unique_counts[0]} rollouts each.")
+        else:
+            print(f"[christine/{label}] WARNING: uneven rollout counts: {dict(id_counts)}")
+            preview = sorted((k, len(v)) for k, v in per_id.items() if len(v) != unique_counts[-1])[:10]
+            print(f"[christine/{label}] example id->count pairs: {preview}")
+
+    # collect all fractions and labels
+    all_fractions = sorted({f for _, f in grouped})
+    all_labels = list(CHRISTINE_DATASET_MAP.values())
+
     results = {}
+    for label in all_labels:
+        rates = []
+        for f in all_fractions:
+            per_id = grouped[(label, f)]
+            if f == 0.0:
+                rates.append(0.0)
+                continue
+            # average spoilage rate per id (equal question weight)
+            id_rates = [sum(v) / len(v) for v in per_id.values()]
+            rates.append(float(np.mean(id_rates)))
+        # unique (id, sample_idx) pairs judged for this dataset
+        id_sample_pairs = frozenset(
+            (row["id"], row["sample_idx"])
+            for row in rows
+            if CHRISTINE_DATASET_MAP.get(row["dataset"]) == label
+        )
+        results[label] = (np.array(all_fractions), rates, id_sample_pairs)
+
+    return results
+
+
+def main():
+    results = {}      # label -> rates
+    n_samples = {}    # label -> total hint count
     for rel_path, label in DATASETS:
         path = BASE / rel_path
         entries = load_entries(path)
@@ -198,6 +258,7 @@ def main():
         validate_hint_counts_per_id(entries, label)
         rates = compute_spoilage_curve(entries, FRACTIONS)
         results[label] = rates
+        n_samples[label] = len(entries)
 
     # Print table
     # header = f"{'Dataset':<20}" + "".join(f"{'f=' + str(f):<12}" for f in FRACTIONS)
@@ -210,20 +271,108 @@ def main():
     #         row += f"{rates[idx]:<12.4f}"
     #     print(row)
 
-    # Plot
-    fig, ax = plt.subplots(figsize=(8, 5))
-    for label, rates in results.items():
-        ax.plot(FRACTIONS, rates, marker="o", markersize=3, label=label)
-    ax.set_xlabel("Prefill Fraction")
-    ax.set_ylabel("Spoilage Rate")
-    ax.set_title("Answer Spoilage Rate by Prefill Fraction")
-    ax.legend()
-    ax.grid(True)
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
+    christine_results = load_christine_spoilage_curves()
+
+    # Pre-load all entries per label so we can filter to matched subset
+    all_entries = {}
+    for rel_path, label in DATASETS:
+        all_entries[label] = load_entries(BASE / rel_path)
+
+    # Plot: one subplot per dataset, regex vs LLM judge
+    labels = [label for _, label in DATASETS]
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True)
+    color_regex       = "steelblue"
+    color_regex_match = "mediumseagreen"
+    color_llm         = "tomato"
+
+    for ax, label in zip(axes.flat, labels):
+        rates_regex = results[label]
+        n_regex = n_samples[label]
+        ax.plot(FRACTIONS, rates_regex,
+                color=color_regex, marker="o", markersize=3,
+                label=f"regex judge (n={n_regex})")
+
+        if label in christine_results:
+            fracs_llm, rates_llm, llm_pairs = christine_results[label]
+            n_llm = len(llm_pairs)
+            ax.plot(fracs_llm, rates_llm,
+                    color=color_llm, marker="s", markersize=3, linestyle="--",
+                    label=f"LLM judge (n={n_llm})")
+
+            # Regex curve restricted to the same (id, sample_idx) pairs as LLM judge
+            # Dedupe on (id, sample_idx) so matched set is exactly llm_pairs
+            seen_keys = set()
+            matched_entries = []
+            for e in all_entries[label]:
+                key = (e["id"], e.get("sample_idx"))
+                if key in llm_pairs and key not in seen_keys:
+                    matched_entries.append(e)
+                    seen_keys.add(key)
+            if matched_entries:
+                rates_matched = compute_spoilage_curve(matched_entries, FRACTIONS)
+                ax.plot(FRACTIONS, rates_matched,
+                        color=color_regex_match, marker="^", markersize=3, linestyle=":",
+                        label=f"regex judge matched (n={len(matched_entries)})")
+
+        ax.set_title(label)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.grid(True)
+        ax.legend(fontsize=8)
+
+    for ax in axes[1]:
+        ax.set_xlabel("Hint Fraction")
+    for ax in axes[:, 0]:
+        ax.set_ylabel("Spoilage Rate")
+
+    fig.suptitle("Answer Spoilage Rate: Regex vs LLM Judge (masked hints)", fontsize=13)
     plt.tight_layout()
+    out_path = REPO_ROOT / "suze_experiments/20260320/spoilage_comparison.pdf"
+    plt.savefig(out_path)
+    print(f"Saved plot to {out_path}")
     plt.show()
-    plt.savefig(f"strict_spoilage_rates.pdf")
+
+
+def inspect_aime_solution_discrepancy(fraction=0.9):
+    """Print examples where LLM says spoiled but regex doesn't at a given fraction for AIME solution."""
+    label = "AIME solution"
+
+    entries = load_entries(BASE / "data/solution/aime.jsonl")
+    entries_by_key = {(e["id"], e.get("sample_idx")): e for e in entries}
+
+    rows_llm = []
+    with open(CHRISTINE_RESULTS_PATH) as f:
+        for line in f:
+            r = json.loads(line)
+            if CHRISTINE_DATASET_MAP.get(r["dataset"]) == label and r["fraction"] == fraction:
+                rows_llm.append(r)
+
+    print(f"\n{'='*80}")
+    print(f"AIME solution: cases where LLM=spoiled, regex=NOT spoiled at fraction={fraction}")
+    print(f"{'='*80}")
+
+    n_shown = 0
+    for row in rows_llm:
+        if not row["spoiled"]: # only check examples that christine marked as spoiled
+            continue
+        key = (row["id"], row["sample_idx"])
+        entry = entries_by_key.get(key)
+        if entry is None:
+            continue
+        fraction = row["fraction"]
+        mask_seed = f"{entry['id']}_{entry.get('sample_idx', 0)}_{fraction}_0"
+        masked = get_masked_text(entry["hint"], fraction=fraction, stop_string="ANSWER:", seed=mask_seed)
+        if not target_is_spoiled(masked, str(entry["target"])):
+            print(f"\n{'='*80}")
+            print(f"  id={row['id']}  sample_idx={row['sample_idx']}  target={entry['target']!r}  fraction={fraction}")
+            print(f"  verdict: {row['verdict']!r}")
+            print(f"  problem:\n{entry.get('question', entry.get('prompt', ''))}")
+            print(f"  masked hint:\n{masked}")
+            n_shown += 1
+            if n_shown >= 5:
+                break
+
+    print(f"\nShowed {n_shown} discrepant examples (LLM spoiled, regex not).")
 
 
 def inspect_id(rel_path, target_id):
@@ -261,6 +410,9 @@ def inspect_id(rel_path, target_id):
 
 if __name__ == "__main__":
     # Switch between modes by commenting/uncommenting below.
+
+    # Inspect cases where LLM says spoiled but regex doesn't — change fraction here:
+    inspect_aime_solution_discrepancy(fraction=1)
 
     # Inspect a specific id's raw vs deduped rows:
     # inspect_id("data/solution/aime.jsonl", "1997-3")
