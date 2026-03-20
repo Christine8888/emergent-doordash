@@ -1,0 +1,45 @@
+{
+  "model": "vllm/Llama-3.1-8B-Instruct",
+  "total_samples": 10000,
+  "completed_samples": 10000,
+  "metadata": {
+    "timeout": 3600,
+    "hint_fraction": 0.2,
+    "fewshot": 0,
+    "data_path": "/sphinx/u/cye/emergent-doordash/suze_experiments/data/solution/bbh.jsonl",
+    "solver_name": "solution_intext_masked"
+  },
+  "bbh_scorer": {
+    "accuracy": 0.3202,
+    "stderr": 0.004665532767005286,
+    "scorer": "bbh_scorer"
+  },
+  "manual_bootstrap": {
+    "accuracy": 0.320164,
+    "stderr": 0.0072548331476333825,
+    "scorer": "manual_bootstrap",
+    "epochs": 5
+  },
+  "pass_at_k": {
+    "1": {
+      "accuracy": 0.3201315,
+      "stderr": 0.007130389733387655
+    },
+    "2": {
+      "accuracy": 0.455158,
+      "stderr": 0.006578414398622212
+    },
+    "3": {
+      "accuracy": 0.5337320000000001,
+      "stderr": 0.005452584341392626
+    },
+    "4": {
+      "accuracy": 0.5882225,
+      "stderr": 0.004019358624208597
+    },
+    "5": {
+      "accuracy": 0.629,
+      "stderr": 0.0
+    }
+  }
+}

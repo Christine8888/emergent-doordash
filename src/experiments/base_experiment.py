@@ -609,16 +609,20 @@ class Experiment(ABC):
         failed_retry_max_connections = min(self.max_connections, failed_retry_max_connections)
 
         # Sanitize checkpoint entries (drop malformed / wrong-length / no-longer-needed).
+        _min_epochs_ckpt = max(1, epochs // 2)
         sanitized: dict[str, list[int]] = {}
         for sid, arr in per.items():
             if sid not in sample_ids_set:
                 continue
-            if not isinstance(arr, list) or len(arr) != epochs:
+            if not isinstance(arr, list) or len(arr) < _min_epochs_ckpt:
                 continue
             try:
-                sanitized[sid] = [1 if int(v) else 0 for v in arr]
+                cleaned = [1 if int(v) else 0 for v in arr]
             except Exception:
                 continue
+            if len(cleaned) < epochs:
+                logger.warning(f"Checkpoint sample {sid}: got {len(cleaned)}/{epochs} epochs, accepting (>50%)")
+            sanitized[sid] = cleaned
         per = sanitized
 
         deferred_retry_raw = state.get("deferred_failed_sample_ids", []) or []
@@ -687,8 +691,12 @@ class Experiment(ABC):
 
             out: dict[str, list[int]] = {}
             incomplete_counts: dict[str, int] = {}
+            min_epochs = max(1, epochs // 2)
             for sid, arr in per_chunk.items():
                 if len(arr) == epochs:
+                    out[sid] = list(arr)
+                elif len(arr) >= min_epochs:
+                    logger.warning(f"Sample {sid}: got {len(arr)}/{epochs} epochs, accepting (>50%)")
                     out[sid] = list(arr)
                 else:
                     incomplete_counts[sid] = len(arr)

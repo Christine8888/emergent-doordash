@@ -1,0 +1,45 @@
+{
+  "model": "vllm/Llama-3.1-70B-Instruct",
+  "total_samples": 10000,
+  "completed_samples": 10000,
+  "metadata": {
+    "timeout": 3600,
+    "hint_fraction": 0.8,
+    "fewshot": 0,
+    "data_path": "/sphinx/u/cye/emergent-doordash/suze_experiments/data/solution/hellaswag.jsonl",
+    "solver_name": "solution_intext_sequential"
+  },
+  "hellaswag_scorer": {
+    "accuracy": 0.2016,
+    "stderr": 0.004011950149241638,
+    "scorer": "hellaswag_scorer"
+  },
+  "manual_bootstrap": {
+    "accuracy": 0.20140699999999997,
+    "stderr": 0.004507976375270831,
+    "scorer": "manual_bootstrap",
+    "epochs": 5
+  },
+  "pass_at_k": {
+    "1": {
+      "accuracy": 0.20174200000000003,
+      "stderr": 0.004705734374143949
+    },
+    "2": {
+      "accuracy": 0.25394599999999995,
+      "stderr": 0.003633742423452717
+    },
+    "3": {
+      "accuracy": 0.27828499999999995,
+      "stderr": 0.003079898537289814
+    },
+    "4": {
+      "accuracy": 0.29455499999999996,
+      "stderr": 0.002207368342619783
+    },
+    "5": {
+      "accuracy": 0.307,
+      "stderr": 0.0
+    }
+  }
+}
