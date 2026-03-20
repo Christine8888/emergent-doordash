@@ -703,8 +703,11 @@ def query_problem_epochs(
     path_hint_level: str,
     hint_fraction: float | None,
     sample_id: str,
+    eval_id: str | None = None,
 ) -> pd.DataFrame:
-    query = """
+    where_hint = "r.hint_fraction IS NULL" if hint_fraction is None else "r.hint_fraction = ?"
+    where_eval = "" if not eval_id else " AND r.eval_id = ?"
+    query = f"""
     SELECT
         r.epoch,
         r.rollout_id,
@@ -725,19 +728,60 @@ def query_problem_epochs(
       AND r.benchmark = ?
       AND r.model = ?
       AND r.path_hint_level = ?
-      AND (
-        (? IS NULL AND r.hint_fraction IS NULL)
-        OR
-        (? IS NOT NULL AND r.hint_fraction IS NOT NULL AND ABS(r.hint_fraction - ?) < 1e-12)
-      )
+      AND {where_hint}
       AND r.sample_id = ?
+      {where_eval}
     ORDER BY r.epoch, r.rollout_id
     """
-    return _query_df(
+    params: list[Any] = [scorer_name, run_type, benchmark, model, path_hint_level]
+    if hint_fraction is not None:
+        params.append(float(hint_fraction))
+    params.append(sample_id)
+    if eval_id:
+        params.append(eval_id)
+    return _query_df(conn, query, params)
+
+
+def query_eval_meta_for_problem(
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    run_type: str,
+    benchmark: str,
+    model: str,
+    path_hint_level: str,
+    hint_fraction: float | None,
+    sample_id: str,
+) -> tuple[str | None, int]:
+    where_hint = "r.hint_fraction IS NULL" if hint_fraction is None else "r.hint_fraction = ?"
+    base_sql = f"""
+    FROM rollouts r
+    WHERE r.run_type = ?
+      AND r.benchmark = ?
+      AND r.model = ?
+      AND r.path_hint_level = ?
+      AND {where_hint}
+      AND r.sample_id = ?
+    """
+    params: list[Any] = [run_type, benchmark, model, path_hint_level]
+    if hint_fraction is not None:
+        params.append(float(hint_fraction))
+    params.append(sample_id)
+
+    eval_rows = _query_df(
         conn,
-        query,
-        [scorer_name, run_type, benchmark, model, path_hint_level, hint_fraction, hint_fraction, hint_fraction, sample_id],
+        "SELECT r.eval_id, COUNT(*) AS epochs_n, MAX(r.created) AS max_created "
+        + base_sql
+        + " GROUP BY r.eval_id "
+        + " ORDER BY (COUNT(*) >= 10) DESC, MAX(r.created) DESC NULLS LAST, r.eval_id DESC",
+        params,
     )
+    latest = None
+    if not eval_rows.empty:
+        latest = str(eval_rows.iloc[0]["eval_id"]) if eval_rows.iloc[0]["eval_id"] is not None else None
+
+    eval_runs = int(len(eval_rows))
+    selected_epochs = int(eval_rows.iloc[0]["epochs_n"]) if not eval_rows.empty else 0
+    return latest, eval_runs, selected_epochs
 
 
 def hydrate_epoch_text_from_source(
@@ -962,6 +1006,8 @@ def main() -> None:
         return
 
     conn = get_connection(str(db_path))
+    perf: dict[str, float] = {}
+    perf_meta: dict[str, str] = {}
 
     if sync_clicked or rebuild_clicked:
         progress_bar = st.progress(0)
@@ -993,6 +1039,9 @@ def main() -> None:
     total_rollouts = conn.execute("SELECT COUNT(*) FROM rollouts").fetchone()[0]
     total_scorer_rows = conn.execute("SELECT COUNT(*) FROM rollout_scorers").fetchone()[0]
     total_files = conn.execute("SELECT COUNT(*) FROM source_files").fetchone()[0]
+    db_revision = str(
+        conn.execute("SELECT COALESCE(MAX(last_ingested_ts), '') FROM source_files").fetchone()[0] or ""
+    )
     st.caption(
         f"DB status: files={total_files:,} rollouts={total_rollouts:,} scorer_rows={total_scorer_rows:,}"
     )
@@ -1001,7 +1050,18 @@ def main() -> None:
         st.info("No ingested data yet. Click 'Sync JSONL -> DuckDB' in the sidebar.")
         return
 
-    opts = load_filter_options(conn)
+    opts_cache_key = ("filter_opts_v1", str(db_path), db_revision)
+    if st.session_state.get("filter_opts_cache_key") == opts_cache_key:
+        opts = st.session_state.get("filter_opts_cache_value", {})
+        perf["filter_options"] = 0.0
+        perf_meta["filter_options"] = "cache"
+    else:
+        t0 = time.perf_counter()
+        opts = load_filter_options(conn)
+        perf["filter_options"] = time.perf_counter() - t0
+        perf_meta["filter_options"] = "query"
+        st.session_state["filter_opts_cache_key"] = opts_cache_key
+        st.session_state["filter_opts_cache_value"] = opts
     if not opts["scorers"]:
         st.error("No scorer rows found. Cannot filter by correctness without scorer data.")
         return
@@ -1061,35 +1121,59 @@ def main() -> None:
     )
     sample_ids = _parse_sample_ids(sample_id_text)
 
-    try:
-        df_summary = query_problem_summary(
-            conn=conn,
-            run_types=run_types,
-            benchmarks=benchmarks,
-            hint_types=hint_types,
-            hint_levels=hint_levels,
-            models=models,
-            sample_ids=sample_ids,
-            scorer_name=scorer_name,
-            score_labels=score_labels,
-            limit=int(row_limit),
-        )
-    except duckdb.InvalidInputException as exc:
-        if "result closed" not in str(exc).lower():
-            raise
-        conn = get_connection(str(db_path))
-        df_summary = query_problem_summary(
-            conn=conn,
-            run_types=run_types,
-            benchmarks=benchmarks,
-            hint_types=hint_types,
-            hint_levels=hint_levels,
-            models=models,
-            sample_ids=sample_ids,
-            scorer_name=scorer_name,
-            score_labels=score_labels,
-            limit=int(row_limit),
-        )
+    summary_cache_key = (
+        "problem_summary_v2",
+        str(db_path),
+        db_revision,
+        tuple(run_types),
+        tuple(benchmarks),
+        tuple(hint_types),
+        tuple(float(h) for h in hint_levels),
+        tuple(models),
+        tuple(sample_ids),
+        str(scorer_name),
+        tuple(score_labels),
+        int(row_limit),
+    )
+    if st.session_state.get("problem_summary_cache_key") == summary_cache_key:
+        df_summary = st.session_state.get("problem_summary_cache_df", pd.DataFrame())
+        perf["problem_summary"] = 0.0
+        perf_meta["problem_summary"] = "cache"
+    else:
+        t0 = time.perf_counter()
+        try:
+            df_summary = query_problem_summary(
+                conn=conn,
+                run_types=run_types,
+                benchmarks=benchmarks,
+                hint_types=hint_types,
+                hint_levels=hint_levels,
+                models=models,
+                sample_ids=sample_ids,
+                scorer_name=scorer_name,
+                score_labels=score_labels,
+                limit=int(row_limit),
+            )
+        except duckdb.InvalidInputException as exc:
+            if "result closed" not in str(exc).lower():
+                raise
+            conn = get_connection(str(db_path))
+            df_summary = query_problem_summary(
+                conn=conn,
+                run_types=run_types,
+                benchmarks=benchmarks,
+                hint_types=hint_types,
+                hint_levels=hint_levels,
+                models=models,
+                sample_ids=sample_ids,
+                scorer_name=scorer_name,
+                score_labels=score_labels,
+                limit=int(row_limit),
+            )
+        perf["problem_summary"] = time.perf_counter() - t0
+        perf_meta["problem_summary"] = "query"
+        st.session_state["problem_summary_cache_key"] = summary_cache_key
+        st.session_state["problem_summary_cache_df"] = df_summary
 
     st.subheader("Problem Summary")
     st.caption(
@@ -1173,6 +1257,26 @@ def main() -> None:
     st.caption("Rollouts for this selected problem are shown below under 'Rollouts (All Epochs)'.")
 
     selected_hint_level = _to_float(selected_row["hint_level"])
+    t_meta = time.perf_counter()
+    selected_eval_id, selected_eval_runs, selected_eval_epochs = query_eval_meta_for_problem(
+        conn=conn,
+        run_type=str(selected_row["run_type"]),
+        benchmark=str(selected_row["benchmark"]),
+        model=str(selected_row["model"]),
+        path_hint_level=str(selected_row["hint_type"]),
+        hint_fraction=selected_hint_level,
+        sample_id=str(selected_row["sample_id"]),
+    )
+    perf["eval_meta"] = time.perf_counter() - t_meta
+    perf_meta["eval_meta"] = "query"
+    if selected_eval_runs > 1:
+        st.caption(
+            "Multiple eval runs exist for this (model, hint, sample). "
+            f"Loading eval_id={selected_eval_id} "
+            f"(eval_runs={selected_eval_runs}, selected_epochs={selected_eval_epochs})."
+        )
+
+    t0 = time.perf_counter()
     try:
         df_epochs = query_problem_epochs(
             conn=conn,
@@ -1183,6 +1287,7 @@ def main() -> None:
             path_hint_level=str(selected_row["hint_type"]),
             hint_fraction=selected_hint_level,
             sample_id=str(selected_row["sample_id"]),
+            eval_id=selected_eval_id,
         )
     except duckdb.InvalidInputException as exc:
         if "result closed" not in str(exc).lower():
@@ -1197,7 +1302,12 @@ def main() -> None:
             path_hint_level=str(selected_row["hint_type"]),
             hint_fraction=selected_hint_level,
             sample_id=str(selected_row["sample_id"]),
+            eval_id=selected_eval_id,
         )
+    perf["problem_epochs"] = time.perf_counter() - t0
+    perf_meta["problem_epochs"] = "query"
+
+    t0 = time.perf_counter()
     df_epochs = hydrate_epoch_text_from_source(
         df_epochs,
         scorer_name=scorer_name,
@@ -1208,7 +1318,22 @@ def main() -> None:
         hint_fraction=selected_hint_level,
         sample_id=str(selected_row["sample_id"]),
     )
+    perf["hydrate_text"] = time.perf_counter() - t0
+    perf_meta["hydrate_text"] = "index"
     render_epoch_details(df_epochs)
+
+    st.caption(
+        "Timing: "
+        + ", ".join(
+            [
+                f"filter_options={perf.get('filter_options', 0.0):.2f}s[{perf_meta.get('filter_options', 'na')}]",
+                f"problem_summary={perf.get('problem_summary', 0.0):.2f}s[{perf_meta.get('problem_summary', 'na')}]",
+                f"eval_meta={perf.get('eval_meta', 0.0):.2f}s[{perf_meta.get('eval_meta', 'na')}]",
+                f"problem_epochs={perf.get('problem_epochs', 0.0):.2f}s[{perf_meta.get('problem_epochs', 'na')}]",
+                f"hydrate_text={perf.get('hydrate_text', 0.0):.2f}s[{perf_meta.get('hydrate_text', 'na')}]",
+            ]
+        )
+    )
 
 
 if __name__ == "__main__":
