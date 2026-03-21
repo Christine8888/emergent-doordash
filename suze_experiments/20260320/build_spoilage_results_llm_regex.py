@@ -31,6 +31,38 @@ STOP_STRING = "ANSWER:"
 MASK_TOKEN = "[MASK]"
 
 
+def parse_bool(value) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        if value == 1:
+            return True
+        if value == 0:
+            return False
+        return None
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in {"true", "t", "1", "yes", "y"}:
+            return True
+        if v in {"false", "f", "0", "no", "n"}:
+            return False
+    return None
+
+
+def infer_rationalize_from_prompt(prompt: str) -> bool:
+    return "HINT: The answer is" in prompt
+
+
+def extract_source_metadata(row: dict) -> tuple[str | None, bool]:
+    metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+    model = row.get("model") or metadata.get("model")
+    raw_rationalize = row.get("rationalize", metadata.get("rationalize"))
+    rationalize = parse_bool(raw_rationalize)
+    if rationalize is None:
+        rationalize = infer_rationalize_from_prompt(str(row.get("prompt", "")))
+    return (None if model is None else str(model), bool(rationalize))
+
+
 def truncate_at_stop(text: str, stop_string: str = STOP_STRING) -> str:
     if stop_string not in text:
         return text
@@ -120,6 +152,7 @@ def build_rows(
     for (dataset, row_id, sample_idx), source_row in source_by_key.items():
         target = str(source_row.get("target", ""))
         hint = str(source_row["hint"])
+        source_model, source_rationalize = extract_source_metadata(source_row)
 
         for fraction in fractions:
             for mask_seed in mask_seeds:
@@ -138,6 +171,8 @@ def build_rows(
                         "fraction": float(fraction),
                         "mask_seed": int(mask_seed),
                         "target": target,
+                        "source_model": source_model,
+                        "source_rationalize": source_rationalize,
                         "llm_spoiled": None if llm_row is None else bool(llm_row["spoiled"]),
                         "llm_verdict": None if llm_row is None else str(llm_row.get("verdict", "")),
                         "llm_judged": llm_row is not None,
