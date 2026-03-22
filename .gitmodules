@@ -1,3 +1,0 @@
-[submodule "src/environments/arc/ARC-AGI"]
-	url = https://github.com/fchollet/ARC-AGI.git
-	path = src/environments/arc/ARC-AGI

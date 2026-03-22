@@ -1,4 +1,0 @@
-christine_experiments/data/solution/aime.jsonl filter=lfs diff=lfs merge=lfs -text
-suze_experiments/data/solution/bbh.jsonl filter=lfs diff=lfs merge=lfs -text
-suze_experiments/data/solution/hellaswag.jsonl filter=lfs diff=lfs merge=lfs -text
-suze_experiments/data/solution/mmlu_0_shot.jsonl filter=lfs diff=lfs merge=lfs -text

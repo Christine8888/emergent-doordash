@@ -1,1 +1,0 @@
-{"model": "vllm/Qwen2.5-32B-Instruct", "total_samples": 925, "completed_samples": 925, "choice": {"accuracy": 0.5383783783783785, "stderr": 0.02891370193561231, "scorer": "choice"}, "manual_bootstrap": {"accuracy": 0.5396648648648649, "stderr": 0.022229138084626465, "scorer": "manual_bootstrap", "epochs": 5}}
