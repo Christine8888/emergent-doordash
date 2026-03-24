@@ -8,12 +8,27 @@ from typing import Any
 import re
 
 
-INPUT_PATH = Path(
-    "suze_experiments/20260321/consolidated_hinted_results_v2/"
-    "aime_solution/Qwen3-14B/hint_fraction_1.0/solution_intext_masked.jsonl"
-)
 TOY_OUTPUT_DIR = Path("suze_experiments/20260321/regrader_toy_outputs")
-OUTPUT_PATH = TOY_OUTPUT_DIR / "qwen3_14b_hint1_solution_intext_masked.new_incorrect_only.json"
+
+# --- Editable constants ---
+DATA_ROOT = Path("suze_experiments/20260321/consolidated_hinted_results_v2")
+DATASET_FAMILY = "aime_solution"
+MODEL_NAME = "Llama-3.1-70B-Instruct"
+HINT_FRACTION = "1.0"
+SOLVER_FILE = "solution_intext_masked.jsonl"
+# --------------------------
+
+
+def safe_token(text: str) -> str:
+    return text.strip().replace("/", "_").replace("\\", "_").replace(" ", "_")
+
+
+INPUT_PATH = DATA_ROOT / DATASET_FAMILY / MODEL_NAME / f"hint_fraction_{HINT_FRACTION}" / SOLVER_FILE
+OUTPUT_PATH = TOY_OUTPUT_DIR / (
+    f"{safe_token(DATASET_FAMILY)}__{safe_token(MODEL_NAME)}__"
+    f"hint_{safe_token(HINT_FRACTION)}__{safe_token(SOLVER_FILE.removesuffix('.jsonl'))}"
+    ".new_incorrect_only.json"
+)
 
 OLD_SCORER_NAME = "aime_scorer"
 NEW_SCORER_NAME = "aime_scorer_v2"
@@ -373,16 +388,16 @@ def main() -> None:
 
     # print_examples("New scorer correct examples", new_correct_examples)
     # print_examples("New scorer incorrect examples", new_incorrect_examples)
-    print(f"\n=== Still incorrect with new grader (showing up to 3) ===")
-    for i, ex in enumerate(new_incorrect_examples[:1], start=1):
-        print(f"\n--- [{i}] sample_id={ex['sample_id']} ---")
-        print(f"  Target answer:       \"{ex['target']}\"")
-        print(f"  Old extracted answer: \"{ex['extracted_answer_old']}\"")
-        print(f"  Old score:           \"{ex['old_status']}\"")
-        print(f"  New extracted answer: \"{ex['extracted_answer_v2']}\"")
-        print(f"  New score:           \"{ex['new_status']}\"")
-        print(f"  Full prompt:\n\"{ex['prompt_preview']}\"")
-        print(f"  Full output:\n\"{ex['output_preview']}\"")
+    # print(f"\n=== Still incorrect with new grader (showing up to 3) ===")
+    # for i, ex in enumerate(new_incorrect_examples[:1], start=1):
+    #     print(f"\n--- [{i}] sample_id={ex['sample_id']} ---")
+    #     print(f"  Target answer:       \"{ex['target']}\"")
+    #     print(f"  Old extracted answer: \"{ex['extracted_answer_old']}\"")
+    #     print(f"  Old score:           \"{ex['old_status']}\"")
+    #     print(f"  New extracted answer: \"{ex['extracted_answer_v2']}\"")
+    #     print(f"  New score:           \"{ex['new_status']}\"")
+    #     print(f"  Full prompt:\n\"{ex['prompt_preview']}\"")
+    #     print(f"  Full output:\n\"{ex['output_preview']}\"")
 
 
 if __name__ == "__main__":
