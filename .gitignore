@@ -13,6 +13,7 @@ christine_experiments/20251010_data/openthoughts_sonnet45.jsonl
 
 consolidated_hinted_results/
 consolidated_hinted_results_v2/
+consolidated_hinted_results_v2_regraded/
 # Python
 __pycache__/
 *.py[cod]

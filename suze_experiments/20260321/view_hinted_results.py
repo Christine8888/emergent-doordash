@@ -9,11 +9,10 @@ from typing import Any
 import streamlit as st
 
 
-DEFAULT_DATA_ROOT = Path("suze_experiments/20260321/consolidated_hinted_results_v2")
+DEFAULT_DATA_ROOT = Path("suze_experiments/20260321/consolidated_hinted_results_v2_regraded")
 KNOWN_DATASETS = ["aime", "gpqa"]
 KNOWN_FAMILIES = ["solution", "cot"]
 
-SCORER_FILTER_ALL = "(all scorers)"
 STATUS_OPTIONS = {
     "Correct": "correct",
     "Incorrect": "incorrect",
@@ -342,24 +341,40 @@ def sample_matches_filters(
     row: dict[str, Any],
     *,
     sample_query: str,
-    scorer_filter: str,
-    selected_status_values: set[str],
+    per_scorer_required_status: dict[str, str | None],
 ) -> bool:
     if sample_query and sample_query.lower() not in str(row.get("sample_id", "")).lower():
         return False
 
-    if scorer_filter == SCORER_FILTER_ALL:
-        return True
-
     status_by_scorer = row.get("status_by_scorer", {})
-    scorer_status = status_by_scorer.get(scorer_filter)
-    if not isinstance(scorer_status, dict):
-        return False
+    for scorer_name, required_status in per_scorer_required_status.items():
+        if required_status is None:
+            continue
+        scorer_status = status_by_scorer.get(scorer_name)
+        if not isinstance(scorer_status, dict):
+            return False
+        if not scorer_status.get(required_status, False):
+            return False
+    return True
 
-    for status in selected_status_values:
-        if scorer_status.get(status):
-            return True
-    return False
+
+def rollout_matches_per_scorer_filters(
+    rollout: dict[str, Any],
+    *,
+    per_scorer_required_status: dict[str, str | None],
+) -> bool:
+    score_outcomes = rollout.get("score_outcomes")
+    score_outcomes = score_outcomes if isinstance(score_outcomes, dict) else {}
+
+    for scorer_name, required_status in per_scorer_required_status.items():
+        if required_status is None:
+            continue
+        payload = score_outcomes.get(scorer_name)
+        payload = payload if isinstance(payload, dict) else {}
+        status = _parse_status(payload.get("is_correct"))
+        if status != required_status:
+            return False
+    return True
 
 
 def main() -> None:
@@ -444,17 +459,23 @@ def main() -> None:
     for row in summary_rows:
         for scorer_name in row.get("scorers", []):
             all_scorers.add(str(scorer_name))
-    scorer_options = [SCORER_FILTER_ALL] + sorted(all_scorers)
+    sorted_scorers = sorted(all_scorers)
+    status_choice_to_value: dict[str, str | None] = {"Any": None, **STATUS_OPTIONS}
 
-    filter_col1, filter_col2, filter_col3 = st.columns([2, 2, 3])
-    scorer_filter = filter_col1.selectbox("Scorer Filter", scorer_options, index=0)
-    selected_status_labels = filter_col2.multiselect(
-        "Status Filter",
-        list(STATUS_OPTIONS.keys()),
-        default=list(STATUS_OPTIONS.keys()),
-    )
-    sample_query = filter_col3.text_input("Search sample_id", "")
-    selected_status_values = {STATUS_OPTIONS[label] for label in selected_status_labels}
+    sample_query = st.text_input("Search sample_id", "")
+    per_scorer_required_status: dict[str, str | None] = {}
+    if sorted_scorers:
+        filter_key_prefix = safe_slug(f"{dataset}_{family}_{model_name}_{hint_dir_name}_{solver_file_name}")
+        with st.expander("Per-Grader Status Filters", expanded=False):
+            st.caption("Set status per grader. `Any` means no filter for that grader.")
+            for scorer_name in sorted_scorers:
+                choice = st.selectbox(
+                    scorer_name,
+                    ["Any", "Correct", "Incorrect", "Unknown"],
+                    index=0,
+                    key=f"per_scorer_filter_{filter_key_prefix}_{safe_slug(scorer_name)}",
+                )
+                per_scorer_required_status[scorer_name] = status_choice_to_value[choice]
 
     filtered_rows = [
         row
@@ -462,10 +483,29 @@ def main() -> None:
         if sample_matches_filters(
             row,
             sample_query=sample_query,
-            scorer_filter=scorer_filter,
-            selected_status_values=selected_status_values,
+            per_scorer_required_status=per_scorer_required_status,
         )
     ]
+
+    has_rollout_level_constraints = any(v is not None for v in per_scorer_required_status.values())
+    if has_rollout_level_constraints:
+        exact_filtered_rows: list[dict[str, Any]] = []
+        for row in filtered_rows:
+            sample_obj = load_sample_at_offset(data_path, row["byte_offset"])
+            rollouts = sample_obj.get("rollouts")
+            if not isinstance(rollouts, list):
+                continue
+            has_matching_rollout = any(
+                isinstance(r, dict)
+                and rollout_matches_per_scorer_filters(
+                    r,
+                    per_scorer_required_status=per_scorer_required_status,
+                )
+                for r in rollouts
+            )
+            if has_matching_rollout:
+                exact_filtered_rows.append(row)
+        filtered_rows = exact_filtered_rows
 
     st.caption(f"Filtered samples: {len(filtered_rows):,}")
     if not filtered_rows:
@@ -474,40 +514,70 @@ def main() -> None:
 
     nav_key = safe_slug(f"{dataset}_{family}_{model_name}_{hint_dir_name}_{solver_file_name}")
     state_key = f"selected_sample_{nav_key}"
+    sample_name_filter_key = f"sample_name_filter_{nav_key}"
 
     sample_ids = [row["sample_id"] for row in filtered_rows]
-    if state_key not in st.session_state or st.session_state[state_key] not in sample_ids:
-        st.session_state[state_key] = sample_ids[0]
-    current_idx = sample_ids.index(st.session_state[state_key])
+    if sample_name_filter_key not in st.session_state:
+        st.session_state[sample_name_filter_key] = ""
+    sample_name_filter = st.text_input(
+        "Sample ID Name Filter (optional)",
+        key=sample_name_filter_key,
+        placeholder="e.g. 1983-5",
+    )
+
+    if sample_name_filter.strip():
+        nav_sample_ids = [sid for sid in sample_ids if sample_name_filter.lower() in sid.lower()]
+    else:
+        nav_sample_ids = sample_ids
+
+    if not nav_sample_ids:
+        st.info("No samples match the sample-id name filter.")
+        st.stop()
+
+    if state_key not in st.session_state or st.session_state[state_key] not in nav_sample_ids:
+        st.session_state[state_key] = nav_sample_ids[0]
+    current_idx = nav_sample_ids.index(st.session_state[state_key])
 
     nav_col1, nav_col2, nav_col3 = st.columns([1, 3, 1])
     if nav_col1.button("<", disabled=(current_idx == 0), width="stretch"):
-        st.session_state[state_key] = sample_ids[current_idx - 1]
+        st.session_state[state_key] = nav_sample_ids[current_idx - 1]
         current_idx = current_idx - 1
-    if nav_col3.button(">", disabled=(current_idx == len(sample_ids) - 1), width="stretch"):
-        st.session_state[state_key] = sample_ids[current_idx + 1]
+    if nav_col3.button(">", disabled=(current_idx == len(nav_sample_ids) - 1), width="stretch"):
+        st.session_state[state_key] = nav_sample_ids[current_idx + 1]
         current_idx = current_idx + 1
 
-    selected_sample_id = nav_col2.selectbox(
-        "Sample",
-        sample_ids,
-        index=current_idx,
-        key=f"sample_picker_{nav_key}",
+    selected_sample_id = st.session_state[state_key]
+    nav_col2.caption(
+        f"Current sample: `{selected_sample_id}` "
+        f"({current_idx + 1:,}/{len(nav_sample_ids):,} in name-filtered list; "
+        f"{len(sample_ids):,} total)"
     )
-    st.session_state[state_key] = selected_sample_id
-    current_idx = sample_ids.index(selected_sample_id)
 
-    selected_summary = filtered_rows[current_idx]
+    summary_by_id = {row["sample_id"]: row for row in filtered_rows}
+    selected_summary = summary_by_id[selected_sample_id]
     sample_obj = load_sample_at_offset(data_path, selected_summary["byte_offset"])
-    rollouts = sample_obj.get("rollouts")
-    if not isinstance(rollouts, list):
+    all_rollouts = sample_obj.get("rollouts")
+    if not isinstance(all_rollouts, list):
         st.error("Selected sample row has invalid rollouts format.")
         st.stop()
+
+    if has_rollout_level_constraints:
+        rollouts = [
+            r
+            for r in all_rollouts
+            if isinstance(r, dict)
+            and rollout_matches_per_scorer_filters(
+                r,
+                per_scorer_required_status=per_scorer_required_status,
+            )
+        ]
+    else:
+        rollouts = all_rollouts
 
     st.subheader(f"Sample {selected_sample_id}")
     st.caption(
         f"Sample {current_idx + 1:,} / {len(sample_ids):,} | "
-        f"num_rollouts={selected_summary['num_rollouts']} | "
+        f"num_rollouts={len(rollouts):,} / total={selected_summary['num_rollouts']:,} | "
         f"target={selected_summary.get('target')}"
     )
 
