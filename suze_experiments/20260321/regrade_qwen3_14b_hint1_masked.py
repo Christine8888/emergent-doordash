@@ -48,7 +48,7 @@ def extract_answer_fixed(completion: str) -> str:
     # - ANSWER: 60
     pattern = (
         r"(?im)(?:^|\n)\s*(?:[\*\-_`>#]+\s*)?"
-        r"(?:target\s+answer|final\s+answer|answer)\s*:\s*([^\n]+)"
+        r"(?:target\s+answer|final\s+answer|answer)\s*:[ \t]*([^\n]+)"
     )
     matches = list(re.finditer(pattern, completion, re.MULTILINE))
     if matches:
@@ -159,6 +159,9 @@ def clean_latex_and_markdown(text: str) -> str:
 
     # Remove common trailing markdown punctuation.
     text = text.rstrip(" .,:;!`*_")
+
+    # Strip leading labels if present in extracted text.
+    text = re.sub(r"(?i)^\s*(?:target\s+answer|final\s+answer|answer)\s*:\s*", "", text).strip()
 
     # Strip leading/trailing whitespace
     text = text.strip()
@@ -378,6 +381,7 @@ def main() -> None:
         print(f"  Old score:           \"{ex['old_status']}\"")
         print(f"  New extracted answer: \"{ex['extracted_answer_v2']}\"")
         print(f"  New score:           \"{ex['new_status']}\"")
+        print(f"  Full prompt:\n\"{ex['prompt_preview']}\"")
         print(f"  Full output:\n\"{ex['output_preview']}\"")
 
 
