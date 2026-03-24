@@ -9,7 +9,7 @@ from typing import Any
 import streamlit as st
 
 
-DEFAULT_DATA_ROOT = Path("suze_experiments/20260321/consolidated_hinted_results")
+DEFAULT_DATA_ROOT = Path("suze_experiments/20260321/consolidated_hinted_results_v2")
 KNOWN_DATASETS = ["aime", "gpqa"]
 KNOWN_FAMILIES = ["solution", "cot"]
 
@@ -395,13 +395,42 @@ def main() -> None:
     model_name = st.selectbox("Model", [p.name for p in model_dirs], index=0)
     model_dir = family_dir / model_name
 
-    hint_files = sorted([p for p in model_dir.glob("*.jsonl") if p.is_file()], key=hint_sort_key)
-    if not hint_files:
-        st.warning(f"No hint-fraction files found in {model_dir}")
+    hint_dirs = sorted(
+        [p for p in model_dir.iterdir() if p.is_dir() and p.name.startswith("hint_fraction_")],
+        key=hint_sort_key,
+    )
+    if not hint_dirs:
+        legacy_hint_files = sorted(
+            [p for p in model_dir.glob("hint_fraction_*.jsonl") if p.is_file()],
+            key=hint_sort_key,
+        )
+        if legacy_hint_files:
+            st.warning(
+                "This model still uses the legacy flat layout. "
+                "Run the migration script first."
+            )
+        else:
+            st.warning(f"No hint-fraction folders found in {model_dir}")
         st.stop()
 
-    hint_file_name = st.selectbox("Hint Fraction File", [p.name for p in hint_files], index=0)
-    data_path = model_dir / hint_file_name
+    hint_dir_name = st.selectbox("Hint Fraction", [p.name for p in hint_dirs], index=0)
+    hint_dir = model_dir / hint_dir_name
+
+    solver_files = sorted([p for p in hint_dir.glob("*.jsonl") if p.is_file()], key=lambda p: p.name)
+    if not solver_files:
+        st.warning(f"No solver/type files found in {hint_dir}")
+        st.stop()
+
+    default_solver_idx = 0
+    solver_file_names = [p.name for p in solver_files]
+    if "solution_intext_masked.jsonl" in solver_file_names:
+        default_solver_idx = solver_file_names.index("solution_intext_masked.jsonl")
+    solver_file_name = st.selectbox(
+        "Type / Solver",
+        solver_file_names,
+        index=default_solver_idx,
+    )
+    data_path = hint_dir / solver_file_name
 
     stat = data_path.stat()
     with st.spinner("Loading index..."):
@@ -443,7 +472,7 @@ def main() -> None:
         st.info("No samples match current filters.")
         st.stop()
 
-    nav_key = safe_slug(f"{dataset}_{family}_{model_name}_{hint_file_name}")
+    nav_key = safe_slug(f"{dataset}_{family}_{model_name}_{hint_dir_name}_{solver_file_name}")
     state_key = f"selected_sample_{nav_key}"
 
     sample_ids = [row["sample_id"] for row in filtered_rows]

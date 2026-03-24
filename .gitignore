@@ -11,6 +11,8 @@ christine_experiments/**/*.ipynb
 !/sphinx/u/cye/emergent-doordash/christine_experiments/20251008/plots.ipynb
 christine_experiments/20251010_data/openthoughts_sonnet45.jsonl
 
+consolidated_hinted_results/
+consolidated_hinted_results_v2/
 # Python
 __pycache__/
 *.py[cod]

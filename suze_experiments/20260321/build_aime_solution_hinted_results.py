@@ -17,7 +17,7 @@ INPUT_JSONL = Path(
 OUTPUT_ROOT = Path(
     os.environ.get(
         "OUTPUT_ROOT",
-        "suze_experiments/20260321/consolidated_hinted_results",
+        "suze_experiments/20260321/consolidated_hinted_results_v2",
     )
 )
 SQLITE_DB_PATH = OUTPUT_ROOT / "_rollout_index.sqlite3"
@@ -46,10 +46,16 @@ def required_text(value: Any, *, field_name: str, line_number: int) -> str:
     return text
 
 
-def hint_fraction_file_name(value: Any, *, line_number: int) -> str:
+def hint_fraction_dir_name(value: Any, *, line_number: int) -> str:
     token = required_text(value, field_name="hint_fraction", line_number=line_number)
     token = token.replace("/", "_").replace("\\", "_")
-    return f"hint_fraction_{token}.jsonl"
+    return f"hint_fraction_{token}"
+
+
+def solver_file_name(value: Any, *, line_number: int) -> str:
+    solver = required_text(value, field_name="solver_name", line_number=line_number)
+    solver = solver.replace("/", "_").replace("\\", "_")
+    return f"{solver}.jsonl"
 
 
 def aime_family_bucket(row: dict[str, Any], *, line_number: int) -> str | None:
@@ -196,7 +202,8 @@ def create_db(conn: sqlite3.Connection) -> None:
         CREATE TABLE rollouts (
             aime_family TEXT NOT NULL,
             model_dir TEXT NOT NULL,
-            hint_fraction_key TEXT NOT NULL,
+            hint_fraction_dir TEXT NOT NULL,
+            solver_file TEXT NOT NULL,
             sample_id TEXT NOT NULL,
             created TEXT,
             eval_id TEXT,
@@ -207,7 +214,7 @@ def create_db(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         "CREATE INDEX idx_rollouts_group_sample "
-        "ON rollouts (aime_family, model_dir, hint_fraction_key, sample_id)"
+        "ON rollouts (aime_family, model_dir, hint_fraction_dir, solver_file, sample_id)"
     )
 
 
@@ -237,7 +244,10 @@ def ingest_rows(conn: sqlite3.Connection) -> tuple[int, int]:
 
             kept_rows += 1
             model_dir = model_dir_for_row(row, line_number=line_number)
-            hint_fraction_key = hint_fraction_file_name(row.get("hint_fraction"), line_number=line_number)
+            hint_fraction_dir = hint_fraction_dir_name(
+                row.get("hint_fraction"), line_number=line_number
+            )
+            solver_file = solver_file_name(row.get("solver_name"), line_number=line_number)
             sample_id = required_text(row.get("sample_id"), field_name="sample_id", line_number=line_number)
             compact_rollout = rollout_record(row)
 
@@ -245,7 +255,8 @@ def ingest_rows(conn: sqlite3.Connection) -> tuple[int, int]:
                 (
                     aime_family,
                     model_dir,
-                    hint_fraction_key,
+                    hint_fraction_dir,
+                    solver_file,
                     sample_id,
                     row.get("created"),
                     row.get("eval_id"),
@@ -260,13 +271,14 @@ def ingest_rows(conn: sqlite3.Connection) -> tuple[int, int]:
                     INSERT INTO rollouts (
                         aime_family,
                         model_dir,
-                        hint_fraction_key,
+                        hint_fraction_dir,
+                        solver_file,
                         sample_id,
                         created,
                         eval_id,
                         rollout_ordinal,
                         rollout_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     batch,
                 )
@@ -282,13 +294,14 @@ def ingest_rows(conn: sqlite3.Connection) -> tuple[int, int]:
             INSERT INTO rollouts (
                 aime_family,
                 model_dir,
-                hint_fraction_key,
+                hint_fraction_dir,
+                solver_file,
                 sample_id,
                 created,
                 eval_id,
                 rollout_ordinal,
                 rollout_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             batch,
         )
@@ -301,26 +314,26 @@ def write_outputs(conn: sqlite3.Connection) -> int:
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
     groups = conn.execute(
-        "SELECT DISTINCT aime_family, model_dir, hint_fraction_key "
+        "SELECT DISTINCT aime_family, model_dir, hint_fraction_dir, solver_file "
         "FROM rollouts "
-        "ORDER BY aime_family, model_dir, hint_fraction_key"
+        "ORDER BY aime_family, model_dir, hint_fraction_dir, solver_file"
     ).fetchall()
 
     files_written = 0
-    for aime_family, model_dir, hint_fraction_key in groups:
-        model_out_dir = OUTPUT_ROOT / aime_family / model_dir
-        model_out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = model_out_dir / hint_fraction_key
+    for aime_family, model_dir, hint_fraction_dir, solver_file in groups:
+        out_dir = OUTPUT_ROOT / aime_family / model_dir / hint_fraction_dir
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / solver_file
         tmp_out_path = out_path.with_name(out_path.name + ".tmp")
 
         cur = conn.execute(
             """
             SELECT sample_id, rollout_json
             FROM rollouts
-            WHERE aime_family = ? AND model_dir = ? AND hint_fraction_key = ?
+            WHERE aime_family = ? AND model_dir = ? AND hint_fraction_dir = ? AND solver_file = ?
             ORDER BY sample_id, created, eval_id, rollout_ordinal
             """,
-            (aime_family, model_dir, hint_fraction_key),
+            (aime_family, model_dir, hint_fraction_dir, solver_file),
         )
 
         with tmp_out_path.open("w", encoding="utf-8") as out_f:
