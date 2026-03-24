@@ -16,11 +16,12 @@ DATA_ROOT = Path("suze_experiments/20260321/consolidated_hinted_results_v2_regra
 DATASET_FAMILY = "aime_solution"
 SOLVER_FILE = "solution_intext_masked.jsonl"
 
-# Use the same tokenizer setup as current Qwen3-4B inspection script.
-TOKENIZER_NAME = "Qwen/Qwen3-4B"
-LOCAL_TOKENIZER_SNAPSHOT = Path(
-    "/nlp/scr/suzeva/hf_cache/models--Qwen--Qwen3-4B/snapshots/1cfa9a7208912126459214e8b04321603b3df60c"
-)
+FAMILY_TOKENIZER_IDS: dict[str, str] = {
+    "Llama-3.1": "meta-llama/Llama-3.1-8B-Instruct",
+    "Qwen2.5": "Qwen/Qwen2.5-1.5B-Instruct",
+    "Qwen3": "Qwen/Qwen3-0.6B",
+    "gemma-3": "google/gemma-3-4b-it",
+}
 
 MODEL_LIST = [
     "Llama-3.1-70B-Instruct",
@@ -62,17 +63,27 @@ OWNER_COLORS = {
 }
 
 
-def load_tokenizer() -> AutoTokenizer:
-    if LOCAL_TOKENIZER_SNAPSHOT.exists():
-        print(f"Loading tokenizer from local snapshot: {LOCAL_TOKENIZER_SNAPSHOT}")
-        return AutoTokenizer.from_pretrained(
-            str(LOCAL_TOKENIZER_SNAPSHOT),
-            trust_remote_code=True,
-            local_files_only=True,
-        )
+_tokenizer_cache: dict[str, AutoTokenizer] = {}
 
-    print(f"Loading tokenizer from model id: {TOKENIZER_NAME}")
-    return AutoTokenizer.from_pretrained(TOKENIZER_NAME, trust_remote_code=True)
+
+def _tokenizer_hf_id(model_name: str) -> str:
+    for prefix, hf_id in FAMILY_TOKENIZER_IDS.items():
+        if model_name.startswith(prefix):
+            return hf_id
+    raise ValueError(
+        f"No tokenizer mapping for model '{model_name}'. "
+        f"Add its family prefix to FAMILY_TOKENIZER_IDS."
+    )
+
+
+def get_tokenizer(model_name: str) -> AutoTokenizer:
+    hf_id = _tokenizer_hf_id(model_name)
+    if hf_id not in _tokenizer_cache:
+        print(f"Loading tokenizer for {model_name} → {hf_id}")
+        _tokenizer_cache[hf_id] = AutoTokenizer.from_pretrained(
+            hf_id, trust_remote_code=True,
+        )
+    return _tokenizer_cache[hf_id]
 
 
 def load_eci_map(path: Path) -> dict[str, float]:
@@ -235,7 +246,7 @@ def inspect_hint_file(path: Path, tokenizer: AutoTokenizer) -> dict[str, Any]:
     }
 
 
-def collect_df(tokenizer: AutoTokenizer) -> pd.DataFrame:
+def collect_df() -> pd.DataFrame:
     family_dir = DATA_ROOT / DATASET_FAMILY
     if not family_dir.exists():
         raise FileNotFoundError(f"Missing family directory: {family_dir}")
@@ -246,6 +257,8 @@ def collect_df(tokenizer: AutoTokenizer) -> pd.DataFrame:
         if not model_dir.exists():
             print(f"WARNING missing model dir: {model_dir}")
             continue
+
+        tokenizer = get_tokenizer(model)
 
         for hint in HINT_LEVELS:
             path = model_dir / f"hint_fraction_{hint:.1f}" / SOLVER_FILE
@@ -337,6 +350,8 @@ def plot_metric_df(
         ax.grid(True, alpha=0.3)
         if y_col == "max_tokens":
             ax.axhline(16000, color="#888888", linestyle="--", linewidth=1.0, alpha=0.8)
+            if model_y_max * 1.05 >= 32000:
+                ax.axhline(32000, color="#cc4444", linestyle="--", linewidth=1.0, alpha=0.8)
         ax.set_xlim(-0.05, 1.05)
         ax.set_ylim(0, model_y_max * 1.05)
 
@@ -346,7 +361,7 @@ def plot_metric_df(
     fig.suptitle(
         f"AIME solution / {SOLVER_FILE.removesuffix('.jsonl')}: "
         f"{title_metric} vs hint by model "
-        f"(max over top {TOP_K_LONGEST_BY_CHARS} by chars, tokenizer={TOKENIZER_NAME})",
+        f"(max over top {TOP_K_LONGEST_BY_CHARS} by chars, per-model tokenizer)",
         fontsize=12,
     )
     present_owners = [k for k in OWNER_COLORS if (df["owner_label"] == k).any()]
@@ -372,8 +387,7 @@ def main() -> None:
         print(f"Using existing CSV (skipping recompute): {out_csv}")
         df = pd.read_csv(out_csv)
     else:
-        tokenizer = load_tokenizer()
-        df = collect_df(tokenizer)
+        df = collect_df()
         df.to_csv(out_csv, index=False)
 
     if REUSE_EXISTING_CSV and out_owner_csv.exists():
@@ -432,5 +446,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # conda run -n ed python suze_experiments/20260321/plot_max_tokens_vs_hint_all_models.py
+    # python suze_experiments/20260321/plot_max_tokens_vs_hint_all_models.py
     main()
