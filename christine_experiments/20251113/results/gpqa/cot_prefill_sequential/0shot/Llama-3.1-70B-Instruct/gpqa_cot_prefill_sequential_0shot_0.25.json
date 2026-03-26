@@ -1,0 +1,93 @@
+{
+  "model": "vllm/Llama-3.1-70B-Instruct",
+  "total_samples": 5940,
+  "completed_samples": 5940,
+  "metadata": {
+    "timeout": 3600,
+    "hint_fraction": 0.25,
+    "fewshot": 0,
+    "data_path": "/sphinx/u/cye/emergent-doordash/christine_experiments/data/cot/gpqa.jsonl",
+    "solver_name": "cot_prefill_sequential"
+  },
+  "gpqa_scorer": {
+    "accuracy": 0.49417328154028034,
+    "stderr": 0.006497450545868947,
+    "scorer": "gpqa_scorer"
+  },
+  "manual_bootstrap": {
+    "accuracy": 0.49446969696969695,
+    "stderr": 0.026032389685220824,
+    "scorer": "manual_bootstrap",
+    "epochs": 30
+  },
+  "pass_at_k": {
+    "1": {
+      "accuracy": 0.49424242424242426,
+      "stderr": 0.025864503742021393
+    },
+    "2": {
+      "accuracy": 0.6328131313131313,
+      "stderr": 0.02372597566450171
+    },
+    "3": {
+      "accuracy": 0.7041969696969698,
+      "stderr": 0.02118278334337656
+    },
+    "4": {
+      "accuracy": 0.7471969696969697,
+      "stderr": 0.019374447670277295
+    },
+    "5": {
+      "accuracy": 0.7768787878787878,
+      "stderr": 0.017829295761993404
+    },
+    "6": {
+      "accuracy": 0.7993585858585859,
+      "stderr": 0.016693024001090687
+    },
+    "7": {
+      "accuracy": 0.8156212121212121,
+      "stderr": 0.015983831968572216
+    },
+    "8": {
+      "accuracy": 0.829449494949495,
+      "stderr": 0.014993825039235764
+    },
+    "9": {
+      "accuracy": 0.8393686868686868,
+      "stderr": 0.013426152853702144
+    },
+    "10": {
+      "accuracy": 0.8492828282828282,
+      "stderr": 0.013248347918866287
+    },
+    "11": {
+      "accuracy": 0.856070707070707,
+      "stderr": 0.012399988644998113
+    },
+    "12": {
+      "accuracy": 0.8626060606060605,
+      "stderr": 0.011693183386068775
+    },
+    "13": {
+      "accuracy": 0.868050505050505,
+      "stderr": 0.01155906477054066
+    },
+    "14": {
+      "accuracy": 0.8731161616161616,
+      "stderr": 0.01097700404919908
+    },
+    "15": {
+      "accuracy": 0.8772929292929293,
+      "stderr": 0.010514739121926088
+    },
+    "16": {
+      "accuracy": 0.8812171717171718,
+      "stderr": 0.010047381627245668
+    },
+    "17": {
+      "accuracy": 0.8888888888888888,
+      "stderr": 0.0
+    }
+  }
+}
