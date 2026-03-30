@@ -14,6 +14,8 @@ christine_experiments/20251010_data/openthoughts_sonnet45.jsonl
 consolidated_hinted_results/
 consolidated_hinted_results_v2/
 consolidated_hinted_results_v2_regraded/
+suze_experiments/20260321/plots/aime_solution_masked_aime_scorer_v2_rollout_scores.csv
+
 # Python
 __pycache__/
 *.py[cod]
