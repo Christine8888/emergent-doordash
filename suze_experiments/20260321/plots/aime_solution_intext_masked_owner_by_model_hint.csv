@@ -1,0 +1,188 @@
+model,hint,owner_label,owner_counts_json,owner_rollouts_total
+Llama-3.1-70B-Instruct,0.0,mine,"{""mine"": 10817}",10817
+Llama-3.1-70B-Instruct,0.1,mine,"{""mine"": 10561}",10561
+Llama-3.1-70B-Instruct,0.2,mine,"{""mine"": 10432}",10432
+Llama-3.1-70B-Instruct,0.3,mine,"{""mine"": 10241}",10241
+Llama-3.1-70B-Instruct,0.4,mine,"{""mine"": 10211}",10211
+Llama-3.1-70B-Instruct,0.5,mine,"{""mine"": 9609}",9609
+Llama-3.1-70B-Instruct,0.6,mine,"{""mine"": 9630}",9630
+Llama-3.1-70B-Instruct,0.7,mine,"{""mine"": 9789}",9789
+Llama-3.1-70B-Instruct,0.8,mine,"{""mine"": 9630}",9630
+Llama-3.1-70B-Instruct,0.9,mine,"{""mine"": 9650}",9650
+Llama-3.1-70B-Instruct,1.0,mine,"{""mine"": 9320}",9320
+Llama-3.1-8B-Instruct,0.0,mine,"{""mine"": 10999}",10999
+Llama-3.1-8B-Instruct,0.1,mine,"{""mine"": 13270}",13270
+Llama-3.1-8B-Instruct,0.2,mine,"{""mine"": 11215}",11215
+Llama-3.1-8B-Instruct,0.3,mine,"{""mine"": 12174}",12174
+Llama-3.1-8B-Instruct,0.4,mine,"{""mine"": 10105}",10105
+Llama-3.1-8B-Instruct,0.5,mine,"{""mine"": 11674}",11674
+Llama-3.1-8B-Instruct,0.6,mine,"{""mine"": 11386}",11386
+Llama-3.1-8B-Instruct,0.7,mine,"{""mine"": 10254}",10254
+Llama-3.1-8B-Instruct,0.8,mine,"{""mine"": 10360}",10360
+Llama-3.1-8B-Instruct,0.9,mine,"{""mine"": 13335}",13335
+Llama-3.1-8B-Instruct,1.0,mine,"{""mine"": 9559}",9559
+Qwen2.5-0.5B-Instruct,0.0,christine,"{""christine"": 9320}",9320
+Qwen2.5-0.5B-Instruct,0.1,christine,"{""christine"": 9320}",9320
+Qwen2.5-0.5B-Instruct,0.2,christine,"{""christine"": 9320}",9320
+Qwen2.5-0.5B-Instruct,0.3,christine,"{""christine"": 9320}",9320
+Qwen2.5-0.5B-Instruct,0.4,christine,"{""christine"": 9320}",9320
+Qwen2.5-0.5B-Instruct,0.5,christine,"{""christine"": 9320}",9320
+Qwen2.5-0.5B-Instruct,0.6,christine,"{""christine"": 9320}",9320
+Qwen2.5-0.5B-Instruct,0.7,christine,"{""christine"": 9320}",9320
+Qwen2.5-0.5B-Instruct,0.8,christine,"{""christine"": 9320}",9320
+Qwen2.5-0.5B-Instruct,0.9,christine,"{""christine"": 9320}",9320
+Qwen2.5-0.5B-Instruct,1.0,christine,"{""christine"": 9320}",9320
+Qwen2.5-1.5B-Instruct,0.0,christine,"{""christine"": 9320}",9320
+Qwen2.5-1.5B-Instruct,0.1,christine,"{""christine"": 9320}",9320
+Qwen2.5-1.5B-Instruct,0.2,christine,"{""christine"": 9320}",9320
+Qwen2.5-1.5B-Instruct,0.3,christine,"{""christine"": 9320}",9320
+Qwen2.5-1.5B-Instruct,0.4,christine,"{""christine"": 9320}",9320
+Qwen2.5-1.5B-Instruct,0.5,christine,"{""christine"": 9320}",9320
+Qwen2.5-1.5B-Instruct,0.6,christine,"{""christine"": 9320}",9320
+Qwen2.5-1.5B-Instruct,0.7,christine,"{""christine"": 9320}",9320
+Qwen2.5-1.5B-Instruct,0.8,christine,"{""christine"": 9320}",9320
+Qwen2.5-1.5B-Instruct,0.9,christine,"{""christine"": 9320}",9320
+Qwen2.5-1.5B-Instruct,1.0,christine,"{""christine"": 9320}",9320
+Qwen2.5-14B-Instruct,0.0,christine,"{""christine"": 9320}",9320
+Qwen2.5-14B-Instruct,0.1,christine,"{""christine"": 9320}",9320
+Qwen2.5-14B-Instruct,0.2,christine,"{""christine"": 9320}",9320
+Qwen2.5-14B-Instruct,0.3,christine,"{""christine"": 9320}",9320
+Qwen2.5-14B-Instruct,0.4,christine,"{""christine"": 9320}",9320
+Qwen2.5-14B-Instruct,0.5,christine,"{""christine"": 9320}",9320
+Qwen2.5-14B-Instruct,0.6,christine,"{""christine"": 9320}",9320
+Qwen2.5-14B-Instruct,0.7,christine,"{""christine"": 9320}",9320
+Qwen2.5-14B-Instruct,0.8,christine,"{""christine"": 9320}",9320
+Qwen2.5-14B-Instruct,0.9,christine,"{""christine"": 9320}",9320
+Qwen2.5-14B-Instruct,1.0,christine,"{""christine"": 9320}",9320
+Qwen2.5-32B-Instruct,0.0,christine,"{""christine"": 9320}",9320
+Qwen2.5-32B-Instruct,0.1,christine,"{""christine"": 9320}",9320
+Qwen2.5-32B-Instruct,0.2,christine,"{""christine"": 9320}",9320
+Qwen2.5-32B-Instruct,0.3,christine,"{""christine"": 9320}",9320
+Qwen2.5-32B-Instruct,0.4,christine,"{""christine"": 9320}",9320
+Qwen2.5-32B-Instruct,0.5,christine,"{""christine"": 9320}",9320
+Qwen2.5-32B-Instruct,0.6,christine,"{""christine"": 9320}",9320
+Qwen2.5-32B-Instruct,0.7,christine,"{""christine"": 9320}",9320
+Qwen2.5-32B-Instruct,0.8,christine,"{""christine"": 9320}",9320
+Qwen2.5-32B-Instruct,0.9,christine,"{""christine"": 9320}",9320
+Qwen2.5-32B-Instruct,1.0,christine,"{""christine"": 9320}",9320
+Qwen2.5-3B-Instruct,0.0,christine,"{""christine"": 9320}",9320
+Qwen2.5-3B-Instruct,0.1,christine,"{""christine"": 9320}",9320
+Qwen2.5-3B-Instruct,0.2,christine,"{""christine"": 9320}",9320
+Qwen2.5-3B-Instruct,0.3,christine,"{""christine"": 9320}",9320
+Qwen2.5-3B-Instruct,0.4,christine,"{""christine"": 9320}",9320
+Qwen2.5-3B-Instruct,0.5,christine,"{""christine"": 9320}",9320
+Qwen2.5-3B-Instruct,0.6,christine,"{""christine"": 9320}",9320
+Qwen2.5-3B-Instruct,0.7,christine,"{""christine"": 9320}",9320
+Qwen2.5-3B-Instruct,0.8,christine,"{""christine"": 9320}",9320
+Qwen2.5-3B-Instruct,0.9,christine,"{""christine"": 9320}",9320
+Qwen2.5-3B-Instruct,1.0,christine,"{""christine"": 9320}",9320
+Qwen2.5-7B-Instruct,0.0,christine,"{""christine"": 9320}",9320
+Qwen2.5-7B-Instruct,0.1,christine,"{""christine"": 9320}",9320
+Qwen2.5-7B-Instruct,0.2,christine,"{""christine"": 9320}",9320
+Qwen2.5-7B-Instruct,0.3,christine,"{""christine"": 9320}",9320
+Qwen2.5-7B-Instruct,0.4,christine,"{""christine"": 9320}",9320
+Qwen2.5-7B-Instruct,0.5,christine,"{""christine"": 9320}",9320
+Qwen2.5-7B-Instruct,0.6,christine,"{""christine"": 9320}",9320
+Qwen2.5-7B-Instruct,0.7,christine,"{""christine"": 9320}",9320
+Qwen2.5-7B-Instruct,0.8,christine,"{""christine"": 9320}",9320
+Qwen2.5-7B-Instruct,0.9,christine,"{""christine"": 9320}",9320
+Qwen2.5-7B-Instruct,1.0,christine,"{""christine"": 9320}",9320
+Qwen3-0.6B,0.0,mixed,"{""christine"": 2390, ""mine"": 18298}",20688
+Qwen3-0.6B,0.1,mixed,"{""christine"": 1440, ""mine"": 20842}",22282
+Qwen3-0.6B,0.2,mixed,"{""christine"": 1540, ""mine"": 22750}",24290
+Qwen3-0.6B,0.3,mixed,"{""christine"": 1210, ""mine"": 20915}",22125
+Qwen3-0.6B,0.4,christine,"{""christine"": 9320}",9320
+Qwen3-0.6B,0.5,mixed,"{""christine"": 2299, ""mine"": 28242}",30541
+Qwen3-0.6B,0.6,christine,"{""christine"": 9320}",9320
+Qwen3-0.6B,0.7,christine,"{""christine"": 9320}",9320
+Qwen3-0.6B,0.8,christine,"{""christine"": 9320}",9320
+Qwen3-0.6B,0.9,christine,"{""christine"": 9320}",9320
+Qwen3-0.6B,1.0,christine,"{""christine"": 9320}",9320
+Qwen3-1.7B,0.0,mixed,"{""christine"": 1191, ""mine"": 14152}",15343
+Qwen3-1.7B,0.1,mixed,"{""christine"": 1390, ""mine"": 9622}",11012
+Qwen3-1.7B,0.2,mixed,"{""christine"": 1460, ""mine"": 9320}",10780
+Qwen3-1.7B,0.3,mixed,"{""christine"": 160, ""mine"": 12862}",13022
+Qwen3-1.7B,0.4,mixed,"{""christine"": 380, ""mine"": 9610}",9990
+Qwen3-1.7B,0.5,mixed,"{""christine"": 870, ""mine"": 9527}",10397
+Qwen3-1.7B,0.6,christine,"{""christine"": 9320}",9320
+Qwen3-1.7B,0.7,mixed,"{""christine"": 1081, ""mine"": 13962}",15043
+Qwen3-1.7B,0.8,christine,"{""christine"": 9320}",9320
+Qwen3-1.7B,0.9,christine,"{""christine"": 9320}",9320
+Qwen3-1.7B,1.0,christine,"{""christine"": 9320}",9320
+Qwen3-14B,0.0,christine,"{""christine"": 9320}",9320
+Qwen3-14B,0.1,christine,"{""christine"": 9320}",9320
+Qwen3-14B,0.2,mixed,"{""christine"": 130, ""mine"": 9641}",9771
+Qwen3-14B,0.3,christine,"{""christine"": 9320}",9320
+Qwen3-14B,0.4,mixed,"{""christine"": 440, ""mine"": 13927}",14367
+Qwen3-14B,0.5,mixed,"{""christine"": 280, ""mine"": 11592}",11872
+Qwen3-14B,0.6,mixed,"{""christine"": 400, ""mine"": 15566}",15966
+Qwen3-14B,0.7,mixed,"{""christine"": 130, ""mine"": 13204}",13334
+Qwen3-14B,0.8,mixed,"{""christine"": 150, ""mine"": 10731}",10881
+Qwen3-14B,0.9,mixed,"{""christine"": 730, ""mine"": 11011}",11741
+Qwen3-14B,1.0,christine,"{""christine"": 9320}",9320
+Qwen3-32B,0.0,mine,"{""mine"": 12995}",12995
+Qwen3-32B,0.1,mine,"{""mine"": 11803}",11803
+Qwen3-32B,0.2,mine,"{""mine"": 11998}",11998
+Qwen3-32B,0.3,mine,"{""mine"": 12242}",12242
+Qwen3-32B,0.4,mine,"{""mine"": 11331}",11331
+Qwen3-32B,0.5,mine,"{""mine"": 11374}",11374
+Qwen3-32B,0.6,mine,"{""mine"": 11252}",11252
+Qwen3-32B,0.7,mine,"{""mine"": 10239}",10239
+Qwen3-32B,0.8,mine,"{""mine"": 9756}",9756
+Qwen3-32B,0.9,mine,"{""mine"": 10325}",10325
+Qwen3-32B,1.0,mine,"{""mine"": 9359}",9359
+Qwen3-4B,0.0,mixed,"{""christine"": 430, ""mine"": 11578}",12008
+Qwen3-4B,0.1,christine,"{""christine"": 9320}",9320
+Qwen3-4B,0.2,christine,"{""christine"": 9320}",9320
+Qwen3-4B,0.3,christine,"{""christine"": 9320}",9320
+Qwen3-4B,0.4,christine,"{""christine"": 9320}",9320
+Qwen3-4B,0.5,christine,"{""christine"": 9320}",9320
+Qwen3-4B,0.6,mixed,"{""christine"": 1661, ""mine"": 9781}",11442
+Qwen3-4B,0.7,mixed,"{""christine"": 1790, ""mine"": 10428}",12218
+Qwen3-4B,0.8,mixed,"{""christine"": 12983, ""mine"": 10535}",23518
+Qwen3-4B,0.9,christine,"{""christine"": 9320}",9320
+Qwen3-4B,1.0,christine,"{""christine"": 9320}",9320
+Qwen3-8B,0.0,christine,"{""christine"": 9320}",9320
+Qwen3-8B,0.1,christine,"{""christine"": 9320}",9320
+Qwen3-8B,0.2,christine,"{""christine"": 9320}",9320
+Qwen3-8B,0.3,mixed,"{""christine"": 2760, ""mine"": 9470}",12230
+Qwen3-8B,0.4,mixed,"{""christine"": 1390, ""mine"": 11673}",13063
+Qwen3-8B,0.5,christine,"{""christine"": 9320}",9320
+Qwen3-8B,0.6,christine,"{""christine"": 9320}",9320
+Qwen3-8B,0.7,christine,"{""christine"": 12780}",12780
+Qwen3-8B,0.8,mixed,"{""christine"": 3770, ""mine"": 12384}",16154
+Qwen3-8B,0.9,christine,"{""christine"": 9320}",9320
+Qwen3-8B,1.0,mine,"{""mine"": 9757}",9757
+gemma-3-12b-it,0.0,mine,"{""mine"": 9320}",9320
+gemma-3-12b-it,0.1,mine,"{""mine"": 9320}",9320
+gemma-3-12b-it,0.2,mine,"{""mine"": 9320}",9320
+gemma-3-12b-it,0.3,mine,"{""mine"": 9320}",9320
+gemma-3-12b-it,0.4,mine,"{""mine"": 9320}",9320
+gemma-3-12b-it,0.5,mine,"{""mine"": 9320}",9320
+gemma-3-12b-it,0.6,mine,"{""mine"": 9320}",9320
+gemma-3-12b-it,0.7,mine,"{""mine"": 9320}",9320
+gemma-3-12b-it,0.8,mine,"{""mine"": 9320}",9320
+gemma-3-12b-it,0.9,mine,"{""mine"": 9320}",9320
+gemma-3-12b-it,1.0,mine,"{""mine"": 9413}",9413
+gemma-3-27b-it,0.0,mine,"{""mine"": 9320}",9320
+gemma-3-27b-it,0.1,mine,"{""mine"": 9340}",9340
+gemma-3-27b-it,0.2,mine,"{""mine"": 9320}",9320
+gemma-3-27b-it,0.3,mine,"{""mine"": 9440}",9440
+gemma-3-27b-it,0.4,mine,"{""mine"": 9560}",9560
+gemma-3-27b-it,0.5,mine,"{""mine"": 9441}",9441
+gemma-3-27b-it,0.6,mine,"{""mine"": 11184}",11184
+gemma-3-27b-it,0.7,mine,"{""mine"": 9330}",9330
+gemma-3-27b-it,0.8,mine,"{""mine"": 9320}",9320
+gemma-3-27b-it,0.9,mine,"{""mine"": 9320}",9320
+gemma-3-27b-it,1.0,mine,"{""mine"": 9320}",9320
+gemma-3-4b-it,0.0,mine,"{""mine"": 9320}",9320
+gemma-3-4b-it,0.1,mine,"{""mine"": 9320}",9320
+gemma-3-4b-it,0.2,mine,"{""mine"": 9320}",9320
+gemma-3-4b-it,0.3,mine,"{""mine"": 9320}",9320
+gemma-3-4b-it,0.4,mine,"{""mine"": 9320}",9320
+gemma-3-4b-it,0.5,mine,"{""mine"": 9320}",9320
+gemma-3-4b-it,0.6,mine,"{""mine"": 9320}",9320
+gemma-3-4b-it,0.7,mine,"{""mine"": 9561}",9561
+gemma-3-4b-it,0.8,mine,"{""mine"": 9350}",9350
+gemma-3-4b-it,0.9,mine,"{""mine"": 9320}",9320
+gemma-3-4b-it,1.0,mine,"{""mine"": 9320}",9320
