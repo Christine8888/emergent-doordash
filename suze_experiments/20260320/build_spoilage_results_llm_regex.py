@@ -1,7 +1,10 @@
-"""Build merged masked spoilage labels (LLM + regex) as JSONL.
+"""Build merged spoilage labels (LLM + regex) as JSONL.
 
-This script computes regex spoilage labels for all source hint rows and joins
-Christine's LLM-judge masked spoilage results when available, keyed by:
+This script computes regex spoilage labels for all source hint rows using:
+1) masked hints; and
+2) truncated-prefix hints (matching christine_experiments/20260304/spoilage_judge.py).
+
+It joins Christine's LLM-judge masked spoilage results when available, keyed by
 dataset, id, sample_idx, fraction, mask_seed.
 
 Output rows are intended as a lightweight lookup index for downstream viewers.
@@ -87,6 +90,24 @@ def get_masked_text(text: str, fraction: float, seed: str | None) -> str:
     return "".join(MASK_TOKEN if i in mask_indices else tok for i, tok in enumerate(tokens)).strip()
 
 
+def get_truncated_prefix_text(text: str, fraction: float) -> str:
+    """Match spoilage_judge.py: truncate at ANSWER:, then keep first fraction of words."""
+    text = truncate_at_stop(text)
+    if fraction >= 1.0:
+        return text
+
+    tokens, word_indices = split_preserving_whitespace(text)
+    if not word_indices:
+        return text
+
+    num_words = max(1, int(len(word_indices) * fraction))
+    if num_words >= len(word_indices):
+        return text
+
+    last_idx = word_indices[num_words - 1]
+    return "".join(tokens[: last_idx + 1]).strip()
+
+
 def target_is_spoiled(prefix_text: str, target: str) -> bool:
     pattern = r"(?<![A-Za-z0-9])" + re.escape(target) + r"(?![A-Za-z0-9])"
     return bool(re.search(pattern, prefix_text))
@@ -161,7 +182,10 @@ def build_rows(
 
                 mask_seed_str = f"{row_id}_{sample_idx}_{fraction}_{mask_seed}"
                 masked_hint = get_masked_text(hint, fraction=fraction, seed=mask_seed_str)
-                regex_spoiled = target_is_spoiled(masked_hint, target)
+                regex_spoiled_masked = target_is_spoiled(masked_hint, target)
+
+                truncated_hint = get_truncated_prefix_text(hint, fraction=fraction)
+                regex_spoiled_truncated = target_is_spoiled(truncated_hint, target)
 
                 merged_rows.append(
                     {
@@ -176,7 +200,10 @@ def build_rows(
                         "llm_spoiled": None if llm_row is None else bool(llm_row["spoiled"]),
                         "llm_verdict": None if llm_row is None else str(llm_row.get("verdict", "")),
                         "llm_judged": llm_row is not None,
-                        "regex_spoiled": bool(regex_spoiled),
+                        # Backward-compatible alias for existing viewers.
+                        "regex_spoiled": bool(regex_spoiled_masked),
+                        "regex_spoiled_masked": bool(regex_spoiled_masked),
+                        "regex_spoiled_truncated": bool(regex_spoiled_truncated),
                     }
                 )
 
@@ -191,7 +218,9 @@ def write_jsonl(rows: list[dict], out_path: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build merged masked spoilage labels (LLM + regex).")
+    parser = argparse.ArgumentParser(
+        description="Build merged spoilage labels (LLM masked + regex masked/truncated)."
+    )
     parser.add_argument("--llm-results", type=Path, default=DEFAULT_LLM_RESULTS)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT_PATH)
     args = parser.parse_args()
