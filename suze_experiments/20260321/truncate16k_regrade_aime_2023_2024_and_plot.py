@@ -55,6 +55,8 @@ ROLLOUT_CSV = OUTPUT_DIR / "aime_2023_2024_solution_intext_masked_trunc16k_rollo
 OWNER_CSV = OUTPUT_DIR / "aime_2023_2024_solution_intext_masked_trunc16k_owner_by_model_hint.csv"
 AGG_CSV = OUTPUT_DIR / "aime_2023_2024_solution_intext_masked_trunc16k_accuracy_by_model_hint.csv"
 PLOT_ACCURACY = OUTPUT_DIR / "aime_2023_2024_solution_intext_masked_trunc16k_accuracy_vs_hint_by_model.png"
+PLOT_ACCURACY_OWNER = OUTPUT_DIR / "aime_2023_2024_solution_intext_masked_trunc16k_accuracy_vs_hint_by_model_owner.png"
+PLOT_ACCURACY_VS_ECI = OUTPUT_DIR / "aime_2023_2024_solution_intext_masked_trunc16k_accuracy_vs_eci_by_hint.png"
 PLOT_HIST_OLD = OUTPUT_DIR / "aime_2023_2024_solution_intext_masked_old_token_length_hist_by_model.png"
 
 REUSE_EXISTING_RESULTS_FILES = True
@@ -501,6 +503,18 @@ def load_eci_map(path: Path) -> dict[str, float]:
     return dict(zip(eci_df["model"], eci_df["eci_fitted"]))
 
 
+def model_labels_by_eci(df: pd.DataFrame) -> tuple[list[float], list[str]]:
+    model_eci = df[["model", "eci"]].drop_duplicates()
+    grouped = (
+        model_eci.groupby("eci", as_index=False)["model"]
+        .agg(lambda s: ", ".join(sorted(s.tolist())))
+        .sort_values("eci")
+    )
+    ticks = [float(v) for v in grouped["eci"].tolist()]
+    labels = grouped["model"].tolist()
+    return ticks, labels
+
+
 def aggregate_accuracy(rollout_df: pd.DataFrame, owner_df: pd.DataFrame) -> pd.DataFrame:
     agg = (
         rollout_df.groupby(["model", "hint"], as_index=False)
@@ -521,6 +535,103 @@ def aggregate_accuracy(rollout_df: pd.DataFrame, owner_df: pd.DataFrame) -> pd.D
     agg.to_csv(AGG_CSV, index=False)
     print(f"[{ts_now()}] Wrote aggregate CSV: {AGG_CSV} rows={len(agg)}")
     return agg
+
+
+def plot_accuracy_vs_eci_raw_by_hint(agg_df: pd.DataFrame) -> Path:
+    eci_map = load_eci_map(ECI_FILE)
+    df = agg_df.copy()
+    df["eci"] = df["model"].map(eci_map)
+    df = df.dropna(subset=["eci"]).copy()
+
+    fig, ax = plt.subplots(figsize=(13, 8))
+    hints = sorted(df["hint"].unique())
+    cmap = plt.cm.viridis
+    colors = {h: cmap(i / max(len(hints) - 1, 1)) for i, h in enumerate(hints)}
+
+    for hint in hints:
+        hdf = df[df["hint"] == hint].sort_values("eci")
+        ax.scatter(
+            hdf["eci"],
+            hdf["new_accuracy"],
+            color=colors[hint],
+            label=f"h={hint:.2f}",
+            alpha=0.85,
+            s=65,
+        )
+
+    ax.set_xlabel("ECI")
+    ax.set_ylabel("accuracy")
+    ax.set_title(
+        f"AIME 2023+2024 / {SOLVER_FILE.removesuffix('.jsonl')}: "
+        f"accuracy vs ECI by hint ({NEW_SCORER_NAME})"
+    )
+    ax.grid(True, alpha=0.3)
+    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
+
+    ticks, labels = model_labels_by_eci(df)
+    ax_top = ax.twiny()
+    ax_top.set_xlim(ax.get_xlim())
+    ax_top.set_xticks(ticks)
+    ax_top.set_xticklabels(labels, rotation=75, ha="left", fontsize=8)
+    ax_top.set_xlabel("model(s) at each ECI")
+
+    plt.tight_layout()
+    fig.savefig(PLOT_ACCURACY_VS_ECI, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[{ts_now()}] Wrote plot: {PLOT_ACCURACY_VS_ECI}")
+    return PLOT_ACCURACY_VS_ECI
+
+
+def plot_accuracy_vs_hint_by_model_raw_points(agg_df: pd.DataFrame) -> Path:
+    eci_map = load_eci_map(ECI_FILE)
+    df = agg_df.copy()
+    df["eci"] = df["model"].map(eci_map)
+    df = df.dropna(subset=["eci"]).copy()
+
+    model_eci = df[["model", "eci"]].drop_duplicates().sort_values("eci")
+    models_sorted = model_eci["model"].tolist()
+    n_models = len(models_sorted)
+    n_cols = 4
+    n_rows = (n_models + n_cols - 1) // n_cols
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.5 * n_rows))
+    axes = axes.flatten() if hasattr(axes, "flatten") else [axes]
+
+    model_cmap = plt.cm.coolwarm
+    model_colors = {m: model_cmap(i / max(n_models - 1, 1)) for i, m in enumerate(models_sorted)}
+
+    for i, model in enumerate(models_sorted):
+        ax = axes[i]
+        mdf = df[df["model"] == model].sort_values("hint")
+        eci = float(mdf["eci"].iloc[0])
+
+        ax.scatter(
+            mdf["hint"],
+            mdf["new_accuracy"],
+            color=model_colors[model],
+            alpha=0.85,
+            s=45,
+        )
+        ax.set_title(f"{model}\neci={eci:.2f}", fontsize=8)
+        ax.set_xlabel("hint")
+        ax.set_ylabel("accuracy")
+        ax.grid(True, alpha=0.3)
+        ax.set_ylim(-0.05, 1.05)
+        ax.set_xlim(-0.05, 1.05)
+
+    for i in range(n_models, len(axes)):
+        axes[i].set_visible(False)
+
+    fig.suptitle(
+        f"AIME 2023+2024 / {SOLVER_FILE.removesuffix('.jsonl')}: "
+        f"accuracy vs hint by model ({NEW_SCORER_NAME})",
+        fontsize=12,
+    )
+    plt.tight_layout()
+    fig.savefig(PLOT_ACCURACY, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[{ts_now()}] Wrote plot: {PLOT_ACCURACY}")
+    return PLOT_ACCURACY
 
 
 def plot_accuracy_vs_hint(agg_df: pd.DataFrame) -> Path:
@@ -568,14 +679,14 @@ def plot_accuracy_vs_hint(agg_df: pd.DataFrame) -> Path:
         fig.legend(handles=handles, loc="upper right", fontsize=9)
     fig.suptitle(
         f"AIME 2023+2024 / {SOLVER_FILE.removesuffix('.jsonl')}: "
-        f"accuracy vs hint by model (truncated to {MAX_TOKENS} tokens, {NEW_SCORER_NAME})",
+        f"accuracy vs hint by model (owner-colored, truncated to {MAX_TOKENS} tokens, {NEW_SCORER_NAME})",
         fontsize=12,
     )
     plt.tight_layout()
-    fig.savefig(PLOT_ACCURACY, dpi=200, bbox_inches="tight")
+    fig.savefig(PLOT_ACCURACY_OWNER, dpi=200, bbox_inches="tight")
     plt.close(fig)
-    print(f"[{ts_now()}] Wrote plot: {PLOT_ACCURACY}")
-    return PLOT_ACCURACY
+    print(f"[{ts_now()}] Wrote plot: {PLOT_ACCURACY_OWNER}")
+    return PLOT_ACCURACY_OWNER
 
 
 def plot_old_length_hist(rollout_df: pd.DataFrame) -> Path:
@@ -668,6 +779,8 @@ async def main() -> None:
     ].copy()
 
     agg_df = aggregate_accuracy(rollout_df, owner_df)
+    plot_accuracy_vs_eci_raw_by_hint(agg_df)
+    plot_accuracy_vs_hint_by_model_raw_points(agg_df)
     plot_accuracy_vs_hint(agg_df)
     plot_old_length_hist(rollout_df)
 
