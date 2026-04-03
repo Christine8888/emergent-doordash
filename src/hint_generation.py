@@ -77,6 +77,7 @@ def generate_hints(
 
     existing = _existing_hint_ids(out_path) if resume else set()
     written = 0
+    would_write = 0
     skipped = 0
 
     for problem in problems:
@@ -94,22 +95,15 @@ def generate_hints(
 
             prompt = spec.build_hint_prompt(problem, hint_type)
             if dry_run:
-                hint_text = (
-                    f"[DRY_RUN] {hint_type} hint for {problem.problem_id} "
-                    f"(rollout {rollout_id})"
-                )
-                usage = {
-                    "input_token_count": 0,
-                    "output_token_count": 0,
-                    "stop_reason": "dry_run",
-                }
-            else:
-                hint_text, usage = query_claude_hint(
-                    prompt=prompt,
-                    model=generator_model,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                )
+                would_write += 1
+                continue
+
+            hint_text, usage = query_claude_hint(
+                prompt=prompt,
+                model=generator_model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
 
             record = HintGenerationRecord(
                 hint_id=hint_id,
@@ -127,7 +121,7 @@ def generate_hints(
                     "prompt": prompt,
                     "prompt_version": prompt_version,
                     "dataset_spec": spec.name,
-                    "problem_metadata": problem.metadata,
+                    "problem_source": problem.source,
                     "temperature": temperature,
                     **usage,
                 },
@@ -136,9 +130,16 @@ def generate_hints(
             existing.add(hint_id)
             written += 1
 
-    print(
-        f"[hint_generation] done benchmark={benchmark_name} hint_type={hint_type} "
-        f"num_problems={len(problems)} rollouts={num_rollouts} written={written} skipped={skipped} "
-        f"output={out_path}"
-    )
+    if dry_run:
+        print(
+            f"[hint_generation] dry_run benchmark={benchmark_name} hint_type={hint_type} "
+            f"num_problems={len(problems)} rollouts={num_rollouts} would_write={would_write} skipped={skipped} "
+            f"output={out_path}"
+        )
+    else:
+        print(
+            f"[hint_generation] done benchmark={benchmark_name} hint_type={hint_type} "
+            f"num_problems={len(problems)} rollouts={num_rollouts} written={written} skipped={skipped} "
+            f"output={out_path}"
+        )
     return out_path

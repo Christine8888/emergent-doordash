@@ -37,5 +37,11 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 """
-python runs/generate_hints.py --benchmark aime2025_2026 --hint-type truncated --generator-model claude-sonnet-4-6 --num-rollouts 1 --limit 1--temperature 1.0 --output-path data/aime2025_2026_truncated.jsonl --dry-run true --resume true
+dry run
+python -m runs.generate_hints --benchmark aime2025_2026 --hint-type truncated --generator-model claude-sonnet-4-6 --num-rollouts 1 --limit 1000 --dry-run true --resume true
+
+generating tiny bit of hints
+python -m runs.generate_hints --benchmark aime2025_2026 --hint-type truncated --generator-model claude-sonnet-4-6 --num-rollouts 1 --limit 1 --dry-run false --resume true
+
+
 """

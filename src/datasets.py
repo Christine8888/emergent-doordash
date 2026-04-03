@@ -3,14 +3,15 @@ from __future__ import annotations
 from abc import ABC
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+import json
+from pathlib import Path
 
 @dataclass(frozen=True)
 class Problem:
     problem_id: str
     question: str
     answer: str
-    metadata: dict[str, Any]
+    source: str
 
 
 class HintType(str, Enum):
@@ -77,7 +78,49 @@ class AIME20252026Spec(DatasetSpecBase):
         HintType.TRUNCATED: "_build_truncated_prompt",
     }
 
+    def _dataset_cache_path(self) -> Path:
+        return Path("data") / "datasets" / f"{self.name}.jsonl"
+
+    def _load_problems_from_cache(self, path: Path) -> list[Problem]:
+        problems: list[Problem] = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                row = json.loads(line)
+                problems.append(
+                    Problem(
+                        problem_id=row["problem_id"],
+                        question=row["question"],
+                        answer=row["answer"],
+                        source=row["source"],
+                    )
+                )
+        return problems
+
+    def _save_problems_to_cache(self, path: Path, problems: list[Problem]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            for problem in problems:
+                f.write(
+                    json.dumps(
+                        {
+                            "problem_id": problem.problem_id,
+                            "question": problem.question,
+                            "answer": problem.answer,
+                            "source": problem.source,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+                f.write("\n")
+
     def load_problems(self) -> list[Problem]:
+        cache_path = self._dataset_cache_path()
+        if cache_path.exists():
+            return self._load_problems_from_cache(cache_path)
+
         from datasets import load_dataset
 
         rows: list[tuple[str, str, str]] = []
@@ -93,7 +136,7 @@ class AIME20252026Spec(DatasetSpecBase):
                     )
                 )
 
-        dataset = load_dataset("opencompass/AIME2025", split="test")
+        dataset = load_dataset("math-ai/aime26", split="test")
         for example in dataset:
             rows.append(
                 (
@@ -110,9 +153,10 @@ class AIME20252026Spec(DatasetSpecBase):
                     problem_id=f"{self.name}_{i:04d}",
                     question=question,
                     answer=answer,
-                    metadata={"source": source},
+                    source=source,
                 )
             )
+        self._save_problems_to_cache(cache_path, problems)
         return problems
 
     def _build_truncated_prompt(self, problem: Problem) -> str:
