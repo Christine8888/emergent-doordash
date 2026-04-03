@@ -1,39 +1,132 @@
-import hashlib
-import re
-from typing import List
+from __future__ import annotations
 
-from datasets import load_dataset
-from pydantic import BaseModel
+from abc import ABC
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any
 
-class Datum(BaseModel): # only for questions of this dataset!
-    id: str
+@dataclass(frozen=True)
+class Problem:
+    problem_id: str
     question: str
     answer: str
+    metadata: dict[str, Any]
 
 
-class AIME2025(BaseModel):
-    data: List[Datum] = []
+class HintType(str, Enum):
+    TRUNCATED = "truncated"
 
-    def __len__(self) -> int:
-        return len(self.data)
 
-    def __getitem__(self, index: int) -> Datum:
-        return self.data[index]
+class DatasetSpecBase(ABC):
+    name: str
+    PROMPT_VERSIONS: dict[HintType, str] = {}
+    PROMPT_BUILDERS: dict[HintType, str] = {}
 
-    def __iter__(self):
-        return iter(self.data)
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        if cls is DatasetSpecBase:
+            return
 
-    @classmethod
-    def load(cls) -> "AIME2025":
-        data = []
-        for config in ["AIME2025-I", "AIME2025-II"]:
-            for example in load_dataset("opencompass/AIME2025", config, split="test"):
-                question = example["question"]
-                answer = re.search(r"\d+", example["answer"]).group()
-                id = hashlib.md5(question.encode()).hexdigest()[:8]
-                data.append(Datum(id=id, question=question, answer=answer))
-        return cls(data=data)
+        expected = set(HintType)
+        versions_keys = set(cls.PROMPT_VERSIONS.keys())
+        builders_keys = set(cls.PROMPT_BUILDERS.keys())
 
-    def is_correct(self, model_answer: str, datum: Datum) -> bool:
-        # the model answer should already be take from the model response
-        return model_answer.strip() == datum.answer.strip()
+        if versions_keys != expected:
+            missing = sorted(h.value for h in (expected - versions_keys))
+            extra = sorted(h.value for h in (versions_keys - expected))
+            raise TypeError(
+                f"{cls.__name__}.PROMPT_VERSIONS must include exactly all hint types. "
+                f"missing={missing} extra={extra}"
+            )
+        if builders_keys != expected:
+            missing = sorted(h.value for h in (expected - builders_keys))
+            extra = sorted(h.value for h in (builders_keys - expected))
+            raise TypeError(
+                f"{cls.__name__}.PROMPT_BUILDERS must include exactly all hint types. "
+                f"missing={missing} extra={extra}"
+            )
+
+        for hint_type, method_name in cls.PROMPT_BUILDERS.items():
+            if not isinstance(method_name, str) or not hasattr(cls, method_name):
+                raise TypeError(
+                    f"{cls.__name__}.PROMPT_BUILDERS[{hint_type.value!r}] "
+                    f"must reference an existing method name."
+                )
+
+    def load_problems(self) -> list[Problem]:
+        raise NotImplementedError
+
+    def supported_hint_types(self) -> list[str]:
+        return [hint_type.value for hint_type in HintType]
+
+    def prompt_version(self, hint_type: str) -> str:
+        return self.PROMPT_VERSIONS[HintType(hint_type)]
+
+    def build_hint_prompt(self, problem: Problem, hint_type: str) -> str:
+        builder_name = self.PROMPT_BUILDERS[HintType(hint_type)]
+        builder = getattr(self, builder_name)
+        return builder(problem)
+
+
+class AIME20252026Spec(DatasetSpecBase):
+    name = "aime2025_2026"
+    PROMPT_VERSIONS = {
+        HintType.TRUNCATED: f"{name}_truncated_v1",
+    }
+    PROMPT_BUILDERS = {
+        HintType.TRUNCATED: "_build_truncated_prompt",
+    }
+
+    def load_problems(self) -> list[Problem]:
+        from datasets import load_dataset
+
+        rows: list[tuple[str, str, str]] = []
+
+        for config_name in ("AIME2025-I", "AIME2025-II"):
+            dataset = load_dataset("opencompass/AIME2025", config_name, split="test")
+            for example in dataset:
+                rows.append(
+                    (
+                        str(example["question"]),
+                        str(example["answer"]),
+                        "opencompass/AIME2025",
+                    )
+                )
+
+        dataset = load_dataset("opencompass/AIME2025", split="test")
+        for example in dataset:
+            rows.append(
+                (
+                    str(example["problem"]),
+                    str(example["answer"]),
+                    "math-ai/aime26",
+                )
+            )
+
+        problems: list[Problem] = []
+        for i, (question, answer, source) in enumerate(rows, start=1):
+            problems.append(
+                Problem(
+                    problem_id=f"{self.name}_{i:04d}",
+                    question=question,
+                    answer=answer,
+                    metadata={"source": source},
+                )
+            )
+        return problems
+
+    def _build_truncated_prompt(self, problem: Problem) -> str:
+        return (
+            "Write a detailed solution to the following problem.\n"
+            "The final answer should be placed between <answer></answer> tags\n"
+            "Do not reveal the final answer until placing it between the tags.\n"
+            "You can do verification and validation of the answer, but only after <answer></answer> tags so the answer is not revealed before then"
+            f"Here is the problem: {problem.question}"
+        )
+
+
+def get_dataset_spec(benchmark_name: str) -> DatasetSpecBase:
+    specs = {
+        "aime2025_2026": AIME20252026Spec(),
+    }
+    return specs[benchmark_name.lower()]
