@@ -10,7 +10,7 @@ from src.datasets import Problem
 from src.storage import build_hint_generation_path, read_jsonl
 
 class HintType(str, Enum):
-    masked = "masked"
+    answer_not_revealed = "answer_not_revealed"
     bag_of_hints = "bag_of_hints"
     basic_hint = "basic_hint"
 
@@ -274,12 +274,12 @@ class BasicHintTypeSpec(HintTypeSpecBase):
         return model_output
 
 
-class MaskedHintTypeSpec(HintTypeSpecBase):
+class AnswerNotRevealedHintTypeSpec(HintTypeSpecBase):
     def __init__(self) -> None:
         super().__init__(
-            name=HintType.masked,
-            prompt_version="masked_v1",
-            post_process_version="masked_post_v1",
+            name=HintType.answer_not_revealed,
+            prompt_version="answer_not_revealed_v1",
+            post_process_version="answer_not_revealed_post_v1",
             grade_model_output=False,
             source_hint_type=HintType.basic_hint,
         )
@@ -370,7 +370,7 @@ class BaggedHintTypeSpec(HintTypeSpecBase):
 
 
 HINT_TYPE_SPECS: dict[str, HintTypeSpecBase] = {
-    HintType.masked.value: MaskedHintTypeSpec(),
+    HintType.answer_not_revealed.value: AnswerNotRevealedHintTypeSpec(),
     HintType.basic_hint.value: BasicHintTypeSpec(),
     HintType.bag_of_hints.value: BaggedHintTypeSpec(),
 }
