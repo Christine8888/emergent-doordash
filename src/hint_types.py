@@ -294,7 +294,7 @@ class BasicHintTypeSpec(HintTypeSpecBase):
         self,
         *,
         name: HintType = HintType.basic_hint,
-        prompt_version: str = "basic_v1",
+        prompt_version: str = "basic_v3",
         post_process_version: str = "basic_post_v1",
         grade_model_output: bool = True,
         source_hint_type: HintType | None = None,
@@ -320,12 +320,21 @@ class BasicHintTypeSpec(HintTypeSpecBase):
         context: HintGenerationContext,
     ) -> str:
         _ = context
-        template = (
+        template_v1 = (
             "Write a detailed solution to the following problem.\n"
             "Provide the answer in <answer></answer> tags.\n"
             "Here is the problem: {question}"
         )
-        return template.format(question=problem.question)
+        template_v2 = (
+            "{question}\n"
+            "The answer is an integer between 0 and 999 inclusive.\n" # TODO update this for any datasets that do not have this!
+            "Provide the answer in <answer></answer> tags.\n"
+        )
+        template_v3 = ( # https://github.com/eth-sri/matharena/blob/main/configs/competitions/aime/aime_2026.yaml
+            "Put your final answer within \\boxed{{}}.\nThe answer is an integer between 0 and 999 inclusive.\n" # TODO update this for any datasets that do not have this!
+            "{question}"
+        )
+        return template_v3.format(question=problem.question)
 
     def _post_process(
         self,
