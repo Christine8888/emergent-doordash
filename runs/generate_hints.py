@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from src.datasets import HintType
+from src.hint_types import HintType
 from src.hint_generation import generate_hints
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,9 +43,9 @@ dry run
 python -m runs.generate_hints --benchmark aime2025_2026 --hint-type masked --first-model claude-sonnet-4-6 --second-model claude-opus-4-6 --num-rollouts 1 --limit 1000 --dry-run true
 
 generating tiny bit of hints
-python -m runs.generate_hints --benchmark aime2025_2026 --hint-type masked --first-model claude-sonnet-4-6 --second-model claude-opus-4-6 --num-rollouts 2 --limit 4 --dry-run false
+python -m runs.generate_hints --benchmark aime2025_2026 --hint-type masked --first-model claude-sonnet-4-6 --second-model claude-opus-4-6 --num-rollouts 2 --limit 2 --dry-run false
 
-python -m runs.generate_hints --benchmark aime2025_2026 --hint-type masked_complete --first-model claude-sonnet-4-6 --second-model claude-opus-4-6 --num-rollouts 2 --limit 4 --dry-run false
+python -m runs.generate_hints --benchmark aime2025_2026 --hint-type basic_hint --first-model claude-sonnet-4-6 --second-model claude-opus-4-6 --num-rollouts 2 --limit 2 --dry-run false
 
 
 """

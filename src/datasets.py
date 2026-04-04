@@ -2,33 +2,10 @@ from __future__ import annotations
 
 from abc import ABC
 from dataclasses import dataclass
-from enum import Enum
 import json
 from pathlib import Path
 import re
 
-FINAL_STEP_TEMPLATE = (
-    "Write a detailed solution to the following problem.\n"
-    "Work through all intermediate steps, but stop just before the final computation.\n"
-    "Perform the last step (e.g., summing results, final arithmetic) inside "
-    "<final_step></final_step> tags — this is the ONLY place the final numerical "
-    "result should appear.\n"
-    "After the closing </final_step> tag, restate just the bare answer in "
-    "<answer></answer> tags.\n"
-    # "You may do verification and validation after the closing </answer> tag.\n\n"
-    "Here is the problem: {question}"
-)
-
-BASIC_TEMPLATE = (
-    "Write a detailed solution to the following problem.\n"
-    "STRICT RULES — follow exactly:\n"
-    "1. When you arrive at the final answer in your working, write [REDACTED] in place of the value — "
-    "do not state the numerical result anywhere in the solution body.\n"
-    "3. Reveal the answer ONLY inside the tags: "
-    "<answer></answer>\n"
-    "4. This is the ONE AND ONLY place the final answer may appear.\n"
-    "Here is the problem: {question}"
-)
 
 @dataclass(frozen=True)
 class Problem:
@@ -38,92 +15,11 @@ class Problem:
     source: str
 
 
-class HintType(str, Enum):
-    masked = "masked"
-    masked_complete = "masked_complete"
-
-
 class DatasetSpecBase(ABC):
     name: str
-    PROMPT_VERSIONS: dict[HintType, str] = {}
-    PROMPT_BUILDERS: dict[HintType, str] = {}
-    POST_PROCESS_VERSIONS: dict[HintType, str] = {}
-    POST_PROCESSORS: dict[HintType, str] = {}
-
-    def __init_subclass__(cls) -> None:
-        super().__init_subclass__()
-        if cls is DatasetSpecBase:
-            return
-
-        expected = set(HintType)
-        versions_keys = set(cls.PROMPT_VERSIONS.keys())
-        builders_keys = set(cls.PROMPT_BUILDERS.keys())
-        post_versions_keys = set(cls.POST_PROCESS_VERSIONS.keys())
-        post_processors_keys = set(cls.POST_PROCESSORS.keys())
-
-        if versions_keys != expected:
-            missing = sorted(h.value for h in (expected - versions_keys))
-            extra = sorted(h.value for h in (versions_keys - expected))
-            raise TypeError(
-                f"{cls.__name__}.PROMPT_VERSIONS must include exactly all hint types. "
-                f"missing={missing} extra={extra}"
-            )
-        if builders_keys != expected:
-            missing = sorted(h.value for h in (expected - builders_keys))
-            extra = sorted(h.value for h in (builders_keys - expected))
-            raise TypeError(
-                f"{cls.__name__}.PROMPT_BUILDERS must include exactly all hint types. "
-                f"missing={missing} extra={extra}"
-            )
-        if post_versions_keys != expected:
-            missing = sorted(h.value for h in (expected - post_versions_keys))
-            extra = sorted(h.value for h in (post_versions_keys - expected))
-            raise TypeError(
-                f"{cls.__name__}.POST_PROCESS_VERSIONS must include exactly all hint types. "
-                f"missing={missing} extra={extra}"
-            )
-        if post_processors_keys != expected:
-            missing = sorted(h.value for h in (expected - post_processors_keys))
-            extra = sorted(h.value for h in (post_processors_keys - expected))
-            raise TypeError(
-                f"{cls.__name__}.POST_PROCESSORS must include exactly all hint types. "
-                f"missing={missing} extra={extra}"
-            )
-
-        for hint_type, method_name in cls.PROMPT_BUILDERS.items():
-            if not isinstance(method_name, str) or not hasattr(cls, method_name):
-                raise TypeError(
-                    f"{cls.__name__}.PROMPT_BUILDERS[{hint_type.value!r}] "
-                    f"must reference an existing method name."
-                )
-        for hint_type, method_name in cls.POST_PROCESSORS.items():
-            if not isinstance(method_name, str) or not hasattr(cls, method_name):
-                raise TypeError(
-                    f"{cls.__name__}.POST_PROCESSORS[{hint_type.value!r}] "
-                    f"must reference an existing method name."
-                )
 
     def load_problems(self) -> list[Problem]:
         raise NotImplementedError
-
-    def supported_hint_types(self) -> list[str]:
-        return [hint_type.value for hint_type in HintType]
-
-    def prompt_version(self, hint_type: str) -> str:
-        return self.PROMPT_VERSIONS[HintType(hint_type)]
-
-    def build_hint_prompt(self, problem: Problem, hint_type: str) -> str:
-        builder_name = self.PROMPT_BUILDERS[HintType(hint_type)]
-        builder = getattr(self, builder_name)
-        return builder(problem)
-
-    def post_process_version(self, hint_type: str) -> str:
-        return self.POST_PROCESS_VERSIONS[HintType(hint_type)]
-
-    def post_process_hint(self, problem: Problem, hint_type: str, model_output: str) -> str:
-        processor_name = self.POST_PROCESSORS[HintType(hint_type)]
-        processor = getattr(self, processor_name)
-        return processor(problem, model_output)
 
     def extract_answer(self, response_text: str) -> str | None:
         raise NotImplementedError
@@ -134,22 +30,6 @@ class DatasetSpecBase(ABC):
 
 class AIME20252026Spec(DatasetSpecBase):
     name = "aime2025_2026"
-    PROMPT_VERSIONS = {
-        HintType.masked: f"{name}_masked_v1",
-        HintType.masked_complete: f"{name}_masked_complete_v1",
-    }
-    PROMPT_BUILDERS = {
-        HintType.masked: "_build_masked_prompt",
-        HintType.masked_complete: "_build_masked_complete_prompt",
-    }
-    POST_PROCESS_VERSIONS = {
-        HintType.masked: f"{name}_masked_post_v1",
-        HintType.masked_complete: f"{name}_masked_complete_post_v1",
-    }
-    POST_PROCESSORS = {
-        HintType.masked: "_post_process_masked",
-        HintType.masked_complete: "_post_process_masked_complete",
-    }
 
     def _dataset_cache_path(self) -> Path:
         return Path("data") / "datasets" / f"{self.name}.jsonl"
@@ -231,39 +111,6 @@ class AIME20252026Spec(DatasetSpecBase):
             )
         self._save_problems_to_cache(cache_path, problems)
         return problems
-
-    def _build_masked_prompt(self, problem: Problem) -> str:
-        # return (
-        #     "Write a detailed solution to the following problem.\n"
-        #     "The final answer should be placed between <answer></answer> tags\n"
-        #     "Do not reveal the final answer before placing it between the tags.\n"
-        #     "You can do verification and validation of the answer, but only after <answer></answer> tags so the answer is not revealed before then"
-        #     f"Here is the problem: {problem.question}"
-        # )
-        # return (
-        #     "Solve the following problem step by step.\n"
-        #     "Rules:\n"
-        #     "1. Show all reasoning and intermediate calculations freely.\n"
-        #     "2. When you reach the final step, write \"Final answer: <answer>YOUR ANSWER HERE</answer>\""
-        #     " — do not state the numerical result anywhere before this line.\n"
-        #     "3. Any verification must appear after the </answer> tag.\n\n"
-        #     f"Here is the problem: {problem.question}"
-        # )
-        return FINAL_STEP_TEMPLATE.format(question=problem.question)
-
-    def _build_masked_complete_prompt(self, problem: Problem) -> str:
-        return BASIC_TEMPLATE.format(question=problem.question)
-
-    def _post_process_masked(self, problem: Problem, model_output: str) -> str:
-        _ = problem
-        tag_match = re.search(r"<\s*(final_step|answer)\b", model_output, re.IGNORECASE)
-        if tag_match is None:
-            return model_output.strip()
-        return model_output[: tag_match.start()].rstrip()
-
-    def _post_process_masked_complete(self, problem: Problem, model_output: str) -> str:
-        _ = problem
-        return model_output
 
     def extract_answer(self, response_text: str) -> str | None:
         match = re.search(r"<answer>(.*?)</answer>", response_text, re.IGNORECASE | re.DOTALL)

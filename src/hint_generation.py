@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from src.datasets import get_dataset_spec
+from src.hint_types import get_hint_type_spec
 from src.storage import append_jsonl, build_hint_generation_path, make_stable_id, read_jsonl
 from src.types import HintGenerationRecord
 
@@ -68,10 +69,12 @@ def generate_hints(
     dry_run: bool,
 ) -> str:
     """Generate hint records and append them to a JSONL file."""
-    spec = get_dataset_spec(benchmark_name)
-    problems = spec.load_problems()[:limit]
-    prompt_version = spec.prompt_version(hint_type)
-    post_process_version = spec.post_process_version(hint_type)
+    dataset_spec = get_dataset_spec(benchmark_name)
+    hint_type_spec = get_hint_type_spec(hint_type)
+    problems = dataset_spec.load_problems()[:limit]
+    prompt_version = hint_type_spec.prompt_version
+    post_process_version = hint_type_spec.post_process_version
+    should_grade_output = hint_type_spec.grade_model_output
 
     out_path = str(
         build_hint_generation_path(
@@ -103,7 +106,15 @@ def generate_hints(
                 skipped += 1
                 continue
 
-            prompt = spec.build_hint_prompt(problem, hint_type)
+            generation_context = hint_type_spec.build_context(
+                benchmark_name=benchmark_name,
+                problem=problem,
+                rollout_id=rollout_id,
+            )
+            prompt = hint_type_spec.build_prompt(
+                problem=problem,
+                context=generation_context,
+            )
             if dry_run:
                 would_write += 1
                 continue
@@ -126,8 +137,14 @@ def generate_hints(
                         max_tokens=max_tokens,
                         temperature=temperature,
                     )
-                    extracted_answer = spec.extract_answer(usage["model_output"])
-                    is_correct = spec.is_correct(extracted_answer, problem)
+                    if not should_grade_output:
+                        successful_usage = usage
+                        successful_model = attempt_model
+                        successful_extracted = None
+                        break
+
+                    extracted_answer = dataset_spec.extract_answer(usage["model_output"])
+                    is_correct = dataset_spec.is_correct(extracted_answer, problem)
                     if is_correct:
                         successful_usage = usage
                         successful_model = attempt_model
@@ -145,11 +162,12 @@ def generate_hints(
                 failed += 1
                 continue
 
-            full_hint = spec.post_process_hint(
-                problem=problem,
-                hint_type=hint_type,
+            full_hint = hint_type_spec.post_process(
                 model_output=successful_usage["model_output"],
+                context=generation_context,
             )
+
+            context_metadata = hint_type_spec.context_metadata(generation_context)
 
             record = HintGenerationRecord(
                 hint_id=hint_id,
@@ -165,10 +183,12 @@ def generate_hints(
                 input_token_count=successful_usage["input_token_count"],
                 output_token_count=successful_usage["output_token_count"],
                 metadata={
+                    "hint_type_spec": hint_type_spec.name.value,
                     "prompt": prompt,
                     "prompt_version": prompt_version,
                     "post_process_version": post_process_version,
-                    "dataset_spec": spec.name,
+                    "grade_model_output": should_grade_output,
+                    "dataset_spec": dataset_spec.name,
                     "problem_source": problem.source,
                     "temperature": temperature,
                     "extracted_answer": successful_extracted,
@@ -178,6 +198,7 @@ def generate_hints(
                     "second_model_attempts": second_model_attempts,
                     "total_attempts_used": attempt_idx,
                     "stop_reason": successful_usage["stop_reason"],
+                    **context_metadata,
                 },
             )
             append_jsonl(out_path, record)

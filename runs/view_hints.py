@@ -165,7 +165,7 @@ def main() -> None:
             keep_cols = [col for col in preview_cols if col in filtered_hints.columns]
             st.dataframe(
                 filtered_hints[keep_cols].sort_values(["problem_id", "rollout_id"]).head(max_preview_rows),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
 
@@ -176,7 +176,7 @@ def main() -> None:
             .rename(columns={"size": "count"})
             .sort_values("count", ascending=False)
         )
-        st.dataframe(model_breakdown, use_container_width=True, hide_index=True)
+        st.dataframe(model_breakdown, width="stretch", hide_index=True)
 
     with tabs[1]:
         st.subheader("Rollout Coverage vs Dataset")
@@ -212,7 +212,7 @@ def main() -> None:
 
         st.dataframe(
             shown_df.sort_values(["is_complete", "missing_rollouts", "problem_id"], ascending=[True, False, True]),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -222,7 +222,7 @@ def main() -> None:
             st.warning(f"Found {len(orphan_hints)} hint rows with problem_id not present in dataset.")
             st.dataframe(
                 orphan_hints[["problem_id", "hint_id", "rollout_id", "generator_model"]],
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
 
@@ -254,7 +254,7 @@ def main() -> None:
 
         nav1, nav2, nav3 = st.columns([1, 3, 1])
         with nav1:
-            if st.button("< Previous", key="browse_prev_top", use_container_width=True):
+            if st.button("< Previous", key="browse_prev_top", width="stretch"):
                 st.session_state["hint_browser_idx"] = (st.session_state["hint_browser_idx"] - 1) % len(
                     filtered_problem_ids
                 )
@@ -264,7 +264,7 @@ def main() -> None:
                 f"**Problem {st.session_state['hint_browser_idx'] + 1} / {len(filtered_problem_ids)}**"
             )
         with nav3:
-            if st.button("Next >", key="browse_next_top", use_container_width=True):
+            if st.button("Next >", key="browse_next_top", width="stretch"):
                 st.session_state["hint_browser_idx"] = (st.session_state["hint_browser_idx"] + 1) % len(
                     filtered_problem_ids
                 )
@@ -322,16 +322,16 @@ def main() -> None:
                     expanded=False,
                 )
 
-                prompt_text = meta.get("prompt") if isinstance(meta, dict) else None
-                if isinstance(prompt_text, str) and prompt_text.strip():
-                    st.markdown("**Prompt Used**")
-                    st.code(prompt_text, language="text")
-
-                st.markdown("**Raw Model Output**")
-                st.code(str(hint_row.get("model_output", "")), language="text")
-
                 st.markdown("**Full Hint**")
                 st.code(str(hint_row.get("full_hint", "")), language="text")
+
+                prompt_text = meta.get("prompt") if isinstance(meta, dict) else None
+                if isinstance(prompt_text, str) and prompt_text.strip():
+                    with st.expander("Prompt Used", expanded=False):
+                        st.code(prompt_text, language="text")
+
+                with st.expander("Raw Model Output", expanded=False):
+                    st.code(str(hint_row.get("model_output", "")), language="text")
 
 
 if __name__ == "__main__":
