@@ -237,6 +237,7 @@ def generate_hints(
 
     existing_rollouts_by_problem = _existing_rollouts_by_problem(out_path)
     prepared_tasks: list[dict[str, Any]] = []
+    missing_rollouts_by_problem: dict[str, list[int]] = {}
     would_write = 0
     skipped = 0
 
@@ -247,6 +248,7 @@ def generate_hints(
                 skipped += 1
                 continue
 
+            missing_rollouts_by_problem.setdefault(problem.problem_id, []).append(rollout_id)
             hint_id = make_stable_id(
                 problem.problem_id,
                 hint_type,
@@ -280,6 +282,16 @@ def generate_hints(
             f"num_problems={len(problems)} rollouts={num_rollouts} would_write={would_write} skipped={skipped} "
             f"output={out_path}"
         )
+        if not missing_rollouts_by_problem:
+            print("[hint_generation] dry_run missing_rollouts none")
+        else:
+            for problem_id in sorted(missing_rollouts_by_problem.keys()):
+                missing_rollouts = sorted(missing_rollouts_by_problem[problem_id])
+                print(
+                    f"[hint_generation] dry_run missing_rollouts "
+                    f"problem_id={problem_id} missing_count={len(missing_rollouts)} "
+                    f"rollout_ids={missing_rollouts}"
+                )
     else:
         written = 0
         failed = 0

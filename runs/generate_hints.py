@@ -46,7 +46,7 @@ python -m runs.generate_hints --benchmark aime2025_2026 --hint-type answer_not_r
 
 generating hints
 python -m runs.generate_hints --benchmark aime2025_2026 --hint-type basic_hint --num-rollouts 10 --limit 65 --dry-run false 
-python -m runs.generate_hints --benchmark aime2025_2026 --hint-type answer_not_revealed --num-rollouts 4 --limit 8 --dry-run false 
+python -m runs.generate_hints --benchmark aime2025_2026 --hint-type answer_not_revealed --num-rollouts 2 --limit 2 --dry-run false 
 
 
 python -m runs.generate_hints --benchmark aime2025_2026 --hint-type bag_of_hints --num-rollouts 1 --limit 2 --dry-run false

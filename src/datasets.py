@@ -78,24 +78,23 @@ class AIME20252026Spec(DatasetSpecBase):
 
         rows: list[tuple[str, str, str]] = []
 
-        for config_name in ("AIME2025-I", "AIME2025-II"):
-            dataset = load_dataset("opencompass/AIME2025", config_name, split="test")
-            for example in dataset:
-                rows.append(
-                    (
-                        str(example["question"]),
-                        str(example["answer"]),
-                        "opencompass/AIME2025",
-                    )
-                )
-
-        dataset = load_dataset("math-ai/aime26", split="test")
+        dataset = load_dataset("MathArena/aime_2025", split="train")
         for example in dataset:
             rows.append(
                 (
                     str(example["problem"]),
                     str(example["answer"]),
-                    "math-ai/aime26",
+                    "MathArena/aime_2025",
+                )
+            )
+
+        dataset = load_dataset("MathArena/aime_2026", split="train")
+        for example in dataset:
+            rows.append(
+                (
+                    str(example["problem"]),
+                    str(example["answer"]),
+                    "MathArena/aime_2026",
                 )
             )
 
