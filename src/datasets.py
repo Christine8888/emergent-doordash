@@ -23,6 +23,8 @@ class DatasetSpecBase(ABC):
     name: str
     PROMPT_VERSIONS: dict[HintType, str] = {}
     PROMPT_BUILDERS: dict[HintType, str] = {}
+    POST_PROCESS_VERSIONS: dict[HintType, str] = {}
+    POST_PROCESSORS: dict[HintType, str] = {}
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
@@ -32,6 +34,8 @@ class DatasetSpecBase(ABC):
         expected = set(HintType)
         versions_keys = set(cls.PROMPT_VERSIONS.keys())
         builders_keys = set(cls.PROMPT_BUILDERS.keys())
+        post_versions_keys = set(cls.POST_PROCESS_VERSIONS.keys())
+        post_processors_keys = set(cls.POST_PROCESSORS.keys())
 
         if versions_keys != expected:
             missing = sorted(h.value for h in (expected - versions_keys))
@@ -47,11 +51,31 @@ class DatasetSpecBase(ABC):
                 f"{cls.__name__}.PROMPT_BUILDERS must include exactly all hint types. "
                 f"missing={missing} extra={extra}"
             )
+        if post_versions_keys != expected:
+            missing = sorted(h.value for h in (expected - post_versions_keys))
+            extra = sorted(h.value for h in (post_versions_keys - expected))
+            raise TypeError(
+                f"{cls.__name__}.POST_PROCESS_VERSIONS must include exactly all hint types. "
+                f"missing={missing} extra={extra}"
+            )
+        if post_processors_keys != expected:
+            missing = sorted(h.value for h in (expected - post_processors_keys))
+            extra = sorted(h.value for h in (post_processors_keys - expected))
+            raise TypeError(
+                f"{cls.__name__}.POST_PROCESSORS must include exactly all hint types. "
+                f"missing={missing} extra={extra}"
+            )
 
         for hint_type, method_name in cls.PROMPT_BUILDERS.items():
             if not isinstance(method_name, str) or not hasattr(cls, method_name):
                 raise TypeError(
                     f"{cls.__name__}.PROMPT_BUILDERS[{hint_type.value!r}] "
+                    f"must reference an existing method name."
+                )
+        for hint_type, method_name in cls.POST_PROCESSORS.items():
+            if not isinstance(method_name, str) or not hasattr(cls, method_name):
+                raise TypeError(
+                    f"{cls.__name__}.POST_PROCESSORS[{hint_type.value!r}] "
                     f"must reference an existing method name."
                 )
 
@@ -69,6 +93,14 @@ class DatasetSpecBase(ABC):
         builder = getattr(self, builder_name)
         return builder(problem)
 
+    def post_process_version(self, hint_type: str) -> str:
+        return self.POST_PROCESS_VERSIONS[HintType(hint_type)]
+
+    def post_process_hint(self, problem: Problem, hint_type: str, model_output: str) -> str:
+        processor_name = self.POST_PROCESSORS[HintType(hint_type)]
+        processor = getattr(self, processor_name)
+        return processor(problem, model_output)
+
     def extract_answer(self, response_text: str) -> str | None:
         raise NotImplementedError
 
@@ -83,6 +115,12 @@ class AIME20252026Spec(DatasetSpecBase):
     }
     PROMPT_BUILDERS = {
         HintType.masked: "_build_masked_prompt",
+    }
+    POST_PROCESS_VERSIONS = {
+        HintType.masked: f"{name}_masked_post_v1",
+    }
+    POST_PROCESSORS = {
+        HintType.masked: "_post_process_masked",
     }
 
     def _dataset_cache_path(self) -> Path:
@@ -194,6 +232,13 @@ class AIME20252026Spec(DatasetSpecBase):
             # "You may do verification and validation after the closing </answer> tag.\n\n"
             f"Here is the problem: {problem.question}"
         )
+
+    def _post_process_masked(self, problem: Problem, model_output: str) -> str:
+        _ = problem
+        tag_match = re.search(r"<\s*(final_step|answer)\b", model_output, re.IGNORECASE)
+        if tag_match is None:
+            return model_output.strip()
+        return model_output[: tag_match.start()].rstrip()
 
     def extract_answer(self, response_text: str) -> str | None:
         match = re.search(r"<answer>(.*?)</answer>", response_text, re.IGNORECASE | re.DOTALL)

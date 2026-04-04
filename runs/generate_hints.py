@@ -25,6 +25,7 @@ def main() -> None:
         benchmark_name=args.benchmark,
         hint_type=args.hint_type,
         first_model=args.first_model,
+        first_model_attempts=3,
         second_model=args.second_model,
         second_model_attempts=3,
         num_rollouts=args.num_rollouts,

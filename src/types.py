@@ -34,6 +34,7 @@ class HintGenerationRecord(BaseModel):
     generator_model: str
     question: str
     answer: str
+    model_output: str
     full_hint: str
     input_token_count: int
     output_token_count: int

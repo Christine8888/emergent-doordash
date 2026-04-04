@@ -307,7 +307,7 @@ def main() -> None:
                 meta = hint_row.get("metadata", {})
                 if not isinstance(meta, dict):
                     meta = {}
-                compact_meta = {k: v for k, v in meta.items() if k not in {"prompt", "full_hint"}}
+                compact_meta = {k: v for k, v in meta.items() if k != "prompt"}
                 st.markdown("**Hint Metadata**")
                 st.json(
                     {
@@ -326,6 +326,9 @@ def main() -> None:
                 if isinstance(prompt_text, str) and prompt_text.strip():
                     st.markdown("**Prompt Used**")
                     st.code(prompt_text, language="text")
+
+                st.markdown("**Raw Model Output**")
+                st.code(str(hint_row.get("model_output", "")), language="text")
 
                 st.markdown("**Full Hint**")
                 st.code(str(hint_row.get("full_hint", "")), language="text")

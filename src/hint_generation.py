@@ -37,7 +37,7 @@ def query_claude_hint(
         response = stream.get_final_message()
 
     return {
-        "full_hint": _parse_anthropic_message_text(response),
+        "model_output": _parse_anthropic_message_text(response),
         "input_token_count": int(response.usage.input_tokens),
         "output_token_count": int(response.usage.output_tokens),
         "stop_reason": getattr(response, "stop_reason", None),
@@ -58,6 +58,7 @@ def generate_hints(
     benchmark_name: str,
     hint_type: str,
     first_model: str,
+    first_model_attempts: int,
     second_model: str,
     second_model_attempts: int,
     num_rollouts: int,
@@ -70,6 +71,7 @@ def generate_hints(
     spec = get_dataset_spec(benchmark_name)
     problems = spec.load_problems()[:limit]
     prompt_version = spec.prompt_version(hint_type)
+    post_process_version = spec.post_process_version(hint_type)
 
     out_path = str(
         build_hint_generation_path(
@@ -92,6 +94,7 @@ def generate_hints(
                 hint_type,
                 rollout_id,
                 first_model,
+                first_model_attempts,
                 second_model,
                 second_model_attempts,
                 length=16,
@@ -108,7 +111,10 @@ def generate_hints(
             successful_usage = None
             successful_model = None
             successful_extracted = None
-            attempt_plan = [(first_model, 1), (second_model, second_model_attempts)]
+            attempt_plan = [
+                (first_model, first_model_attempts),
+                (second_model, second_model_attempts),
+            ]
             attempt_idx = 0
 
             for attempt_model, max_attempts in attempt_plan:
@@ -120,7 +126,7 @@ def generate_hints(
                         max_tokens=max_tokens,
                         temperature=temperature,
                     )
-                    extracted_answer = spec.extract_answer(usage["full_hint"])
+                    extracted_answer = spec.extract_answer(usage["model_output"])
                     is_correct = spec.is_correct(extracted_answer, problem)
                     if is_correct:
                         successful_usage = usage
@@ -139,6 +145,12 @@ def generate_hints(
                 failed += 1
                 continue
 
+            full_hint = spec.post_process_hint(
+                problem=problem,
+                hint_type=hint_type,
+                model_output=successful_usage["model_output"],
+            )
+
             record = HintGenerationRecord(
                 hint_id=hint_id,
                 problem_id=problem.problem_id,
@@ -148,21 +160,24 @@ def generate_hints(
                 generator_model=successful_model,
                 question=problem.question,
                 answer=problem.answer,
-                full_hint=successful_usage["full_hint"],
+                model_output=successful_usage["model_output"],
+                full_hint=full_hint,
                 input_token_count=successful_usage["input_token_count"],
                 output_token_count=successful_usage["output_token_count"],
                 metadata={
                     "prompt": prompt,
                     "prompt_version": prompt_version,
+                    "post_process_version": post_process_version,
                     "dataset_spec": spec.name,
                     "problem_source": problem.source,
                     "temperature": temperature,
                     "extracted_answer": successful_extracted,
                     "first_model": first_model,
+                    "first_model_attempts": first_model_attempts,
                     "second_model": second_model,
                     "second_model_attempts": second_model_attempts,
                     "total_attempts_used": attempt_idx,
-                    **successful_usage,
+                    "stop_reason": successful_usage["stop_reason"],
                 },
             )
             append_jsonl(out_path, record)
