@@ -7,6 +7,29 @@ import json
 from pathlib import Path
 import re
 
+FINAL_STEP_TEMPLATE = (
+    "Write a detailed solution to the following problem.\n"
+    "Work through all intermediate steps, but stop just before the final computation.\n"
+    "Perform the last step (e.g., summing results, final arithmetic) inside "
+    "<final_step></final_step> tags — this is the ONLY place the final numerical "
+    "result should appear.\n"
+    "After the closing </final_step> tag, restate just the bare answer in "
+    "<answer></answer> tags.\n"
+    # "You may do verification and validation after the closing </answer> tag.\n\n"
+    "Here is the problem: {question}"
+)
+
+BASIC_TEMPLATE = (
+    "Write a detailed solution to the following problem.\n"
+    "STRICT RULES — follow exactly:\n"
+    "1. When you arrive at the final answer in your working, write [REDACTED] in place of the value — "
+    "do not state the numerical result anywhere in the solution body.\n"
+    "3. Reveal the answer ONLY inside the tags: "
+    "<answer></answer>\n"
+    "4. This is the ONE AND ONLY place the final answer may appear.\n"
+    "Here is the problem: {question}"
+)
+
 @dataclass(frozen=True)
 class Problem:
     problem_id: str
@@ -17,6 +40,7 @@ class Problem:
 
 class HintType(str, Enum):
     masked = "masked"
+    masked_complete = "masked_complete"
 
 
 class DatasetSpecBase(ABC):
@@ -112,15 +136,19 @@ class AIME20252026Spec(DatasetSpecBase):
     name = "aime2025_2026"
     PROMPT_VERSIONS = {
         HintType.masked: f"{name}_masked_v1",
+        HintType.masked_complete: f"{name}_masked_complete_v1",
     }
     PROMPT_BUILDERS = {
         HintType.masked: "_build_masked_prompt",
+        HintType.masked_complete: "_build_masked_complete_prompt",
     }
     POST_PROCESS_VERSIONS = {
         HintType.masked: f"{name}_masked_post_v1",
+        HintType.masked_complete: f"{name}_masked_complete_post_v1",
     }
     POST_PROCESSORS = {
         HintType.masked: "_post_process_masked",
+        HintType.masked_complete: "_post_process_masked_complete",
     }
 
     def _dataset_cache_path(self) -> Path:
@@ -221,17 +249,10 @@ class AIME20252026Spec(DatasetSpecBase):
         #     "3. Any verification must appear after the </answer> tag.\n\n"
         #     f"Here is the problem: {problem.question}"
         # )
-        return (
-            "Write a detailed solution to the following problem.\n"
-            "Work through all intermediate steps, but stop just before the final computation.\n"
-            "Perform the last step (e.g., summing results, final arithmetic) inside "
-            "<final_step></final_step> tags — this is the ONLY place the final numerical "
-            "result should appear.\n"
-            "After the closing </final_step> tag, restate just the bare answer in "
-            "<answer></answer> tags.\n"
-            # "You may do verification and validation after the closing </answer> tag.\n\n"
-            f"Here is the problem: {problem.question}"
-        )
+        return FINAL_STEP_TEMPLATE.format(question=problem.question)
+
+    def _build_masked_complete_prompt(self, problem: Problem) -> str:
+        return BASIC_TEMPLATE.format(question=problem.question)
 
     def _post_process_masked(self, problem: Problem, model_output: str) -> str:
         _ = problem
@@ -239,6 +260,10 @@ class AIME20252026Spec(DatasetSpecBase):
         if tag_match is None:
             return model_output.strip()
         return model_output[: tag_match.start()].rstrip()
+
+    def _post_process_masked_complete(self, problem: Problem, model_output: str) -> str:
+        _ = problem
+        return model_output
 
     def extract_answer(self, response_text: str) -> str | None:
         match = re.search(r"<answer>(.*?)</answer>", response_text, re.IGNORECASE | re.DOTALL)

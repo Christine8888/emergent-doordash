@@ -45,5 +45,7 @@ python -m runs.generate_hints --benchmark aime2025_2026 --hint-type masked --fir
 generating tiny bit of hints
 python -m runs.generate_hints --benchmark aime2025_2026 --hint-type masked --first-model claude-sonnet-4-6 --second-model claude-opus-4-6 --num-rollouts 2 --limit 4 --dry-run false
 
+python -m runs.generate_hints --benchmark aime2025_2026 --hint-type masked_complete --first-model claude-sonnet-4-6 --second-model claude-opus-4-6 --num-rollouts 2 --limit 4 --dry-run false
+
 
 """
