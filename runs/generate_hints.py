@@ -45,4 +45,7 @@ generating tiny bit of hints
 python -m runs.generate_hints --benchmark aime2025_2026 --hint-type basic_hint --num-rollouts 4 --limit 8 --dry-run false
 python -m runs.generate_hints --benchmark aime2025_2026 --hint-type masked --num-rollouts 4 --limit 8 --dry-run false
 
+
+python -m runs.generate_hints --benchmark aime2025_2026 --hint-type bag_of_hints --num-rollouts 1 --limit 2 --dry-run false
+
 """

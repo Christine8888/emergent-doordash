@@ -11,6 +11,7 @@ from src.storage import build_hint_generation_path, read_jsonl
 
 class HintType(str, Enum):
     masked = "masked"
+    bag_of_hints = "bag_of_hints"
     basic_hint = "basic_hint"
 
 
@@ -124,7 +125,31 @@ class HintTypeSpecBase(ABC):
             )
 
         source_rows = by_problem[problem.problem_id]
-        source_row = source_rows[rollout_id % len(source_rows)]
+        matching_rows: list[dict[str, Any]] = []
+        for row in source_rows:
+            row_rollout_id = row.get("rollout_id")
+            if isinstance(row_rollout_id, str) and row_rollout_id.isdigit():
+                row_rollout_id = int(row_rollout_id)
+            if row_rollout_id == rollout_id:
+                matching_rows.append(row)
+
+        if not matching_rows:
+            available_rollout_ids = sorted(
+                {
+                    int(row["rollout_id"])
+                    for row in source_rows
+                    if isinstance(row.get("rollout_id"), int)
+                    or (isinstance(row.get("rollout_id"), str) and str(row.get("rollout_id")).isdigit())
+                }
+            )
+            raise ValueError(
+                f"Missing source rollout_id={rollout_id} for problem_id={problem.problem_id!r} "
+                f"in derived hint type {self.name.value!r}. "
+                f"Available source rollout_ids={available_rollout_ids}. "
+                f"Generate {self.source_hint_type.value!r} with enough rollouts first."
+            )
+
+        source_row = matching_rows[-1]
         source_path = build_hint_generation_path(
             benchmark_name=benchmark_name,
             hint_type=self.source_hint_type.value,
@@ -232,22 +257,6 @@ class BasicHintTypeSpec(HintTypeSpecBase):
         context: HintGenerationContext,
     ) -> str:
         _ = context
-        # return (
-        #     "Write a detailed solution to the following problem.\n"
-        #     "The final answer should be placed between <answer></answer> tags\n"
-        #     "Do not reveal the final answer before placing it between the tags.\n"
-        #     "You can do verification and validation of the answer, but only after <answer></answer> tags so the answer is not revealed before then"
-        #     f"Here is the problem: {problem.question}"
-        # )
-        # return (
-        #     "Solve the following problem step by step.\n"
-        #     "Rules:\n"
-        #     "1. Show all reasoning and intermediate calculations freely.\n"
-        #     "2. When you reach the final step, write \"Final answer: <answer>YOUR ANSWER HERE</answer>\""
-        #     " — do not state the numerical result anywhere before this line.\n"
-        #     "3. Any verification must appear after the </answer> tag.\n\n"
-        #     f"Here is the problem: {problem.question}"
-        # )
         template = (
             "Write a detailed solution to the following problem.\n"
             "Provide the answer in <answer></answer> tags.\n"
@@ -305,16 +314,65 @@ class MaskedHintTypeSpec(HintTypeSpecBase):
         model_output: str,
         context: HintGenerationContext,
     ) -> str:
+        return model_output
+
+
+
+class BaggedHintTypeSpec(HintTypeSpecBase):
+    def __init__(self) -> None:
+        super().__init__(
+            name=HintType.bag_of_hints,
+            prompt_version="bag_of_hints_v1",
+            post_process_version="bag_of_hints_post_v1",
+            grade_model_output=False,
+            source_hint_type=HintType.basic_hint,
+        )
+
+    def _build_prompt(
+        self,
+        *,
+        problem: Problem,
+        context: HintGenerationContext,
+    ) -> str:
+        template = (
+            "You will be given a problem and a reference solution. "
+            "Create 10 standalone hints that could be given to a student who only has the problem statement. "
+            "Each hint should reveal exactly one useful observation or technique — "
+            "no hint should state specific intermediate values, name specific answers, or give away the solution structure. "
+            "All hints should be at the same level of abstraction: pointing toward an approach or insight, not spelling it out. "
+            "Each hint must be distinct — do not repeat the same idea in different words across multiple hints. "
+            "The final answer {source_answer} must not appear in any hint.\n\n"
+            "Format your response as exactly 10 hints using this structure:\n"
+            "<hint id=1>hint text here</hint>\n"
+            "<hint id=2>hint text here</hint>\n"
+            "...and so on up to id=10.\n"
+            "Do not include any text outside of the hint tags.\n\n"
+            "Problem:\n"
+            "{question}\n\n"
+            "Reference full solution:\n"
+            "{source_solution}"
+        )
+        return template.format(
+            question=problem.question,
+            source_answer=context["source_answer"],
+            source_solution=context["source_model_output"],
+        )
+
+    def _post_process(
+        self,
+        *,
+        model_output: str,
+        context: HintGenerationContext,
+    ) -> str:
         _ = context
-        tag_match = re.search(r"<\s*answer\b", model_output, re.IGNORECASE)
-        if tag_match is None:
-            return model_output.strip()
-        return model_output[: tag_match.start()].rstrip()
+        return model_output
+
 
 
 HINT_TYPE_SPECS: dict[str, HintTypeSpecBase] = {
     HintType.masked.value: MaskedHintTypeSpec(),
     HintType.basic_hint.value: BasicHintTypeSpec(),
+    HintType.bag_of_hints.value: BaggedHintTypeSpec(),
 }
 
 
