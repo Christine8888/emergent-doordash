@@ -2,13 +2,20 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.hint_fractioners import fraction_hint
+from src.hint_types import get_hint_type_spec
+from src.types import HintGenerationRecord
+
 DATA_ROOT = PROJECT_ROOT / "data"
 DATASETS_ROOT = DATA_ROOT / "datasets"
 HINT_GENERATION_ROOT = DATA_ROOT / "hint_generation"
@@ -44,6 +51,12 @@ def _discover_hint_types(benchmark_name: str) -> list[str]:
     return sorted(path.stem for path in hint_dir.glob("*.jsonl"))
 
 
+def _normalize_problem_id_series(df: pd.DataFrame) -> pd.Series:
+    if "problem_id" not in df.columns:
+        return pd.Series(dtype=str)
+    return df["problem_id"].astype(str)
+
+
 @st.cache_data(show_spinner=False)
 def load_dataset_df(path_str: str) -> pd.DataFrame:
     path = Path(path_str)
@@ -65,6 +78,7 @@ def load_hints_df(path_str: str) -> pd.DataFrame:
         return pd.DataFrame()
 
     df = pd.DataFrame(rows)
+    df["_raw_row"] = rows
     if "metadata" not in df.columns:
         df["metadata"] = [{} for _ in range(len(df))]
 
@@ -76,20 +90,53 @@ def load_hints_df(path_str: str) -> pd.DataFrame:
     df["attempts_used"] = df["metadata"].apply(lambda m: _meta_get(m, "total_attempts_used"))
     df["extracted_answer"] = df["metadata"].apply(lambda m: _meta_get(m, "extracted_answer"))
     df["prompt_version"] = df["metadata"].apply(lambda m: _meta_get(m, "prompt_version"))
-    df["problem_source"] = df["metadata"].apply(lambda m: _meta_get(m, "problem_source"))
     return df
 
 
-def _normalize_problem_id_series(df: pd.DataFrame) -> pd.Series:
-    if "problem_id" not in df.columns:
-        return pd.Series(dtype=str)
-    return df["problem_id"].astype(str)
+def _apply_fractioning(
+    hints_df: pd.DataFrame,
+    *,
+    fractioner: str,
+    hint_fraction: float,
+) -> pd.DataFrame:
+    if hints_df.empty:
+        return hints_df.copy()
+
+    out = hints_df.copy()
+    fractioned_texts: list[str] = []
+    fractioned_meta: list[dict[str, Any]] = []
+    fractioned_error: list[str | None] = []
+    fractioned_chars: list[int] = []
+
+    for raw in out["_raw_row"].tolist():
+        try:
+            record = HintGenerationRecord.model_validate(raw)
+            text, meta = fraction_hint(
+                hint_record=record,
+                fractioner_name=fractioner,
+                hint_fraction=hint_fraction,
+            )
+            fractioned_texts.append(text)
+            fractioned_meta.append(meta)
+            fractioned_error.append(None)
+            fractioned_chars.append(len(text))
+        except Exception as exc:
+            fractioned_texts.append("")
+            fractioned_meta.append({})
+            fractioned_error.append(str(exc))
+            fractioned_chars.append(0)
+
+    out["fractioned_hint"] = fractioned_texts
+    out["fractioned_metadata"] = fractioned_meta
+    out["fractioned_error"] = fractioned_error
+    out["fractioned_chars"] = fractioned_chars
+    return out
 
 
 def main() -> None:
-    st.set_page_config(page_title="Hint Viewer", layout="wide")
-    st.title("Hint Generation Viewer")
-    st.caption("Dataset-backed viewer for hint_generation JSONL files.")
+    st.set_page_config(page_title="Fractioned Hint Viewer", layout="wide")
+    st.title("Fractioned Hint Viewer")
+    st.caption("View transformed hints on the fly from hint_generation JSONL files.")
 
     benchmark_options = _discover_benchmarks()
     if not benchmark_options:
@@ -105,9 +152,12 @@ def main() -> None:
             return
         hint_type = st.selectbox("Hint Type", options=hint_type_options, index=0)
 
+        hint_type_spec = get_hint_type_spec(hint_type)
+        fractioner = st.selectbox("Fractioner", options=list(hint_type_spec.allowed_fractioners), index=0)
+        hint_fraction = st.slider("Hint Fraction", min_value=0.0, max_value=1.0, value=0.3, step=0.1)
+
         dataset_path = DATASETS_ROOT / f"{benchmark_name}.jsonl"
         hints_path = HINT_GENERATION_ROOT / benchmark_name / f"{hint_type}.jsonl"
-
         st.caption(f"Dataset: {dataset_path}")
         st.caption(f"Hints: {hints_path}")
 
@@ -117,7 +167,6 @@ def main() -> None:
     if dataset_df.empty:
         st.error(f"Dataset file is missing or empty: {dataset_path}")
         return
-
     if hints_df.empty:
         st.warning(f"Hint file is missing or empty: {hints_path}")
         return
@@ -135,21 +184,28 @@ def main() -> None:
             _normalize_problem_id_series(filtered_hints).str.contains(problem_id_query, case=False, regex=False)
         ]
 
+    fractioned_df = _apply_fractioning(
+        filtered_hints,
+        fractioner=fractioner,
+        hint_fraction=float(hint_fraction),
+    )
+
     total_dataset_problems = int(dataset_df["problem_id"].astype(str).nunique())
     hinted_problem_count = int(_normalize_problem_id_series(hints_df).nunique())
     filtered_hint_count = int(len(filtered_hints))
+    fraction_error_count = int(fractioned_df["fractioned_error"].notna().sum()) if not fractioned_df.empty else 0
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Dataset Problems", total_dataset_problems)
-    m2.metric("Hint Rows (all)", int(len(hints_df)))
-    m3.metric("Hint Rows (filtered)", filtered_hint_count)
+    m2.metric("Hint Rows (filtered)", filtered_hint_count)
+    m3.metric("Fraction Errors", fraction_error_count)
     m4.metric("Problem Coverage", f"{(hinted_problem_count / total_dataset_problems * 100):.1f}%")
 
     tabs = st.tabs(["Summary", "Coverage", "Problem Browser"])
 
     with tabs[0]:
-        st.subheader("Filtered Hint Preview")
-        if filtered_hints.empty:
+        st.subheader("Fractioned Hint Preview")
+        if fractioned_df.empty:
             st.warning("No hint rows match current filters.")
         else:
             preview_cols = [
@@ -157,26 +213,16 @@ def main() -> None:
                 "rollout_id",
                 "hint_id",
                 "generator_model",
-                "input_token_count",
-                "output_token_count",
-                "attempts_used",
+                "fractioned_chars",
+                "fractioned_error",
                 "created_at",
             ]
-            keep_cols = [col for col in preview_cols if col in filtered_hints.columns]
+            keep_cols = [col for col in preview_cols if col in fractioned_df.columns]
             st.dataframe(
-                filtered_hints[keep_cols].sort_values(["problem_id", "rollout_id"]).head(max_preview_rows),
+                fractioned_df[keep_cols].sort_values(["problem_id", "rollout_id"]).head(max_preview_rows),
                 width="stretch",
                 hide_index=True,
             )
-
-        st.subheader("Model Breakdown")
-        model_breakdown = (
-            hints_df.groupby("generator_model", as_index=False)
-            .size()
-            .rename(columns={"size": "count"})
-            .sort_values("count", ascending=False)
-        )
-        st.dataframe(model_breakdown, width="stretch", hide_index=True)
 
     with tabs[1]:
         st.subheader("Rollout Coverage vs Dataset")
@@ -200,79 +246,66 @@ def main() -> None:
 
         incomplete_only = st.checkbox("Show only incomplete problems", value=False)
         shown_df = coverage_df[~coverage_df["is_complete"]].copy() if incomplete_only else coverage_df.copy()
-
-        c1, c2, c3 = st.columns(3)
-        complete_problems = int(coverage_df["is_complete"].sum())
-        c1.metric("Complete Problems", complete_problems)
-        c2.metric("Incomplete Problems", int(len(coverage_df) - complete_problems))
-        c3.metric(
-            "Completion Rate",
-            f"{(complete_problems / len(coverage_df) * 100):.1f}%" if len(coverage_df) else "0.0%",
-        )
-
         st.dataframe(
             shown_df.sort_values(["is_complete", "missing_rollouts", "problem_id"], ascending=[True, False, True]),
             width="stretch",
             hide_index=True,
         )
 
-        dataset_problem_ids = set(dataset_df["problem_id"].astype(str).tolist())
-        orphan_hints = hints_df[~_normalize_problem_id_series(hints_df).isin(dataset_problem_ids)]
-        if not orphan_hints.empty:
-            st.warning(f"Found {len(orphan_hints)} hint rows with problem_id not present in dataset.")
-            st.dataframe(
-                orphan_hints[["problem_id", "hint_id", "rollout_id", "generator_model"]],
-                width="stretch",
-                hide_index=True,
-            )
-
     with tabs[2]:
-        st.subheader("Per-Problem Hint Browser")
-        if filtered_hints.empty:
+        st.subheader("Per-Problem Fractioned Hint Browser")
+        if fractioned_df.empty:
             st.warning("No hint rows match current filters.")
             return
 
         filtered_problem_ids = (
-            filtered_hints["problem_id"].astype(str).drop_duplicates().sort_values().tolist()
+            fractioned_df["problem_id"].astype(str).drop_duplicates().sort_values().tolist()
         )
         if not filtered_problem_ids:
             st.warning("No problems available under current filters.")
             return
 
-        browser_signature = (benchmark_name, hint_type, tuple(selected_models), problem_id_query)
-        if st.session_state.get("hint_browser_signature") != browser_signature:
-            st.session_state["hint_browser_signature"] = browser_signature
-            st.session_state["hint_browser_idx"] = 0
+        browser_signature = (
+            benchmark_name,
+            hint_type,
+            fractioner,
+            float(hint_fraction),
+            tuple(selected_models),
+            problem_id_query,
+        )
+        if st.session_state.get("fractioned_hint_browser_signature") != browser_signature:
+            st.session_state["fractioned_hint_browser_signature"] = browser_signature
+            st.session_state["fractioned_hint_browser_idx"] = 0
 
-        if "hint_browser_idx" not in st.session_state:
-            st.session_state["hint_browser_idx"] = 0
+        if "fractioned_hint_browser_idx" not in st.session_state:
+            st.session_state["fractioned_hint_browser_idx"] = 0
 
-        st.session_state["hint_browser_idx"] = max(
+        st.session_state["fractioned_hint_browser_idx"] = max(
             0,
-            min(st.session_state["hint_browser_idx"], len(filtered_problem_ids) - 1),
+            min(st.session_state["fractioned_hint_browser_idx"], len(filtered_problem_ids) - 1),
         )
 
         nav1, nav2, nav3 = st.columns([1, 3, 1])
         with nav1:
             if st.button("< Previous", key="browse_prev_top", width="stretch"):
-                st.session_state["hint_browser_idx"] = (st.session_state["hint_browser_idx"] - 1) % len(
-                    filtered_problem_ids
-                )
+                st.session_state["fractioned_hint_browser_idx"] = (
+                    st.session_state["fractioned_hint_browser_idx"] - 1
+                ) % len(filtered_problem_ids)
                 st.rerun()
         with nav2:
             st.markdown(
-                f"**Problem {st.session_state['hint_browser_idx'] + 1} / {len(filtered_problem_ids)}**"
+                f"**Problem {st.session_state['fractioned_hint_browser_idx'] + 1} / {len(filtered_problem_ids)}**"
             )
         with nav3:
             if st.button("Next >", key="browse_next_top", width="stretch"):
-                st.session_state["hint_browser_idx"] = (st.session_state["hint_browser_idx"] + 1) % len(
-                    filtered_problem_ids
-                )
+                st.session_state["fractioned_hint_browser_idx"] = (
+                    st.session_state["fractioned_hint_browser_idx"] + 1
+                ) % len(filtered_problem_ids)
                 st.rerun()
 
-        selected_problem_id = filtered_problem_ids[st.session_state["hint_browser_idx"]]
+        selected_problem_id = filtered_problem_ids[st.session_state["fractioned_hint_browser_idx"]]
         problem_row = dataset_df[dataset_df["problem_id"].astype(str) == selected_problem_id]
-        problem_hints = filtered_hints[filtered_hints["problem_id"].astype(str) == selected_problem_id].copy()
+        problem_hints = fractioned_df[fractioned_df["problem_id"].astype(str) == selected_problem_id].copy()
         problem_hints = problem_hints.sort_values(["rollout_id", "hint_id"]).reset_index(drop=True)
 
         if problem_row.empty:
@@ -287,14 +320,14 @@ def main() -> None:
                 "source": row.get("source", None),
                 "answer": row.get("answer", None),
                 "num_hints_visible": int(len(problem_hints)),
+                "fractioner": fractioner,
+                "hint_fraction": float(hint_fraction),
             },
             expanded=True,
         )
 
         st.markdown("**Question**")
         st.text(str(row.get("question", "")))
-        st.markdown("**Answer**")
-        st.code(str(row.get("answer", "")), language="text")
 
         st.markdown("**Hints**")
         for i, hint_row in problem_hints.iterrows():
@@ -304,6 +337,37 @@ def main() -> None:
                 f"hint_id={hint_row.get('hint_id', '')}"
             )
             with st.expander(title, expanded=(i == 0)):
+                error = hint_row.get("fractioned_error")
+                if isinstance(error, str) and error:
+                    st.error(error)
+                    continue
+
+                st.markdown("**Fractioned Hint**")
+                st.code(str(hint_row.get("fractioned_hint", "")), language="text")
+
+                fractioned_meta = hint_row.get("fractioned_metadata", {})
+                if not isinstance(fractioned_meta, dict):
+                    fractioned_meta = {}
+                st.markdown("**Fractioning Metadata**")
+                st.json(fractioned_meta, expanded=False)
+                units_total = fractioned_meta.get("units_total")
+                units_visible = fractioned_meta.get("units_visible")
+                units_masked = fractioned_meta.get("units_masked")
+                if isinstance(units_total, int) and isinstance(units_visible, int) and isinstance(units_masked, int):
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Units Total", units_total)
+                    c2.metric("Units Visible", units_visible)
+                    c3.metric("Units Masked", units_masked)
+
+                if fractioner in ("mask_sentence", "mask_word"):
+                    mask_token_count = str(hint_row.get("fractioned_hint", "")).count("[MASK]")
+                    st.metric("`[MASK]` Tokens", int(mask_token_count))
+                    if mask_token_count == 0:
+                        st.warning(
+                            "No tokens were masked for this row. "
+                            "Try a smaller hint fraction or verify this hint has enough units to mask."
+                        )
+
                 meta = hint_row.get("metadata", {})
                 if not isinstance(meta, dict):
                     meta = {}
@@ -322,8 +386,8 @@ def main() -> None:
                     expanded=False,
                 )
 
-                st.markdown("**Full Hint**")
-                st.code(str(hint_row.get("full_hint", "")), language="text")
+                with st.expander("Full Hint", expanded=False):
+                    st.code(str(hint_row.get("full_hint", "")), language="text")
 
                 prompt_text = meta.get("prompt") if isinstance(meta, dict) else None
                 if isinstance(prompt_text, str) and prompt_text.strip():
@@ -335,5 +399,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # streamlit run runs/view_hints.py
+    # streamlit run runs/view_fractioned_hints.py
     main()

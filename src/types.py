@@ -52,6 +52,7 @@ class HintedInferenceRecord(BaseModel):
     benchmark_name: str
     model: str
     hint_type: str
+    fractioner: str
     hint_fraction: float
     hint_text_used: str
     model_output: str

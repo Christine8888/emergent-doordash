@@ -126,6 +126,8 @@ def generate_hints(
             successful_usage = None
             successful_model = None
             successful_extracted = None
+            successful_full_hint = None
+            successful_grader_metadata: dict[str, Any] = {}
             attempt_plan = [
                 (first_model, first_model_attempts),
                 (second_model, second_model_attempts),
@@ -152,24 +154,49 @@ def generate_hints(
                         f"model={attempt_model} input_tokens={usage['input_token_count']} "
                         f"output_tokens={usage['output_token_count']} stop_reason={usage['stop_reason']}"
                     )
-                    if not should_grade_output:
-                        successful_usage = usage
-                        successful_model = attempt_model
-                        successful_extracted = None
-                        break
 
-                    extracted_answer = dataset_spec.extract_answer(usage["model_output"])
-                    is_correct = dataset_spec.is_correct(extracted_answer, problem)
-                    if is_correct:
-                        successful_usage = usage
-                        successful_model = attempt_model
-                        successful_extracted = extracted_answer
-                        break
-                    print(
-                        f"[hint_generation][WARN] incorrect answer benchmark={benchmark_name} "
-                        f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
-                        f"model={attempt_model} extracted={extracted_answer!r} correct={problem.answer!r}"
+                    grade_result = hint_type_spec.grade_output(
+                        model_output=usage["model_output"],
+                        problem=problem,
+                        dataset_spec=dataset_spec,
+                        context=generation_context,
                     )
+                    extracted_answer = grade_result["extracted_answer"]
+                    grader_metadata: dict[str, Any] = grade_result["metadata"]
+                    if not grade_result["is_correct"]:
+                        if extracted_answer is None:
+                            print(
+                                f"[hint_generation][WARN] grader_rejected benchmark={benchmark_name} "
+                                f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
+                                f"model={attempt_model} metadata={grader_metadata}"
+                            )
+                        else:
+                            print(
+                                f"[hint_generation][WARN] grader_rejected benchmark={benchmark_name} "
+                                f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
+                                f"model={attempt_model} extracted={extracted_answer!r} correct={problem.answer!r}"
+                            )
+                        continue
+
+                    try:
+                        full_hint_candidate = hint_type_spec.post_process(
+                            model_output=usage["model_output"],
+                            context=generation_context,
+                        )
+                    except Exception as exc:
+                        print(
+                            f"[hint_generation][WARN] invalid_hint_output benchmark={benchmark_name} "
+                            f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
+                            f"model={attempt_model} error={exc}"
+                        )
+                        continue
+
+                    successful_usage = usage
+                    successful_model = attempt_model
+                    successful_extracted = extracted_answer
+                    successful_grader_metadata = grader_metadata
+                    successful_full_hint = full_hint_candidate
+                    break
                 if successful_usage is not None:
                     break
 
@@ -177,10 +204,7 @@ def generate_hints(
                 failed += 1
                 continue
 
-            full_hint = hint_type_spec.post_process(
-                model_output=successful_usage["model_output"],
-                context=generation_context,
-            )
+            full_hint = str(successful_full_hint)
 
             context_metadata = hint_type_spec.context_metadata(generation_context)
 
@@ -207,6 +231,7 @@ def generate_hints(
                     "problem_source": problem.source,
                     "temperature": temperature,
                     "extracted_answer": successful_extracted,
+                    "grader_metadata": successful_grader_metadata,
                     "first_model": first_model,
                     "first_model_attempts": first_model_attempts,
                     "second_model": second_model,

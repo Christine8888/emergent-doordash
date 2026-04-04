@@ -6,8 +6,23 @@ from pathlib import Path
 from typing import Any, TypedDict
 import re
 
-from src.datasets import Problem
+from src.datasets import DatasetSpecBase, Problem
 from src.storage import build_hint_generation_path, read_jsonl
+
+
+def _parse_bag_hints(text: str) -> list[str]:
+    pattern = re.compile(
+        r"<hint\s+id\s*=\s*['\"]?(\d+)['\"]?\s*>(.*?)</hint>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    matches = pattern.findall(text)
+    if not matches:
+        return []
+    by_id: dict[int, str] = {}
+    for raw_id, hint_text in matches:
+        by_id[int(raw_id)] = hint_text.strip()
+    return [by_id[i] for i in sorted(by_id.keys())]
+
 
 class HintType(str, Enum):
     answer_not_revealed = "answer_not_revealed"
@@ -26,11 +41,18 @@ class HintGenerationContext(TypedDict, total=False):
     source_answer: str
 
 
+class HintGraderResult(TypedDict):
+    is_correct: bool
+    extracted_answer: str | None
+    metadata: dict[str, Any]
+
+
 class HintTypeSpecBase(ABC):
     name: HintType
     prompt_version: str
     post_process_version: str
     grade_model_output: bool
+    allowed_fractioners: tuple[str, ...]
 
     def __init__(
         self,
@@ -39,6 +61,7 @@ class HintTypeSpecBase(ABC):
         prompt_version: str,
         post_process_version: str,
         grade_model_output: bool,
+        allowed_fractioners: tuple[str, ...],
         uses_context: bool | None = None,
         required_context_keys: tuple[str, ...] = (),
         source_hint_type: HintType | None = None,
@@ -47,6 +70,7 @@ class HintTypeSpecBase(ABC):
         self.prompt_version = prompt_version
         self.post_process_version = post_process_version
         self.grade_model_output = grade_model_output
+        self.allowed_fractioners = allowed_fractioners
         self.source_hint_type = source_hint_type
         if uses_context is None:
             uses_context = source_hint_type is not None
@@ -231,6 +255,39 @@ class HintTypeSpecBase(ABC):
                 metadata[key] = context[key]
         return metadata
 
+    def grade_output(
+        self,
+        *,
+        model_output: str,
+        problem: Problem,
+        dataset_spec: DatasetSpecBase,
+        context: HintGenerationContext,
+    ) -> HintGraderResult:
+        if not self.grade_model_output:
+            return {
+                "is_correct": True,
+                "extracted_answer": None,
+            "metadata": {},
+        }
+        return self._grade_output(
+            model_output=model_output,
+            problem=problem,
+            dataset_spec=dataset_spec,
+            context=context,
+        )
+
+    def _grade_output(
+        self,
+        *,
+        model_output: str,
+        problem: Problem,
+        dataset_spec: DatasetSpecBase,
+        context: HintGenerationContext,
+    ) -> HintGraderResult:
+        raise NotImplementedError(
+            f"Hint type {self.name.value!r} must implement _grade_output when grade_model_output=True."
+        )
+
 
 class BasicHintTypeSpec(HintTypeSpecBase):
     def __init__(
@@ -247,6 +304,12 @@ class BasicHintTypeSpec(HintTypeSpecBase):
             prompt_version=prompt_version,
             post_process_version=post_process_version,
             grade_model_output=grade_model_output,
+            allowed_fractioners=(
+                "truncate_sentence",
+                "truncate_word",
+                "mask_sentence",
+                "mask_word",
+            ),
             source_hint_type=source_hint_type,
         )
 
@@ -273,6 +336,24 @@ class BasicHintTypeSpec(HintTypeSpecBase):
         _ = context
         return model_output
 
+    def _grade_output(
+        self,
+        *,
+        model_output: str,
+        problem: Problem,
+        dataset_spec: DatasetSpecBase,
+        context: HintGenerationContext,
+    ) -> HintGraderResult:
+        _ = context
+        extracted_answer = dataset_spec.extract_answer(model_output)
+        return {
+            "is_correct": dataset_spec.is_correct(extracted_answer, problem),
+            "extracted_answer": extracted_answer,
+            "metadata": {
+                "grader_type": "dataset_extract_and_match",
+            },
+        }
+
 
 class AnswerNotRevealedHintTypeSpec(HintTypeSpecBase):
     def __init__(self) -> None:
@@ -281,6 +362,12 @@ class AnswerNotRevealedHintTypeSpec(HintTypeSpecBase):
             prompt_version="answer_not_revealed_v1",
             post_process_version="answer_not_revealed_post_v1",
             grade_model_output=False,
+            allowed_fractioners=(
+                "truncate_sentence",
+                "truncate_word",
+                "mask_sentence",
+                "mask_word",
+            ),
             source_hint_type=HintType.basic_hint,
         )
 
@@ -325,6 +412,7 @@ class BaggedHintTypeSpec(HintTypeSpecBase):
             prompt_version="bag_of_hints_v1",
             post_process_version="bag_of_hints_post_v1",
             grade_model_output=False,
+            allowed_fractioners=("bag_count",),
             source_hint_type=HintType.basic_hint,
         )
 
@@ -367,6 +455,29 @@ class BaggedHintTypeSpec(HintTypeSpecBase):
         _ = context
         return model_output
 
+    def grade_output(
+        self,
+        *,
+        model_output: str,
+        problem: Problem,
+        dataset_spec: DatasetSpecBase,
+        context: HintGenerationContext,
+    ) -> HintGraderResult:
+        _ = problem
+        _ = dataset_spec
+        _ = context
+        hint_count = len(_parse_bag_hints(model_output))
+        is_correct = hint_count == 10
+        return {
+            "is_correct": is_correct,
+            "extracted_answer": None,
+            "metadata": {
+                "grader_type": "bag_hint_count",
+                "hint_count": hint_count,
+                "required_hint_count": 10,
+            },
+        }
+
 
 
 HINT_TYPE_SPECS: dict[str, HintTypeSpecBase] = {
@@ -377,4 +488,8 @@ HINT_TYPE_SPECS: dict[str, HintTypeSpecBase] = {
 
 
 def get_hint_type_spec(hint_type: str) -> HintTypeSpecBase:
+    aliases = {
+        "masked": HintType.answer_not_revealed.value,
+    }
+    hint_type = aliases.get(hint_type, hint_type)
     return HINT_TYPE_SPECS[hint_type]

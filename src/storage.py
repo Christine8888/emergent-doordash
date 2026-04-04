@@ -38,6 +38,7 @@ def build_hinted_inference_path(
     benchmark_name: str,
     model: str,
     hint_type: str,
+    fractioner: str,
     hint_fraction: float,
     *,
     data_root: str | Path,
@@ -45,10 +46,19 @@ def build_hinted_inference_path(
     benchmark = _safe_component(benchmark_name)
     model_name = _safe_component(model)
     hint = _safe_component(hint_type)
+    fractioner_name = _safe_component(fractioner)
+    hint_fractioner = f"{hint}__{fractioner_name}"
     fraction_text = f"{hint_fraction:.4f}".rstrip("0").rstrip(".")
     if not fraction_text:
         fraction_text = "0"
-    return Path(data_root) / "hinted_inference" / benchmark / model_name / hint / f"fraction_{fraction_text}.jsonl"
+    return (
+        Path(data_root)
+        / "hinted_inference"
+        / benchmark
+        / model_name
+        / hint_fractioner
+        / f"fraction_{fraction_text}.jsonl"
+    )
 
 
 def append_jsonl(path: str | Path, record: BaseModel | dict[str, Any]) -> None:
