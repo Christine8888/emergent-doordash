@@ -163,5 +163,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # python -m runs.plot_spoilage_regex --benchmark aime2025_2026
+    # python -m runs.plot_spoilage --benchmark aime2025_2026
     main()
