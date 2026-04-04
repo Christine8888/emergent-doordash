@@ -22,23 +22,26 @@ def query_claude_hint(
     *,
     max_tokens: int,
     temperature: float,
-) -> tuple[str, dict[str, Any]]:
+) -> dict[str, Any]:
     import anthropic
 
     client = anthropic.Anthropic()
-    response = client.messages.create(
+    with client.messages.stream(
         model=model,
         max_tokens=max_tokens,
         temperature=temperature,
         messages=[{"role": "user", "content": prompt}],
-    )
-    text = _parse_anthropic_message_text(response)
-    usage = {
+    ) as stream:
+        for _ in stream.text_stream:
+            pass
+        response = stream.get_final_message()
+
+    return {
+        "full_hint": _parse_anthropic_message_text(response),
         "input_token_count": int(response.usage.input_tokens),
         "output_token_count": int(response.usage.output_tokens),
         "stop_reason": getattr(response, "stop_reason", None),
     }
-    return text, usage
 
 
 def _existing_hint_ids(path: str | Path) -> set[str]:
@@ -54,13 +57,14 @@ def generate_hints(
     *,
     benchmark_name: str,
     hint_type: str,
-    generator_model: str,
+    first_model: str,
+    second_model: str,
+    second_model_attempts: int,
     num_rollouts: int,
     limit: int,
     max_tokens: int,
     temperature: float,
     dry_run: bool,
-    resume: bool,
 ) -> str:
     """Generate hint records and append them to a JSONL file."""
     spec = get_dataset_spec(benchmark_name)
@@ -75,10 +79,11 @@ def generate_hints(
         )
     )
 
-    existing = _existing_hint_ids(out_path) if resume else set()
+    existing = _existing_hint_ids(out_path)
     written = 0
     would_write = 0
     skipped = 0
+    failed = 0
 
     for problem in problems:
         for rollout_id in range(num_rollouts):
@@ -86,7 +91,9 @@ def generate_hints(
                 problem.problem_id,
                 hint_type,
                 rollout_id,
-                generator_model,
+                first_model,
+                second_model,
+                second_model_attempts,
                 length=16,
             )
             if hint_id in existing:
@@ -98,12 +105,39 @@ def generate_hints(
                 would_write += 1
                 continue
 
-            hint_text, usage = query_claude_hint(
-                prompt=prompt,
-                model=generator_model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-            )
+            successful_usage = None
+            successful_model = None
+            successful_extracted = None
+            attempt_plan = [(first_model, 1), (second_model, second_model_attempts)]
+            attempt_idx = 0
+
+            for attempt_model, max_attempts in attempt_plan:
+                for _ in range(max_attempts):
+                    attempt_idx += 1
+                    usage = query_claude_hint(
+                        prompt=prompt,
+                        model=attempt_model,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                    )
+                    extracted_answer = spec.extract_answer(usage["full_hint"])
+                    is_correct = spec.is_correct(extracted_answer, problem)
+                    if is_correct:
+                        successful_usage = usage
+                        successful_model = attempt_model
+                        successful_extracted = extracted_answer
+                        break
+                    print(
+                        f"[hint_generation][WARN] incorrect answer benchmark={benchmark_name} "
+                        f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
+                        f"model={attempt_model} extracted={extracted_answer!r} correct={problem.answer!r}"
+                    )
+                if successful_usage is not None:
+                    break
+
+            if successful_usage is None:
+                failed += 1
+                continue
 
             record = HintGenerationRecord(
                 hint_id=hint_id,
@@ -111,19 +145,24 @@ def generate_hints(
                 benchmark_name=benchmark_name,
                 hint_type=hint_type,
                 rollout_id=rollout_id,
-                generator_model=generator_model,
+                generator_model=successful_model,
                 question=problem.question,
                 answer=problem.answer,
-                full_hint=hint_text,
-                input_token_count=usage["input_token_count"],
-                output_token_count=usage["output_token_count"],
+                full_hint=successful_usage["full_hint"],
+                input_token_count=successful_usage["input_token_count"],
+                output_token_count=successful_usage["output_token_count"],
                 metadata={
                     "prompt": prompt,
                     "prompt_version": prompt_version,
                     "dataset_spec": spec.name,
                     "problem_source": problem.source,
                     "temperature": temperature,
-                    **usage,
+                    "extracted_answer": successful_extracted,
+                    "first_model": first_model,
+                    "second_model": second_model,
+                    "second_model_attempts": second_model_attempts,
+                    "total_attempts_used": attempt_idx,
+                    **successful_usage,
                 },
             )
             append_jsonl(out_path, record)
@@ -139,7 +178,7 @@ def generate_hints(
     else:
         print(
             f"[hint_generation] done benchmark={benchmark_name} hint_type={hint_type} "
-            f"num_problems={len(problems)} rollouts={num_rollouts} written={written} skipped={skipped} "
+            f"num_problems={len(problems)} rollouts={num_rollouts} written={written} skipped={skipped} failed={failed} "
             f"output={out_path}"
         )
     return out_path

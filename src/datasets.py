@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 import json
 from pathlib import Path
+import re
 
 @dataclass(frozen=True)
 class Problem:
@@ -67,6 +68,12 @@ class DatasetSpecBase(ABC):
         builder_name = self.PROMPT_BUILDERS[HintType(hint_type)]
         builder = getattr(self, builder_name)
         return builder(problem)
+
+    def extract_answer(self, response_text: str) -> str | None:
+        raise NotImplementedError
+
+    def is_correct(self, extracted_answer: str | None, problem: Problem) -> bool:
+        raise NotImplementedError
 
 
 class AIME20252026Spec(DatasetSpecBase):
@@ -163,10 +170,21 @@ class AIME20252026Spec(DatasetSpecBase):
         return (
             "Write a detailed solution to the following problem.\n"
             "The final answer should be placed between <answer></answer> tags\n"
-            "Do not reveal the final answer until placing it between the tags.\n"
+            "Do not reveal the final answer before placing it between the tags.\n"
             "You can do verification and validation of the answer, but only after <answer></answer> tags so the answer is not revealed before then"
             f"Here is the problem: {problem.question}"
         )
+
+    def extract_answer(self, response_text: str) -> str | None:
+        match = re.search(r"<answer>(.*?)</answer>", response_text, re.IGNORECASE | re.DOTALL)
+        if match is None:
+            return None
+        return match.group(1).strip()
+
+    def is_correct(self, extracted_answer: str | None, problem: Problem) -> bool:
+        if extracted_answer is None:
+            return False
+        return extracted_answer.strip() == problem.answer.strip()
 
 
 def get_dataset_spec(benchmark_name: str) -> DatasetSpecBase:
