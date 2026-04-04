@@ -18,12 +18,12 @@ HINT_FRACTIONER_COMBOS: list[tuple[str, str]] = [
     ("answer_not_revealed", "mask_sentence"),
     ("answer_not_revealed", "mask_word"),
 
-    ("basic_hint", "truncate_sentence"),
-    ("basic_hint", "truncate_word"),
-    ("basic_hint", "mask_sentence"),
-    ("basic_hint", "mask_word"),
+    # ("basic_hint", "truncate_sentence"),
+    # ("basic_hint", "truncate_word"),
+    # ("basic_hint", "mask_sentence"),
+    # ("basic_hint", "mask_word"),
     
-    ("bag_of_hints", "bag_count"),
+    # ("bag_of_hints", "bag_count"),
 ]
 
 FRACTIONS: list[float] = [round(i * 0.05, 2) for i in range(21)]
