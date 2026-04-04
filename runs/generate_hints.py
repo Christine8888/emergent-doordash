@@ -18,6 +18,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    # if args.concurrency < 1:
+    #     parser.error("--concurrency must be >= 1")
 
     generate_hints(
         benchmark_name=args.benchmark,
@@ -32,6 +34,7 @@ def main() -> None:
         max_tokens=32000,
         temperature=1.0,
         dry_run=args.dry_run == "true",
+        concurrency=8,
     )
 
 
@@ -41,9 +44,9 @@ if __name__ == "__main__":
 dry run
 python -m runs.generate_hints --benchmark aime2025_2026 --hint-type answer_not_revealed --num-rollouts 1 --limit 1000 --dry-run true
 
-generating tiny bit of hints
-python -m runs.generate_hints --benchmark aime2025_2026 --hint-type basic_hint --num-rollouts 4 --limit 8 --dry-run false
-python -m runs.generate_hints --benchmark aime2025_2026 --hint-type answer_not_revealed --num-rollouts 4 --limit 8 --dry-run false
+generating hints
+python -m runs.generate_hints --benchmark aime2025_2026 --hint-type basic_hint --num-rollouts 10 --limit 65 --dry-run false 
+python -m runs.generate_hints --benchmark aime2025_2026 --hint-type answer_not_revealed --num-rollouts 4 --limit 8 --dry-run false 
 
 
 python -m runs.generate_hints --benchmark aime2025_2026 --hint-type bag_of_hints --num-rollouts 1 --limit 2 --dry-run false
