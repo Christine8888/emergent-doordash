@@ -16,7 +16,7 @@ class Problem:
 
 
 class HintType(str, Enum):
-    TRUNCATED = "truncated"
+    masked = "masked"
 
 
 class DatasetSpecBase(ABC):
@@ -79,10 +79,10 @@ class DatasetSpecBase(ABC):
 class AIME20252026Spec(DatasetSpecBase):
     name = "aime2025_2026"
     PROMPT_VERSIONS = {
-        HintType.TRUNCATED: f"{name}_truncated_v1",
+        HintType.masked: f"{name}_masked_v1",
     }
     PROMPT_BUILDERS = {
-        HintType.TRUNCATED: "_build_truncated_prompt",
+        HintType.masked: "_build_masked_prompt",
     }
 
     def _dataset_cache_path(self) -> Path:
@@ -166,12 +166,32 @@ class AIME20252026Spec(DatasetSpecBase):
         self._save_problems_to_cache(cache_path, problems)
         return problems
 
-    def _build_truncated_prompt(self, problem: Problem) -> str:
+    def _build_masked_prompt(self, problem: Problem) -> str:
+        # return (
+        #     "Write a detailed solution to the following problem.\n"
+        #     "The final answer should be placed between <answer></answer> tags\n"
+        #     "Do not reveal the final answer before placing it between the tags.\n"
+        #     "You can do verification and validation of the answer, but only after <answer></answer> tags so the answer is not revealed before then"
+        #     f"Here is the problem: {problem.question}"
+        # )
+        # return (
+        #     "Solve the following problem step by step.\n"
+        #     "Rules:\n"
+        #     "1. Show all reasoning and intermediate calculations freely.\n"
+        #     "2. When you reach the final step, write \"Final answer: <answer>YOUR ANSWER HERE</answer>\""
+        #     " — do not state the numerical result anywhere before this line.\n"
+        #     "3. Any verification must appear after the </answer> tag.\n\n"
+        #     f"Here is the problem: {problem.question}"
+        # )
         return (
             "Write a detailed solution to the following problem.\n"
-            "The final answer should be placed between <answer></answer> tags\n"
-            "Do not reveal the final answer before placing it between the tags.\n"
-            "You can do verification and validation of the answer, but only after <answer></answer> tags so the answer is not revealed before then"
+            "Work through all intermediate steps, but stop just before the final computation.\n"
+            "Perform the last step (e.g., summing results, final arithmetic) inside "
+            "<final_step></final_step> tags — this is the ONLY place the final numerical "
+            "result should appear.\n"
+            "After the closing </final_step> tag, restate just the bare answer in "
+            "<answer></answer> tags.\n"
+            # "You may do verification and validation after the closing </answer> tag.\n\n"
             f"Here is the problem: {problem.question}"
         )
 
