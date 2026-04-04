@@ -45,12 +45,18 @@ def query_claude_hint(
     }
 
 
-def _existing_hint_ids(path: str | Path) -> set[str]:
-    existing = set()
+def _existing_rollouts_by_problem(path: str | Path) -> dict[str, set[int]]:
+    existing: dict[str, set[int]] = {}
     for row in read_jsonl(path, model_cls=None):
-        hint_id = row.get("hint_id") if isinstance(row, dict) else None
-        if isinstance(hint_id, str):
-            existing.add(hint_id)
+        if not isinstance(row, dict):
+            continue
+        problem_id = row.get("problem_id")
+        rollout_id = row.get("rollout_id")
+        if not isinstance(problem_id, str):
+            continue
+        if not isinstance(rollout_id, int):
+            continue
+        existing.setdefault(problem_id, set()).add(rollout_id)
     return existing
 
 
@@ -84,27 +90,25 @@ def generate_hints(
         )
     )
 
-    existing = _existing_hint_ids(out_path)
+    existing_rollouts_by_problem = _existing_rollouts_by_problem(out_path)
     written = 0
     would_write = 0
     skipped = 0
     failed = 0
 
     for problem in problems:
+        existing_rollouts = existing_rollouts_by_problem.setdefault(problem.problem_id, set())
         for rollout_id in range(num_rollouts):
+            if rollout_id in existing_rollouts:
+                skipped += 1
+                continue
+
             hint_id = make_stable_id(
                 problem.problem_id,
                 hint_type,
                 rollout_id,
-                first_model,
-                first_model_attempts,
-                second_model,
-                second_model_attempts,
                 length=16,
             )
-            if hint_id in existing:
-                skipped += 1
-                continue
 
             generation_context = hint_type_spec.build_context(
                 benchmark_name=benchmark_name,
@@ -131,11 +135,22 @@ def generate_hints(
             for attempt_model, max_attempts in attempt_plan:
                 for _ in range(max_attempts):
                     attempt_idx += 1
+                    print(
+                        f"[hint_generation] request benchmark={benchmark_name} hint_type={hint_type} "
+                        f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
+                        f"model={attempt_model}"
+                    )
                     usage = query_claude_hint(
                         prompt=prompt,
                         model=attempt_model,
                         max_tokens=max_tokens,
                         temperature=temperature,
+                    )
+                    print(
+                        f"[hint_generation] response benchmark={benchmark_name} hint_type={hint_type} "
+                        f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
+                        f"model={attempt_model} input_tokens={usage['input_token_count']} "
+                        f"output_tokens={usage['output_token_count']} stop_reason={usage['stop_reason']}"
                     )
                     if not should_grade_output:
                         successful_usage = usage
@@ -202,7 +217,7 @@ def generate_hints(
                 },
             )
             append_jsonl(out_path, record)
-            existing.add(hint_id)
+            existing_rollouts.add(rollout_id)
             written += 1
 
     if dry_run:

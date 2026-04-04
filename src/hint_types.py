@@ -281,18 +281,17 @@ class MaskedHintTypeSpec(HintTypeSpecBase):
         problem: Problem,
         context: HintGenerationContext,
     ) -> str:
-        template = (
+        template = ( # NOTE: this template is optimized to not reveal the answer at all. It's quite good at it when you ask claude opus
             "You will be given a problem and a reference solution. "
             "Rewrite the reference solution as a detailed explanation. "
-            # "Do not state the final answer value anywhere in your response.\n\n"
-            "The final answer {source_answer} must not appear anywhere in the explanation body, including in summary lines — "
-            "stop the computation just before the final value is stated.\n"
+            "The final answer {source_answer} must not appear anywhere in your explanation. "
+            "You may compute all intermediate values, but do not perform the final step that directly produces {source_answer} — "
+            "stop your explanation at the last intermediate result.\n\n"
             "Problem:\n"
             "{question}\n\n"
             "Reference full solution:\n"
             "{source_solution}\n\n"
-            "REMINDER: Your rewritten explanation must not contain {source_answer} anywhere. "
-            "Stop before the final computation resolves to {source_answer}."
+            "REMINDER: Do not perform the final step. Your explanation must not contain {source_answer} anywhere."
         )
         return template.format(
             question=problem.question,
