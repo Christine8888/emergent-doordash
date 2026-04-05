@@ -331,7 +331,7 @@ class BasicHintTypeSpec(HintTypeSpecBase):
             "Provide the answer in <answer></answer> tags.\n"
         )
         template_v3 = ( # https://github.com/eth-sri/matharena/blob/main/configs/competitions/aime/aime_2026.yaml
-            "Put your final answer within \\boxed{{}}.\nThe answer is an integer between 0 and 999 inclusive.\n" # TODO update this for any datasets that do not have this!
+            "Put your final answer within \\boxed{{}}. \nThe answer is an integer between 0 and 999 inclusive. \n" # TODO update this for any datasets that do not have this!
             "{question}"
         )
         return template_v3.format(question=problem.question)

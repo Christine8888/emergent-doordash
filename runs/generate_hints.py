@@ -18,8 +18,6 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    # if args.concurrency < 1:
-    #     parser.error("--concurrency must be >= 1")
 
     generate_hints(
         benchmark_name=args.benchmark,
@@ -34,7 +32,7 @@ def main() -> None:
         max_tokens=32000,
         temperature=1.0,
         dry_run=args.dry_run == "true",
-        concurrency=16,
+        concurrency=4,
     )
 
 
@@ -42,12 +40,14 @@ if __name__ == "__main__":
     main()
 
 """
-python -m runs.generate_hints --benchmark aime2025_2026 --hint-type basic_hint --num-rollouts 10 --limit 65 --dry-run false 
+python -m runs.generate_hints --benchmark aime2025_2026 --hint-type basic_hint --num-rollouts 3 --limit 15 --dry-run false 
+
+
+
+
+
 python -m runs.generate_hints --benchmark aime2025_2026 --hint-type answer_not_revealed --num-rollouts 2 --limit 2 --dry-run false 
-
-
 python -m runs.generate_hints --benchmark aime2025_2026 --hint-type bag_of_hints --num-rollouts 1 --limit 2 --dry-run false
-
 """
 
 
@@ -110,4 +110,7 @@ Rejected: 113
 
 It cost $4.72 to get 27 nswers (0.18 per answer)
 Need 113 more (~$20 dollars)
+
+
+Got 72 more
 """
