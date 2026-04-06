@@ -10,6 +10,40 @@ from src.hint_types import get_hint_type_spec
 from src.storage import append_jsonl, build_hint_generation_path, make_stable_id, read_jsonl
 from src.types import HintGenerationRecord
 
+ANTHROPIC_MODELS: set[str] = {
+    "claude-opus-4-6",
+    "claude-sonnet-4-6",
+}
+
+OPENAI_MODELS: set[str] = {
+    "gpt-5.4",
+}
+
+
+def _provider_for_model_id(model_id: str) -> str:
+    model_name = model_id.strip()
+    if model_name in ANTHROPIC_MODELS:
+        return "anthropic"
+    if model_name in OPENAI_MODELS:
+        return "openai"
+    all_known = sorted(ANTHROPIC_MODELS | OPENAI_MODELS)
+    raise ValueError(
+        f"Unknown model_id={model_id!r}. Add it to ANTHROPIC_MODELS or OPENAI_MODELS. "
+        f"Known models: {all_known}"
+    )
+
+
+def _load_project_env() -> None:
+    try:
+        from dotenv import load_dotenv
+    except Exception:
+        return
+    project_root = Path(__file__).resolve().parents[1]
+    load_dotenv(project_root / ".env")
+
+
+_load_project_env()
+
 
 def _log(message: str) -> None:
     timestamp = datetime.now().strftime("%H:%M:%S")
@@ -34,7 +68,25 @@ def _parse_anthropic_message_thinking(message) -> str:
     return "\n".join(thoughts).strip()
 
 
-def query_claude_hint(
+def _parse_openai_message_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        texts: list[str] = []
+        for part in content:
+            if isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str):
+                    texts.append(text)
+            else:
+                text = getattr(part, "text", None)
+                if isinstance(text, str):
+                    texts.append(text)
+        return "".join(texts).strip()
+    return str(content).strip() if content is not None else ""
+
+
+def query_anthropic_hint(
     prompt: str,
     model: str,
     *,
@@ -68,6 +120,7 @@ def query_claude_hint(
     return {
         "model_output": _parse_anthropic_message_text(response),
         "thinking": _parse_anthropic_message_thinking(response),
+        "provider": "anthropic",
         "thinking_enabled": thinking_enabled,
         "thinking_mode": thinking_mode,
         "effort": effort,
@@ -75,6 +128,73 @@ def query_claude_hint(
         "output_token_count": int(response.usage.output_tokens),
         "stop_reason": getattr(response, "stop_reason", None),
     }
+
+
+def query_openai_hint(
+    prompt: str,
+    model: str,
+    *,
+    max_tokens: int,
+    temperature: float,
+    thinking_enabled: bool,
+    thinking_effort: str,
+) -> dict[str, Any]:
+    from openai import OpenAI
+
+    client = OpenAI()
+    effort = thinking_effort if thinking_enabled else "none"
+    completion = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=temperature,
+        max_completion_tokens=max_tokens,
+        reasoning_effort=effort,
+    )
+    choice = completion.choices[0]
+    content = getattr(choice.message, "content", None)
+    usage = getattr(completion, "usage", None)
+    return {
+        "model_output": _parse_openai_message_text(content),
+        "thinking": "",
+        "provider": "openai",
+        "thinking_enabled": thinking_enabled,
+        "thinking_mode": "openai_reasoning_effort" if thinking_enabled else "disabled",
+        "effort": effort,
+        "input_token_count": int(getattr(usage, "prompt_tokens", 0) or 0),
+        "output_token_count": int(getattr(usage, "completion_tokens", 0) or 0),
+        "stop_reason": getattr(choice, "finish_reason", None),
+    }
+
+
+def query_model_hint(
+    prompt: str,
+    model: str,
+    *,
+    max_tokens: int,
+    temperature: float,
+    thinking_enabled: bool,
+    thinking_effort: str,
+) -> dict[str, Any]:
+    provider = _provider_for_model_id(model)
+    if provider == "anthropic":
+        return query_anthropic_hint(
+            prompt=prompt,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            thinking_enabled=thinking_enabled,
+            thinking_effort=thinking_effort,
+        )
+    if provider == "openai":
+        return query_openai_hint(
+            prompt=prompt,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            thinking_enabled=thinking_enabled,
+            thinking_effort=thinking_effort,
+        )
+    raise RuntimeError(f"Unhandled provider={provider!r} for model={model!r}")
 
 
 def _existing_rollouts_by_problem(path: str | Path) -> dict[str, set[int]]:
@@ -129,6 +249,17 @@ def _generate_record_for_task(
     context_metadata = hint_type_spec.context_metadata(generation_context)
 
     for attempt_model, max_attempts in attempt_plan:
+        provider_name = _provider_for_model_id(attempt_model)
+        query_error_thinking_mode = (
+            "adaptive"
+            if thinking_enabled and provider_name == "anthropic"
+            else ("openai_reasoning_effort" if thinking_enabled else "disabled")
+        )
+        query_error_effort = (
+            thinking_effort
+            if thinking_enabled
+            else ("none" if provider_name == "openai" else None)
+        )
         for _ in range(max_attempts):
             attempt_idx += 1
             _log(
@@ -137,7 +268,7 @@ def _generate_record_for_task(
                 f"model={attempt_model}"
             )
             try:
-                usage = query_claude_hint(
+                usage = query_model_hint(
                     prompt=prompt,
                     model=attempt_model,
                     max_tokens=max_tokens,
@@ -160,9 +291,10 @@ def _generate_record_for_task(
                         "question": problem.question,
                         "answer": problem.answer,
                         "prompt": prompt,
+                        "provider": provider_name,
                         "thinking_enabled": thinking_enabled,
-                        "thinking_mode": "adaptive" if thinking_enabled else "disabled",
-                        "effort": thinking_effort if thinking_enabled else None,
+                        "thinking_mode": query_error_thinking_mode,
+                        "effort": query_error_effort,
                         **context_metadata,
                     }
                 )
@@ -202,6 +334,7 @@ def _generate_record_for_task(
                         "answer": problem.answer,
                         "prompt": prompt,
                         "model_output": usage["model_output"],
+                        "provider": usage["provider"],
                         "input_token_count": usage["input_token_count"],
                         "output_token_count": usage["output_token_count"],
                         "stop_reason": usage["stop_reason"],
@@ -249,6 +382,7 @@ def _generate_record_for_task(
                         "answer": problem.answer,
                         "prompt": prompt,
                         "model_output": usage["model_output"],
+                        "provider": usage["provider"],
                         "input_token_count": usage["input_token_count"],
                         "output_token_count": usage["output_token_count"],
                         "stop_reason": usage["stop_reason"],
@@ -311,6 +445,7 @@ def _generate_record_for_task(
                 "first_model_attempts": first_model_attempts,
                 "second_model": second_model,
                 "second_model_attempts": second_model_attempts,
+                "provider": successful_usage["provider"],
                 "total_attempts_used": attempt_idx,
                 "stop_reason": successful_usage["stop_reason"],
                 "thinking": successful_usage["thinking"],
@@ -347,6 +482,8 @@ def generate_hints(
         raise ValueError("concurrency must be >= 1")
     if thinking_effort not in {"low", "medium", "high", "max"}:
         raise ValueError("thinking_effort must be one of: low, medium, high, max")
+    _provider_for_model_id(first_model)
+    _provider_for_model_id(second_model)
 
     dataset_spec = get_dataset_spec(benchmark_name)
     hint_type_spec = get_hint_type_spec(hint_type)

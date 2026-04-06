@@ -99,6 +99,5 @@ General
 - we should save all the data in subfolders in a data/ folder
 
 
-[22:35:45] [hint_generation] dry_run missing_rollouts problem_id=aime2025_2026_0015 missing_count=6 rollout_ids=[2, 3, 4, 5, 6, 8]
 [22:35:45] [hint_generation] dry_run missing_rollouts problem_id=aime2025_2026_0045 missing_count=10 rollout_ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 [22:35:45] [hint_generation] dry_run missing_rollouts problem_id=aime2025_2026_0060 missing_count=9 rollout_ids=[0, 1, 2, 3, 4, 5, 6, 8, 9]

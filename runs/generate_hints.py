@@ -24,7 +24,7 @@ def main() -> None:
         benchmark_name=args.benchmark,
         hint_type=args.hint_type,
         # first_model="claude-sonnet-4-6", # sonnet keeps revealing the answer accidentally so I'm switching to opus
-        first_model="claude-opus-4-6",
+        first_model="gpt-5.4",
         first_model_attempts=1,
         second_model="claude-opus-4-6",
         second_model_attempts=0,
@@ -33,10 +33,10 @@ def main() -> None:
         max_tokens=64000,
         temperature=1.0,
         dry_run=args.dry_run == "true",
-        problem_ids=['aime2025_2026_0015'],
+        # problem_ids=['aime2025_2026_0015'],
         thinking_enabled=True,
         thinking_effort="medium",
-        concurrency=6,
+        concurrency=30,
     )
 
 
