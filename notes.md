@@ -89,7 +89,8 @@ These should all be written to one file and named by the hint_types used
     - extractor_grader_type
     - extracted_answer
     - is_correct
-This inference can (andmaybe should?) be in a completely different file than the other inference, though they can use the same helper functions
+This inference can (and maybe should?) be in a completely different file than the other inference, though they can use the same helper functions. 
+I want to save dataset/hint type/model/[hint fraction files]
 
 4. Plotting/analysis
 [todo]
@@ -97,6 +98,3 @@ to make this easier, we should ideally save one file per model+hint_type+hint_fr
 
 General
 - we should save all the data in subfolders in a data/ folder
-
-
-[22:35:45] [hint_generation] dry_run missing_rollouts problem_id=aime2025_2026_0045 missing_count=10 rollout_ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

@@ -138,6 +138,7 @@ celerybeat.pid
 
 # temporary
 *.jsonl 
+*.json
 
 # RabbitMQ
 mnesia/
