@@ -173,7 +173,7 @@ def main() -> None:
 
         hint_type_spec = get_hint_type_spec(hint_type)
         fractioner = st.selectbox("Fractioner", options=list(hint_type_spec.allowed_fractioners), index=0)
-        hint_fraction = st.slider("Hint Fraction", min_value=0.0, max_value=1.0, value=0.3, step=0.1)
+        hint_fraction = st.slider("Hint Fraction", min_value=0.0, max_value=1.0, value=1.0, step=0.1)
 
         dataset_path = DATASETS_ROOT / f"{benchmark_name}.jsonl"
         hints_path = HINT_GENERATION_ROOT / benchmark_name / f"{hint_type}.jsonl"
@@ -197,9 +197,10 @@ def main() -> None:
         spoilage_filter = st.selectbox(
             "Spoilage",
             options=["all", "spoiled", "not_spoiled"],
-            index=0,
+            index=1,
             format_func=lambda x: {"all": "All", "spoiled": "Spoiled", "not_spoiled": "Not spoiled"}[x],
         )
+        hint_text_query = st.text_input("Hint contains (all words)", value="").strip()
         problem_id_query = st.text_input("Problem ID contains", value="").strip()
         max_preview_rows = st.slider("Preview rows", min_value=25, max_value=2000, value=200, step=25)
 
@@ -221,6 +222,12 @@ def main() -> None:
             fractioned_df = fractioned_df[eligible & spoiled].copy()
         else:
             fractioned_df = fractioned_df[eligible & (~spoiled)].copy()
+    if not fractioned_df.empty and hint_text_query:
+        hint_series = fractioned_df["fractioned_hint"].astype(str)
+        for term in hint_text_query.split():
+            hint_series_match = hint_series.str.contains(term, case=False, regex=False, na=False)
+            fractioned_df = fractioned_df[hint_series_match].copy()
+            hint_series = fractioned_df["fractioned_hint"].astype(str)
 
     total_dataset_problems = int(dataset_df["problem_id"].astype(str).nunique())
     hinted_problem_count = int(_normalize_problem_id_series(hints_df).nunique())
@@ -305,6 +312,7 @@ def main() -> None:
             float(hint_fraction),
             tuple(selected_models),
             spoilage_filter,
+            hint_text_query,
             problem_id_query,
         )
         if st.session_state.get("fractioned_hint_browser_signature") != browser_signature:
