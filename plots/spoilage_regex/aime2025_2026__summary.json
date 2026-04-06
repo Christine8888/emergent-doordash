@@ -28,153 +28,153 @@
       "hint_type": "answer_not_revealed",
       "fractioner": "truncate_sentence",
       "hint_path": "data/hint_generation/aime2025_2026/answer_not_revealed.jsonl",
-      "num_rows": 20,
+      "num_rows": 600,
       "points": [
         {
           "fraction": 0.0,
           "spoilage_rate": 0.0,
           "spoiled_count": 0,
-          "total_count": 20,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.05,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.008333333333333333,
+          "spoiled_count": 5,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.1,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.015,
+          "spoiled_count": 9,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.15,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.2,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.25,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.3,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.35,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.4,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.45,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.5,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.55,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.6,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.65,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.7,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.75,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.02,
+          "spoiled_count": 12,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.8,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.02,
+          "spoiled_count": 12,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.85,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.023333333333333334,
+          "spoiled_count": 14,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.9,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.02666666666666667,
+          "spoiled_count": 16,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.95,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.04,
+          "spoiled_count": 24,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 1.0,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.05,
+          "spoiled_count": 30,
+          "total_count": 600,
           "transform_errors": 0
         }
       ]
@@ -183,153 +183,153 @@
       "hint_type": "answer_not_revealed",
       "fractioner": "truncate_word",
       "hint_path": "data/hint_generation/aime2025_2026/answer_not_revealed.jsonl",
-      "num_rows": 20,
+      "num_rows": 600,
       "points": [
         {
           "fraction": 0.0,
           "spoilage_rate": 0.0,
           "spoiled_count": 0,
-          "total_count": 20,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.05,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.005,
+          "spoiled_count": 3,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.1,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.15,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.2,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.25,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.3,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.35,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.4,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.45,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.5,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.55,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.6,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.65,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.7,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.018333333333333333,
+          "spoiled_count": 11,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.75,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.018333333333333333,
+          "spoiled_count": 11,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.8,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.02,
+          "spoiled_count": 12,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.85,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.02,
+          "spoiled_count": 12,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.9,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.02,
+          "spoiled_count": 12,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.95,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03833333333333333,
+          "spoiled_count": 23,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 1.0,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.05,
+          "spoiled_count": 30,
+          "total_count": 600,
           "transform_errors": 0
         }
       ]
@@ -338,153 +338,153 @@
       "hint_type": "answer_not_revealed",
       "fractioner": "mask_sentence",
       "hint_path": "data/hint_generation/aime2025_2026/answer_not_revealed.jsonl",
-      "num_rows": 20,
+      "num_rows": 600,
       "points": [
         {
           "fraction": 0.0,
           "spoilage_rate": 0.0,
           "spoiled_count": 0,
-          "total_count": 20,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.05,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.018333333333333333,
+          "spoiled_count": 11,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.1,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.016666666666666666,
+          "spoiled_count": 10,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.15,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.023333333333333334,
+          "spoiled_count": 14,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.2,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.02666666666666667,
+          "spoiled_count": 16,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.25,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.028333333333333332,
+          "spoiled_count": 17,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.3,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03166666666666667,
+          "spoiled_count": 19,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.35,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03166666666666667,
+          "spoiled_count": 19,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.4,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03666666666666667,
+          "spoiled_count": 22,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.45,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03833333333333333,
+          "spoiled_count": 23,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.5,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03833333333333333,
+          "spoiled_count": 23,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.55,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03833333333333333,
+          "spoiled_count": 23,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.6,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.041666666666666664,
+          "spoiled_count": 25,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.65,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.04,
+          "spoiled_count": 24,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.7,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.04,
+          "spoiled_count": 24,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.75,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.043333333333333335,
+          "spoiled_count": 26,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.8,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.04833333333333333,
+          "spoiled_count": 29,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.85,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.04833333333333333,
+          "spoiled_count": 29,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.9,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.05,
+          "spoiled_count": 30,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.95,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.05,
+          "spoiled_count": 30,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 1.0,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.05,
+          "spoiled_count": 30,
+          "total_count": 600,
           "transform_errors": 0
         }
       ]
@@ -493,153 +493,153 @@
       "hint_type": "answer_not_revealed",
       "fractioner": "mask_word",
       "hint_path": "data/hint_generation/aime2025_2026/answer_not_revealed.jsonl",
-      "num_rows": 20,
+      "num_rows": 600,
       "points": [
         {
           "fraction": 0.0,
           "spoilage_rate": 0.0,
           "spoiled_count": 0,
-          "total_count": 20,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.05,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.006666666666666667,
+          "spoiled_count": 4,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.1,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.013333333333333334,
+          "spoiled_count": 8,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.15,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.023333333333333334,
+          "spoiled_count": 14,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.2,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.025,
+          "spoiled_count": 15,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.25,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.018333333333333333,
+          "spoiled_count": 11,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.3,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03166666666666667,
+          "spoiled_count": 19,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.35,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03333333333333333,
+          "spoiled_count": 20,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.4,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03333333333333333,
+          "spoiled_count": 20,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.45,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.04,
+          "spoiled_count": 24,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.5,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03666666666666667,
+          "spoiled_count": 22,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.55,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03833333333333333,
+          "spoiled_count": 23,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.6,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03333333333333333,
+          "spoiled_count": 20,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.65,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.04,
+          "spoiled_count": 24,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.7,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.043333333333333335,
+          "spoiled_count": 26,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.75,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.03833333333333333,
+          "spoiled_count": 23,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.8,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.041666666666666664,
+          "spoiled_count": 25,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.85,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.04833333333333333,
+          "spoiled_count": 29,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.9,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.045,
+          "spoiled_count": 27,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 0.95,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.04666666666666667,
+          "spoiled_count": 28,
+          "total_count": 600,
           "transform_errors": 0
         },
         {
           "fraction": 1.0,
-          "spoilage_rate": 0.0,
-          "spoiled_count": 0,
-          "total_count": 20,
+          "spoilage_rate": 0.05,
+          "spoiled_count": 30,
+          "total_count": 600,
           "transform_errors": 0
         }
       ]

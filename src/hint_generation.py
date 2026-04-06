@@ -20,6 +20,16 @@ OPENAI_MODELS: set[str] = {
 }
 
 
+def _is_max_token_stop(*, provider: str, stop_reason: Any) -> bool:
+    if not isinstance(stop_reason, str):
+        return False
+    if provider == "anthropic":
+        return stop_reason == "max_tokens"
+    if provider == "openai":
+        return stop_reason == "length"
+    return False
+
+
 def _provider_for_model_id(model_id: str) -> str:
     model_name = model_id.strip()
     if model_name in ANTHROPIC_MODELS:
@@ -310,6 +320,40 @@ def _generate_record_for_task(
                 f"model={attempt_model} input_tokens={usage['input_token_count']} "
                 f"output_tokens={usage['output_token_count']} stop_reason={usage['stop_reason']}"
             )
+            if _is_max_token_stop(provider=usage["provider"], stop_reason=usage["stop_reason"]):
+                failed_attempts.append(
+                    {
+                        "hint_id": hint_id,
+                        "problem_id": problem.problem_id,
+                        "benchmark_name": benchmark_name,
+                        "hint_type": hint_type,
+                        "rollout_id": rollout_id,
+                        "attempt": attempt_idx,
+                        "model": attempt_model,
+                        "failure_type": "max_tokens_reached",
+                        "question": problem.question,
+                        "answer": problem.answer,
+                        "prompt": prompt,
+                        "model_output": usage["model_output"],
+                        "provider": usage["provider"],
+                        "input_token_count": usage["input_token_count"],
+                        "output_token_count": usage["output_token_count"],
+                        "stop_reason": usage["stop_reason"],
+                        "thinking": usage["thinking"],
+                        "thinking_enabled": usage["thinking_enabled"],
+                        "thinking_mode": usage["thinking_mode"],
+                        "effort": usage["effort"],
+                        "max_tokens": max_tokens,
+                        **context_metadata,
+                    }
+                )
+                _log(
+                    f"[hint_generation][WARN] max_tokens_reached benchmark={benchmark_name} "
+                    f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
+                    f"model={attempt_model} output_tokens={usage['output_token_count']} "
+                    f"stop_reason={usage['stop_reason']}"
+                )
+                continue
 
             grade_result = hint_type_spec.grade_output(
                 model_output=usage["model_output"],

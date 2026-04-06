@@ -23,20 +23,18 @@ def main() -> None:
     generate_hints(
         benchmark_name=args.benchmark,
         hint_type=args.hint_type,
-        # first_model="claude-sonnet-4-6", # sonnet keeps revealing the answer accidentally so I'm switching to opus
-        first_model="gpt-5.4",
-        first_model_attempts=3,
+        first_model="claude-opus-4-6",
+        first_model_attempts=2,
         second_model="claude-opus-4-6",
         second_model_attempts=0,
         num_rollouts=args.num_rollouts,
         limit=args.limit,
-        max_tokens=64000,
+        max_tokens=4096,
         temperature=1.0,
         dry_run=args.dry_run == "true",
-        # problem_ids=['aime2025_2026_0015'],
-        thinking_enabled=True,
-        thinking_effort="medium",
-        concurrency=30,
+        thinking_enabled=False,
+        # thinking_effort="medium",
+        concurrency=40,
     )
 
 
@@ -47,9 +45,9 @@ if __name__ == "__main__":
 python -m runs.generate_hints --benchmark aime2025_2026 --hint-type basic_hint --num-rollouts 10 --limit 60 --dry-run false 
 
 
+python -m runs.generate_hints --benchmark aime2025_2026 --hint-type answer_not_revealed --num-rollouts 10 --limit 60 --dry-run false 
 
 
 
-python -m runs.generate_hints --benchmark aime2025_2026 --hint-type answer_not_revealed --num-rollouts 2 --limit 2 --dry-run false 
 python -m runs.generate_hints --benchmark aime2025_2026 --hint-type bag_of_hints --num-rollouts 1 --limit 2 --dry-run false
 """
