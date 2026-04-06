@@ -106,6 +106,7 @@ def main() -> None:
 
     fig, ax = plt.subplots(figsize=(9, 5.5))
     plotted_any = False
+    y_max_global = 0.0
 
     for hint_type, fractioner in HINT_FRACTIONER_COMBOS:
         hint_path = build_hint_generation_path(
@@ -125,9 +126,12 @@ def main() -> None:
         )
         x = [p["fraction"] for p in points]
         y = [p["spoilage_rate"] for p in points]
-        label = f"{hint_type} + {fractioner}"
+        n_hints = len(rows)
+        label = f"{hint_type} + {fractioner} (n={n_hints})"
         ax.plot(x, y, marker="o", markersize=3, linewidth=1.5, label=label)
         plotted_any = True
+        if y:
+            y_max_global = max(y_max_global, max(y))
 
         all_payload["combos"].append(
             {
@@ -148,7 +152,7 @@ def main() -> None:
     ax.set_ylabel("Regex Spoilage Rate")
     ax.set_title(f"Regex Spoilage Curves ({args.benchmark})")
     ax.set_xlim(0.0, 1.0)
-    ax.set_ylim(0.0, 1.0)
+    ax.set_ylim(0.0, y_max_global * 1.05 if y_max_global > 0 else 1.0)
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=8)
     fig.tight_layout()

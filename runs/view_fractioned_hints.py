@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import sys
 from typing import Any
 
@@ -57,6 +58,11 @@ def _normalize_problem_id_series(df: pd.DataFrame) -> pd.Series:
     return df["problem_id"].astype(str)
 
 
+def _target_is_spoiled(text: str, target: str) -> bool:
+    pattern = r"(?<![A-Za-z0-9])" + re.escape(target) + r"(?![A-Za-z0-9])"
+    return bool(re.search(pattern, text))
+
+
 @st.cache_data(show_spinner=False)
 def load_dataset_df(path_str: str) -> pd.DataFrame:
     path = Path(path_str)
@@ -107,6 +113,8 @@ def _apply_fractioning(
     fractioned_meta: list[dict[str, Any]] = []
     fractioned_error: list[str | None] = []
     fractioned_chars: list[int] = []
+    spoilage_eligible: list[bool] = []
+    is_spoiled: list[bool | None] = []
 
     for raw in out["_raw_row"].tolist():
         try:
@@ -120,16 +128,27 @@ def _apply_fractioning(
             fractioned_meta.append(meta)
             fractioned_error.append(None)
             fractioned_chars.append(len(text))
+            target = str(record.answer).strip()
+            if target:
+                spoilage_eligible.append(True)
+                is_spoiled.append(_target_is_spoiled(text, target))
+            else:
+                spoilage_eligible.append(False)
+                is_spoiled.append(None)
         except Exception as exc:
             fractioned_texts.append("")
             fractioned_meta.append({})
             fractioned_error.append(str(exc))
             fractioned_chars.append(0)
+            spoilage_eligible.append(False)
+            is_spoiled.append(None)
 
     out["fractioned_hint"] = fractioned_texts
     out["fractioned_metadata"] = fractioned_meta
     out["fractioned_error"] = fractioned_error
     out["fractioned_chars"] = fractioned_chars
+    out["spoilage_eligible"] = spoilage_eligible
+    out["is_spoiled"] = is_spoiled
     return out
 
 
@@ -175,6 +194,12 @@ def main() -> None:
         st.header("Hint Filters")
         model_options = sorted(hints_df["generator_model"].dropna().astype(str).unique().tolist())
         selected_models = st.multiselect("Generator Model", options=model_options, default=model_options)
+        spoilage_filter = st.selectbox(
+            "Spoilage",
+            options=["all", "spoiled", "not_spoiled"],
+            index=0,
+            format_func=lambda x: {"all": "All", "spoiled": "Spoiled", "not_spoiled": "Not spoiled"}[x],
+        )
         problem_id_query = st.text_input("Problem ID contains", value="").strip()
         max_preview_rows = st.slider("Preview rows", min_value=25, max_value=2000, value=200, step=25)
 
@@ -189,10 +214,17 @@ def main() -> None:
         fractioner=fractioner,
         hint_fraction=float(hint_fraction),
     )
+    if not fractioned_df.empty and spoilage_filter != "all":
+        eligible = fractioned_df["spoilage_eligible"].fillna(False)
+        spoiled = fractioned_df["is_spoiled"].fillna(False)
+        if spoilage_filter == "spoiled":
+            fractioned_df = fractioned_df[eligible & spoiled].copy()
+        else:
+            fractioned_df = fractioned_df[eligible & (~spoiled)].copy()
 
     total_dataset_problems = int(dataset_df["problem_id"].astype(str).nunique())
     hinted_problem_count = int(_normalize_problem_id_series(hints_df).nunique())
-    filtered_hint_count = int(len(filtered_hints))
+    filtered_hint_count = int(len(fractioned_df))
     fraction_error_count = int(fractioned_df["fractioned_error"].notna().sum()) if not fractioned_df.empty else 0
 
     m1, m2, m3, m4 = st.columns(4)
@@ -213,6 +245,7 @@ def main() -> None:
                 "rollout_id",
                 "hint_id",
                 "generator_model",
+                "is_spoiled",
                 "fractioned_chars",
                 "fractioned_error",
                 "created_at",
@@ -271,6 +304,7 @@ def main() -> None:
             fractioner,
             float(hint_fraction),
             tuple(selected_models),
+            spoilage_filter,
             problem_id_query,
         )
         if st.session_state.get("fractioned_hint_browser_signature") != browser_signature:
@@ -336,7 +370,7 @@ def main() -> None:
                 f"model={hint_row.get('generator_model', '')} | "
                 f"hint_id={hint_row.get('hint_id', '')}"
             )
-            with st.expander(title, expanded=(i == 0)):
+            with st.expander(title, expanded=True):
                 error = hint_row.get("fractioned_error")
                 if isinstance(error, str) and error:
                     st.error(error)
