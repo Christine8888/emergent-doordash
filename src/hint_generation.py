@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import httpx
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -141,7 +141,7 @@ def query_openai_hint(
 ) -> dict[str, Any]:
     from openai import OpenAI
 
-    client = OpenAI()
+    client = OpenAI(timeout=httpx.Timeout(7200, connect=30))
     effort = thinking_effort if thinking_enabled else "none"
     completion = client.chat.completions.create(
         model=model,

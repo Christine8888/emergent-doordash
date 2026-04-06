@@ -25,7 +25,7 @@ def main() -> None:
         hint_type=args.hint_type,
         # first_model="claude-sonnet-4-6", # sonnet keeps revealing the answer accidentally so I'm switching to opus
         first_model="gpt-5.4",
-        first_model_attempts=1,
+        first_model_attempts=3,
         second_model="claude-opus-4-6",
         second_model_attempts=0,
         num_rollouts=args.num_rollouts,
