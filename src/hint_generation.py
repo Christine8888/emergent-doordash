@@ -40,20 +40,27 @@ def query_claude_hint(
     *,
     max_tokens: int,
     temperature: float,
+    thinking_enabled: bool,
+    thinking_effort: str,
 ) -> dict[str, Any]:
     import anthropic
 
     client = anthropic.Anthropic()
-    thinking_mode = "adaptive"
-    effort = "medium"
-    with client.messages.stream(
-        model=model,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        thinking={"type": thinking_mode},
-        output_config={"effort": effort},
-        messages=[{"role": "user", "content": prompt}],
-    ) as stream:
+    request: dict[str, Any] = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    thinking_mode = "disabled"
+    effort: str | None = None
+    if thinking_enabled:
+        thinking_mode = "adaptive"
+        effort = thinking_effort
+        request["thinking"] = {"type": thinking_mode}
+        request["output_config"] = {"effort": effort}
+
+    with client.messages.stream(**request) as stream:
         for _ in stream.text_stream:
             pass
         response = stream.get_final_message()
@@ -61,6 +68,7 @@ def query_claude_hint(
     return {
         "model_output": _parse_anthropic_message_text(response),
         "thinking": _parse_anthropic_message_thinking(response),
+        "thinking_enabled": thinking_enabled,
         "thinking_mode": thinking_mode,
         "effort": effort,
         "input_token_count": int(response.usage.input_tokens),
@@ -104,6 +112,8 @@ def _generate_record_for_task(
     second_model_attempts: int,
     max_tokens: int,
     temperature: float,
+    thinking_enabled: bool,
+    thinking_effort: str,
 ) -> tuple[HintGenerationRecord | None, list[dict[str, Any]]]:
     successful_usage = None
     successful_model = None
@@ -132,6 +142,8 @@ def _generate_record_for_task(
                     model=attempt_model,
                     max_tokens=max_tokens,
                     temperature=temperature,
+                    thinking_enabled=thinking_enabled,
+                    thinking_effort=thinking_effort,
                 )
             except Exception as exc:
                 failed_attempts.append(
@@ -148,6 +160,9 @@ def _generate_record_for_task(
                         "question": problem.question,
                         "answer": problem.answer,
                         "prompt": prompt,
+                        "thinking_enabled": thinking_enabled,
+                        "thinking_mode": "adaptive" if thinking_enabled else "disabled",
+                        "effort": thinking_effort if thinking_enabled else None,
                         **context_metadata,
                     }
                 )
@@ -191,6 +206,7 @@ def _generate_record_for_task(
                         "output_token_count": usage["output_token_count"],
                         "stop_reason": usage["stop_reason"],
                         "thinking": usage["thinking"],
+                        "thinking_enabled": usage["thinking_enabled"],
                         "thinking_mode": usage["thinking_mode"],
                         "effort": usage["effort"],
                         "extracted_answer": extracted_answer,
@@ -237,6 +253,7 @@ def _generate_record_for_task(
                         "output_token_count": usage["output_token_count"],
                         "stop_reason": usage["stop_reason"],
                         "thinking": usage["thinking"],
+                        "thinking_enabled": usage["thinking_enabled"],
                         "thinking_mode": usage["thinking_mode"],
                         "effort": usage["effort"],
                         "extracted_answer": extracted_answer,
@@ -297,6 +314,7 @@ def _generate_record_for_task(
                 "total_attempts_used": attempt_idx,
                 "stop_reason": successful_usage["stop_reason"],
                 "thinking": successful_usage["thinking"],
+                "thinking_enabled": successful_usage["thinking_enabled"],
                 "thinking_mode": successful_usage["thinking_mode"],
                 "effort": successful_usage["effort"],
                 **context_metadata,
@@ -319,15 +337,40 @@ def generate_hints(
     max_tokens: int,
     temperature: float,
     dry_run: bool,
+    problem_ids: list[str] | None = None,
+    thinking_enabled: bool = True,
+    thinking_effort: str = "medium",
     concurrency: int = 1,
 ) -> str:
     """Generate hint records and append them to a JSONL file."""
     if concurrency < 1:
         raise ValueError("concurrency must be >= 1")
+    if thinking_effort not in {"low", "medium", "high", "max"}:
+        raise ValueError("thinking_effort must be one of: low, medium, high, max")
 
     dataset_spec = get_dataset_spec(benchmark_name)
     hint_type_spec = get_hint_type_spec(hint_type)
-    problems = dataset_spec.load_problems()[:limit]
+    all_problems = dataset_spec.load_problems()
+    if problem_ids:
+        cleaned_problem_ids = [pid.strip() for pid in problem_ids if pid.strip()]
+        by_id = {problem.problem_id: problem for problem in all_problems}
+        missing_problem_ids = [pid for pid in cleaned_problem_ids if pid not in by_id]
+        if missing_problem_ids:
+            raise ValueError(
+                f"Unknown problem_id(s): {missing_problem_ids}. "
+                f"Benchmark={benchmark_name!r} has {len(all_problems)} problems."
+            )
+
+        seen: set[str] = set()
+        ordered_problem_ids: list[str] = []
+        for pid in cleaned_problem_ids:
+            if pid in seen:
+                continue
+            seen.add(pid)
+            ordered_problem_ids.append(pid)
+        problems = [by_id[pid] for pid in ordered_problem_ids]
+    else:
+        problems = all_problems[:limit]
     prompt_version = hint_type_spec.prompt_version
     post_process_version = hint_type_spec.post_process_version
     should_grade_output = hint_type_spec.grade_model_output
@@ -385,7 +428,9 @@ def generate_hints(
         would_write = len(prepared_tasks)
         _log(
             f"[hint_generation] dry_run benchmark={benchmark_name} hint_type={hint_type} "
-            f"num_problems={len(problems)} rollouts={num_rollouts} would_write={would_write} skipped={skipped} "
+            f"num_problems={len(problems)} rollouts={num_rollouts} "
+            f"thinking_enabled={thinking_enabled} thinking_effort={thinking_effort if thinking_enabled else 'n/a'} "
+            f"would_write={would_write} skipped={skipped} "
             f"output={out_path}"
         )
         if not missing_rollouts_by_problem:
@@ -424,6 +469,8 @@ def generate_hints(
                     second_model_attempts=second_model_attempts,
                     max_tokens=max_tokens,
                     temperature=temperature,
+                    thinking_enabled=thinking_enabled,
+                    thinking_effort=thinking_effort,
                 )
                 task_succeeded = record is not None
                 for failed_attempt in failed_attempts:
@@ -463,6 +510,8 @@ def generate_hints(
                         second_model_attempts=second_model_attempts,
                         max_tokens=max_tokens,
                         temperature=temperature,
+                        thinking_enabled=thinking_enabled,
+                        thinking_effort=thinking_effort,
                     )
                     for task in prepared_tasks
                 ]
@@ -487,6 +536,7 @@ def generate_hints(
         _log(
             f"[hint_generation] done benchmark={benchmark_name} hint_type={hint_type} "
             f"num_problems={len(problems)} rollouts={num_rollouts} concurrency={concurrency} "
+            f"thinking_enabled={thinking_enabled} thinking_effort={thinking_effort if thinking_enabled else 'n/a'} "
             f"accepted={written} rejected={failed_attempts_written} "
             f"written={written} skipped={skipped} failed={failed} failed_attempts_logged={failed_attempts_written} "
             f"output={out_path} failed_output={failed_out_path}"
