@@ -68,10 +68,9 @@ class VLLMServer:
         print(f"[vllm] starting: {' '.join(cmd)}", flush=True)
         self.process = subprocess.Popen(
             cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
+            # Inherit parent stdio so vLLM logs are visible in real time.
+            stdout=None,
+            stderr=None,
         )
         self._wait_for_health(timeout=health_timeout)
 

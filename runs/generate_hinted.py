@@ -28,6 +28,8 @@ EIGHT_GPU_SLURM_CPUS_PER_TASK = 120
 EIGHT_GPU_SLURM_MEM_GB = 1000
 NLP_SLURM_ACCOUNT = "nlp"
 NLP_SLURM_PARTITION = "sphinx,jag-standard"
+SPHINX_SLURM_ACCOUNT = "nlp"
+SPHINX_SLURM_PARTITION = "sphinx"
 MISO_SLURM_ACCOUNT = "miso"
 MISO_SLURM_PARTITION = "miso"
 
@@ -142,7 +144,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", type=str, choices=["all"] + MODELS_TO_RUN, default="all")
     parser.add_argument(
         "--cluster",
-        choices=["nlp", "miso"],
+        choices=["nlp", "sphinx", "miso"],
         default="nlp",
         help="Submit target cluster/account routing (no auto-inference).",
     )
@@ -212,6 +214,8 @@ def _resolve_slurm_account(
 ) -> tuple[str, str, str]:
     if cluster == "miso":
         return "miso", MISO_SLURM_ACCOUNT, MISO_SLURM_PARTITION
+    if cluster == "sphinx":
+        return "sphinx", SPHINX_SLURM_ACCOUNT, SPHINX_SLURM_PARTITION
     if cluster == "nlp":
         return "nlp", NLP_SLURM_ACCOUNT, NLP_SLURM_PARTITION
     raise ValueError(f"Unsupported cluster: {cluster!r}")
@@ -482,17 +486,29 @@ if __name__ == "__main__":
 
 
 """
+MISO
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
-    --fractioner truncate_sentence \
+    --fractioner mask_word \
     --model Qwen/Qwen3-4B \
     --executor submitit \
-    --cluster nlp \
+    --cluster miso \
+    --max-connections 120 \
+    --num-gpus 8 \
+    --checkpoint-every 1000
+
+NLP
+python -m runs.generate_hinted \
+    --benchmark aime2025_2026 \
+    --hint-type answer_not_revealed \
+    --fractioner truncate_word \
+    --model Qwen/Qwen3-4B \
+    --executor submitit \
+    --cluster sphinx \
     --max-connections 48 \
     --num-gpus 1 \
-    --cluster nlp
-
+    --checkpoint-every 500
 
 CREATING HINTS
 
@@ -500,14 +516,6 @@ python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner truncate_sentence \
-    --model Qwen/Qwen3-4B \
-    --executor local \
-    --build-only true
-
-python -m runs.generate_hinted \
-    --benchmark aime2025_2026 \
-    --hint-type answer_not_revealed \
-    --fractioner truncate_word \
     --model Qwen/Qwen3-4B \
     --executor local \
     --build-only true

@@ -122,15 +122,25 @@ def _extract_stop_reason(response: Any) -> str | None:
 
 
 def _extract_last_boxed_expression(text: str) -> str | None:
-    marker = "\\boxed"
-    start = text.rfind(marker)
-    while start != -1:
-        i = start + len(marker)
+    markers = ["\\boxed", "\\fbox"]
+    search_end = len(text)
+    while True:
+        best_start = -1
+        best_marker = ""
+        for marker in markers:
+            idx = text.rfind(marker, 0, search_end)
+            if idx > best_start:
+                best_start = idx
+                best_marker = marker
+        if best_start == -1:
+            return None
+
+        i = best_start + len(best_marker)
         n = len(text)
         while i < n and text[i].isspace():
             i += 1
         if i >= n:
-            start = text.rfind(marker, 0, start)
+            search_end = best_start
             continue
 
         if text[i] == "{":
@@ -154,8 +164,7 @@ def _extract_last_boxed_expression(text: str) -> str | None:
             if inner:
                 return inner
 
-        start = text.rfind(marker, 0, start)
-    return None
+        search_end = best_start
 
 
 def _read_existing_inference_ids(path: Path) -> set[str]:
