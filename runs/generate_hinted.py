@@ -43,11 +43,9 @@ def _parse_bool(value: str) -> bool:
     raise ValueError(f"Invalid bool value: {value!r}")
 
 
-def _setup_vllm_env(*, port: int, served_model_name: str) -> None:
+def _setup_vllm_env(*, port: int) -> None:
     os.environ["VLLM_BASE_URL"] = f"http://localhost:{port}/v1"
     os.environ["VLLM_API_KEY"] = "local"
-    os.environ["INSPECT_EVAL_MODEL"] = f"vllm/{served_model_name}"
-    os.environ["OPENAI_TIMEOUT"] = str(REQUEST_TIMEOUT_SECONDS)
 
 
 def _run_single_model_job(
@@ -74,7 +72,6 @@ def _run_single_model_job(
             benchmark_name=benchmark,
             hint_type=hint_type,
             model=model_name,
-            inspect_model_id=f"vllm/{model_name}",
             fractioner=fractioner,
             hint_fractions=hint_fractions,
             do_sample=sampling_params.get("do_sample"),
@@ -106,13 +103,11 @@ def _run_single_model_job(
         with VLLMServer(server_config) as server:
             _setup_vllm_env(
                 port=server.port,
-                served_model_name=model_name,
             )
             summaries = run_hinted_inference(
                 benchmark_name=benchmark,
                 hint_type=hint_type,
                 model=model_name,
-                inspect_model_id=f"vllm/{model_name}",
                 fractioner=fractioner,
                 hint_fractions=hint_fractions,
                 do_sample=sampling_params.get("do_sample"),
@@ -137,7 +132,7 @@ def _run_single_model_job(
     }
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run hinted inference with Inspect + local vLLM.")
+    parser = argparse.ArgumentParser(description="Run hinted inference with local vLLM.")
     parser.add_argument("--benchmark", type=str, required=True)
     parser.add_argument("--hint-type", choices=[h.value for h in HintType], required=True)
     parser.add_argument("--fractioner", type=str, required=True)
@@ -299,7 +294,7 @@ def _build_run_metadata(
             "enable_prefix_caching": True,
             "enable_chunked_prefill": True,
         },
-        "inspect_generation": {
+        "generation": {
             "do_sample": sampling_params.get("do_sample"),
             "temperature": sampling_params.get("temperature"),
             "top_p": sampling_params.get("top_p"),
