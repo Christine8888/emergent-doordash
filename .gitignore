@@ -139,6 +139,9 @@ celerybeat.pid
 # temporary
 *.jsonl 
 *.json
+*.zip
+
+submitit_logs/
 
 # RabbitMQ
 mnesia/

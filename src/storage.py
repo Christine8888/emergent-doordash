@@ -61,6 +61,30 @@ def build_hinted_inference_path(
     )
 
 
+def build_expanded_hinted_prompt_path(
+    benchmark_name: str,
+    hint_type: str,
+    fractioner: str,
+    hint_fraction: float,
+    *,
+    data_root: str | Path,
+) -> Path:
+    benchmark = _safe_component(benchmark_name)
+    hint = _safe_component(hint_type)
+    fractioner_name = _safe_component(fractioner)
+    fraction_text = f"{hint_fraction:.4f}".rstrip("0").rstrip(".")
+    if not fraction_text:
+        fraction_text = "0"
+    return (
+        Path(data_root)
+        / "expanded_hinted_prompts"
+        / benchmark
+        / hint
+        / fractioner_name
+        / f"fraction_{fraction_text}.jsonl"
+    )
+
+
 def append_jsonl(path: str | Path, record: BaseModel | dict[str, Any]) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

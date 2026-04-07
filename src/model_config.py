@@ -16,38 +16,94 @@ class ModelSpec:
     tp: int = 1
     account: str | None = None
     constraint: str | None = None
+    do_sample: bool = True
+    temperature: float = 1.0
+    top_p: float = 1.0
+    top_k: int = 0
+    repetition_penalty: float = 1.0
 
     @property
     def name(self) -> str:
         return self.path.split("/")[-1]
 
+    @property
+    def sampling_params(self) -> dict[str, bool | float | int]:
+        return {
+            "do_sample": self.do_sample,
+            "temperature": self.temperature,
+            "top_p": self.top_p,
+            "top_k": self.top_k,
+            "repetition_penalty": self.repetition_penalty,
+        }
+
+
+QWEN3_SAMPLING = {
+    "do_sample": True,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "repetition_penalty": 1.0,
+}
+
+QWEN25_15B_SAMPLING = {
+    "do_sample": True,
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "repetition_penalty": 1.1,
+}
+
+QWEN25_SAMPLING = {
+    "do_sample": True,
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "repetition_penalty": 1.05,
+}
+
+LLAMA_SAMPLING = {
+    "do_sample": True,
+    "temperature": 0.6,
+    "top_p": 0.9,
+    "top_k": 50,
+    "repetition_penalty": 1.0,
+}
+
+GEMMA_SAMPLING = {
+    "do_sample": True,
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "top_k": 64,
+    "repetition_penalty": 1.0,
+}
+
 
 QWEN3_MODELS = [
-    ModelSpec("Qwen/Qwen3-0.6B", constraint=SMALL_MODEL_CONSTRAINT),
-    ModelSpec("Qwen/Qwen3-1.7B", constraint=SMALL_MODEL_CONSTRAINT),
-    ModelSpec("Qwen/Qwen3-4B", constraint=SMALL_MODEL_CONSTRAINT),
-    ModelSpec("Qwen/Qwen3-8B", constraint=MEDIUM_MODEL_CONSTRAINT),
-    ModelSpec("Qwen/Qwen3-14B", constraint=LARGE_MODEL_CONSTRAINT),
-    ModelSpec("Qwen/Qwen3-32B", constraint=H200_CONSTRAINT),
+    ModelSpec("Qwen/Qwen3-0.6B", constraint=SMALL_MODEL_CONSTRAINT, **QWEN3_SAMPLING),
+    ModelSpec("Qwen/Qwen3-1.7B", constraint=SMALL_MODEL_CONSTRAINT, **QWEN3_SAMPLING),
+    ModelSpec("Qwen/Qwen3-4B", constraint=SMALL_MODEL_CONSTRAINT, **QWEN3_SAMPLING),
+    ModelSpec("Qwen/Qwen3-8B", constraint=MEDIUM_MODEL_CONSTRAINT, **QWEN3_SAMPLING),
+    ModelSpec("Qwen/Qwen3-14B", constraint=LARGE_MODEL_CONSTRAINT, **QWEN3_SAMPLING),
+    ModelSpec("Qwen/Qwen3-32B", constraint=H200_CONSTRAINT, **QWEN3_SAMPLING),
 ]
 
 QWEN25_MODELS = [
-    ModelSpec("Qwen/Qwen2.5-1.5B-Instruct", constraint=SMALL_MODEL_CONSTRAINT),
-    ModelSpec("Qwen/Qwen2.5-3B-Instruct", constraint=SMALL_MODEL_CONSTRAINT),
-    ModelSpec("Qwen/Qwen2.5-7B-Instruct", constraint=MEDIUM_MODEL_CONSTRAINT),
-    ModelSpec("Qwen/Qwen2.5-14B-Instruct", constraint=LARGE_MODEL_CONSTRAINT),
-    ModelSpec("Qwen/Qwen2.5-32B-Instruct", constraint=H200_CONSTRAINT),
+    ModelSpec("Qwen/Qwen2.5-1.5B-Instruct", constraint=SMALL_MODEL_CONSTRAINT, **QWEN25_15B_SAMPLING),
+    ModelSpec("Qwen/Qwen2.5-3B-Instruct", constraint=SMALL_MODEL_CONSTRAINT, **QWEN25_SAMPLING),
+    ModelSpec("Qwen/Qwen2.5-7B-Instruct", constraint=MEDIUM_MODEL_CONSTRAINT, **QWEN25_SAMPLING),
+    ModelSpec("Qwen/Qwen2.5-14B-Instruct", constraint=LARGE_MODEL_CONSTRAINT, **QWEN25_SAMPLING),
+    ModelSpec("Qwen/Qwen2.5-32B-Instruct", constraint=H200_CONSTRAINT, **QWEN25_SAMPLING),
 ]
 
 LLAMA_MODELS = [
-    ModelSpec("meta-llama/Llama-3.1-8B-Instruct", constraint=MEDIUM_MODEL_CONSTRAINT),
-    ModelSpec("meta-llama/Llama-3.1-70B-Instruct", tp=2, constraint=H200_CONSTRAINT),
+    ModelSpec("meta-llama/Llama-3.1-8B-Instruct", constraint=MEDIUM_MODEL_CONSTRAINT, **LLAMA_SAMPLING),
+    ModelSpec("meta-llama/Llama-3.1-70B-Instruct", tp=2, constraint=H200_CONSTRAINT, **LLAMA_SAMPLING),
 ]
 
 GEMMA_MODELS = [
-    ModelSpec("google/gemma-3-4b-it", constraint=SMALL_MODEL_CONSTRAINT),
-    ModelSpec("google/gemma-3-12b-it", constraint=GEMMA_12B_CONSTRAINT),
-    ModelSpec("google/gemma-3-27b-it", tp=2, constraint=MEDIUM_MODEL_CONSTRAINT),
+    ModelSpec("google/gemma-3-4b-it", constraint=SMALL_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
+    ModelSpec("google/gemma-3-12b-it", constraint=GEMMA_12B_CONSTRAINT, **GEMMA_SAMPLING),
+    ModelSpec("google/gemma-3-27b-it", tp=2, constraint=MEDIUM_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
 ]
 
 ALL_MODELS = QWEN3_MODELS + QWEN25_MODELS + LLAMA_MODELS + GEMMA_MODELS

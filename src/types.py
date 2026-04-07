@@ -71,3 +71,32 @@ class HintedInferenceRecord(BaseModel):
         if value < 0.0 or value > 1.0:
             raise ValueError("hint_fraction must be in [0.0, 1.0]")
         return value
+
+
+class ExpandedHintedPromptRecord(BaseModel):
+    """One fully materialized hinted prompt (fractioned + harnessed)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    prompt_id: str
+    problem_id: str
+    benchmark_name: str
+    hint_type: str
+    fractioner: str
+    hint_fraction: float
+    hint_id: str
+    question: str
+    answer: str
+    hint_text_used: str
+    prompt: str
+    fraction_metadata: dict[str, Any]
+    hint: HintGenerationRecord
+    created_at: str = Field(default_factory=_utcnow_iso, frozen=True)
+    metadata: dict[str, Any]
+
+    @field_validator("hint_fraction")
+    @classmethod
+    def validate_hint_fraction(cls, value: float) -> float:
+        if value < 0.0 or value > 1.0:
+            raise ValueError("hint_fraction must be in [0.0, 1.0]")
+        return value
