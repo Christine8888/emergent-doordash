@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import socket
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -32,6 +33,15 @@ from src.types import (
 
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _configure_inspect_openai_http_timeout(timeout_seconds: float) -> None:
+    """Patch Inspect default HTTP timeout for OpenAI-compatible clients."""
+    import httpx
+    import inspect_ai.model._openai as inspect_openai
+
+    inspect_openai.DEFAULT_TIMEOUT = httpx.Timeout(timeout=timeout_seconds)
+
 
 
 def _normalize_fraction(value: float) -> float:
@@ -634,12 +644,12 @@ async def _run_all_candidates(
         flush=True,
     )
     progress = (
-        tqdm(total=total_pending, desc=f"{model} hinted", leave=True)
+        tqdm(total=total_pending, desc=f"{model} hinted", leave=True, file=sys.stdout)
         if tqdm is not None
         else None
     )
     last_metrics_poll = 0.0
-    metrics_poll_interval_seconds = 5.0
+    metrics_poll_interval_seconds = 1.0
     prev_metrics_gen_tokens: float | None = None
     prev_metrics_prompt_tokens: float | None = None
     prev_metrics_time: float | None = None
@@ -673,211 +683,263 @@ async def _run_all_candidates(
     global_output_tokens = 0
 
     async with get_model(inspect_model_id, config=config) as model_client:
-        for state, candidate in work_items:
-            hint = candidate.hint
-            inference_id = candidate.inference_id
-            state.last_inference_id = inference_id
-            hint_fraction = state.hint_fraction
-            fraction_meta = candidate.fraction_metadata
-            hint_text_used = candidate.hint_text_used
-            prompt = candidate.prompt
-            model_output = ""
-            input_token_count = 0
-            output_token_count = 0
-            stop_reason: str | None = None
-            graders: list[GraderResult]
-            is_error = False
-            error_text: str | None = None
-            attempts = 0
+        semaphore = asyncio.Semaphore(max_connections)
 
-            for attempt_idx in range(max_retries + 1):
-                attempts = attempt_idx + 1
-                try:
-                    response = await asyncio.wait_for(
-                        model_client.generate(input=[ChatMessageUser(content=prompt)]),
-                        timeout=timeout_seconds,
-                    )
-                    model_output = response.completion
-                    usage = getattr(response, "usage", None)
-                    input_token_count = _safe_usage_tokens(usage, "input_tokens", "prompt_tokens")
-                    output_token_count = _safe_usage_tokens(usage, "output_tokens", "completion_tokens")
-                    stop_reason = _extract_stop_reason(response)
+        async def _generate_one(
+            item_state: FractionRunState, item_candidate: PromptCandidate
+        ) -> dict[str, Any]:
+            async with semaphore:
+                hint = item_candidate.hint
+                hint_fraction = item_state.hint_fraction
+                prompt = item_candidate.prompt
+                model_output = ""
+                input_token_count = 0
+                output_token_count = 0
+                stop_reason: str | None = None
+                graders: list[GraderResult]
+                is_error = False
+                error_text: str | None = None
+                attempts = 0
 
-                    extracted_answer = _extract_last_boxed_expression(model_output)
-                    problem = Problem(
-                        problem_id=hint.problem_id,
-                        question=hint.question,
-                        answer=hint.answer,
-                        source=str(hint.metadata.get("problem_source", "")),
-                    )
-                    is_correct = dataset_spec.is_correct(extracted_answer, problem)
-                    graders = [
-                        _build_success_grader(
-                            extracted_answer=extracted_answer,
-                            is_correct=is_correct,
-                            dataset_name=dataset_spec.name,
+                for attempt_idx in range(max_retries + 1):
+                    attempts = attempt_idx + 1
+                    try:
+                        response = await asyncio.wait_for(
+                            model_client.generate(input=[ChatMessageUser(content=prompt)]),
+                            timeout=timeout_seconds,
                         )
-                    ]
-                    state.written_success += 1
-                    break
-                except Exception as exc:
-                    error_text = str(exc)
-                    if attempt_idx < max_retries:
-                        state.retry_count += 1
-                        global_retry_count += 1
-                        print(
-                            f"[hinted_inference] retry model={model} fraction={hint_fraction} "
-                            f"inference_id={inference_id} attempt={attempt_idx + 1}/{max_retries + 1} "
-                            f"error={error_text}",
-                            flush=True,
-                        )
-                        continue
-                    is_error = True
-                    graders = [
-                        GraderResult(
-                            extractor_grader_type="dataset_extract_and_match",
-                            extracted_answer=None,
-                            is_correct=None,
-                            metadata={
-                                "dataset_spec": dataset_spec.name,
-                                "error": error_text,
-                            },
-                        )
-                    ]
-                    state.written_error += 1
+                        model_output = response.completion
+                        usage = getattr(response, "usage", None)
+                        input_token_count = _safe_usage_tokens(usage, "input_tokens", "prompt_tokens")
+                        output_token_count = _safe_usage_tokens(usage, "output_tokens", "completion_tokens")
+                        stop_reason = _extract_stop_reason(response)
 
-            record = HintedInferenceRecord(
-                inference_id=inference_id,
-                problem_id=hint.problem_id,
-                benchmark_name=benchmark_name,
-                model=model,
-                hint_type=hint.hint_type,
-                fractioner=fractioner,
-                hint_fraction=hint_fraction,
-                hint_text_used=hint_text_used,
-                model_output=model_output,
-                input_token_count=input_token_count,
-                output_token_count=output_token_count,
-                cost=0.0,
-                is_error=is_error,
-                graders=graders,
-                hint=hint,
-                metadata={
-                    "run_id": run_id,
-                    "backend": "inspect_vllm",
-                    "inspect_model_id": inspect_model_id,
-                    "prompt_version": "hinted_inference_v1",
-                    "prompt_id": candidate.prompt_id,
-                    "expanded_prompt_path": str(state.expanded_prompt_path),
-                    "prompt": prompt,
-                    "do_sample": do_sample,
-                    "temperature": temperature,
-                    "top_p": top_p,
-                    "top_k": top_k,
-                    "repetition_penalty": repetition_penalty,
-                    "max_tokens": max_tokens,
-                    "max_connections": max_connections,
-                    "timeout_seconds": timeout_seconds,
-                    "vllm_metrics_url": vllm_metrics_url,
-                    "fraction_metadata": fraction_meta,
+                        extracted_answer = _extract_last_boxed_expression(model_output)
+                        problem = Problem(
+                            problem_id=hint.problem_id,
+                            question=hint.question,
+                            answer=hint.answer,
+                            source=str(hint.metadata.get("problem_source", "")),
+                        )
+                        is_correct = dataset_spec.is_correct(extracted_answer, problem)
+                        graders = [
+                            _build_success_grader(
+                                extracted_answer=extracted_answer,
+                                is_correct=is_correct,
+                                dataset_name=dataset_spec.name,
+                            )
+                        ]
+                        break
+                    except Exception as exc:
+                        error_text = str(exc)
+                        if attempt_idx < max_retries:
+                            print(
+                                f"[hinted_inference] retry model={model} fraction={hint_fraction} "
+                                f"inference_id={item_candidate.inference_id} attempt={attempt_idx + 1}/{max_retries + 1} "
+                                f"error={error_text}",
+                                flush=True,
+                            )
+                            continue
+                        is_error = True
+                        graders = [
+                            GraderResult(
+                                extractor_grader_type="dataset_extract_and_match",
+                                extracted_answer=None,
+                                is_correct=None,
+                                metadata={
+                                    "dataset_spec": dataset_spec.name,
+                                    "error": error_text,
+                                },
+                            )
+                        ]
+
+                return {
+                    "state": item_state,
+                    "candidate": item_candidate,
+                    "model_output": model_output,
+                    "input_token_count": input_token_count,
+                    "output_token_count": output_token_count,
                     "stop_reason": stop_reason,
-                    "host": host,
-                    "pid": pid,
-                    "slurm_job_id": slurm_job_id,
-                    "error": error_text,
+                    "is_error": is_error,
+                    "error_text": error_text,
                     "attempts": attempts,
-                    "max_retries": max_retries,
                     "retries_used": max(0, attempts - 1),
-                    "answer_extractor": "last_boxed_expression",
-                    "run_metadata": run_metadata,
-                },
-            )
-            append_jsonl(state.output_path, record)
-
-            state.processed_this_run += 1
-            state.total_input_tokens += input_token_count
-            state.total_output_tokens += output_token_count
-            global_processed += 1
-            global_output_tokens += output_token_count
-
-            now = time.monotonic()
-            if vllm_metrics_url and (now - last_metrics_poll >= metrics_poll_interval_seconds):
-                last_metrics_poll = now
-                snapshot = _read_vllm_metrics(vllm_metrics_url)
-                if snapshot is not None:
-                    latest_waiting = snapshot.get("waiting")
-                    latest_running = snapshot.get("running")
-                    gen_tokens = snapshot.get("gen_tokens_total")
-                    prompt_tokens = snapshot.get("prompt_tokens_total")
-                    if (
-                        isinstance(gen_tokens, (float, int))
-                        and prev_metrics_gen_tokens is not None
-                        and prev_metrics_time is not None
-                    ):
-                        dt = now - prev_metrics_time
-                        if dt > 0:
-                            latest_gen_tps = (float(gen_tokens) - prev_metrics_gen_tokens) / dt
-                            if isinstance(prompt_tokens, (float, int)) and prev_metrics_prompt_tokens is not None:
-                                latest_prompt_tps = (
-                                    float(prompt_tokens) - prev_metrics_prompt_tokens
-                                ) / dt
-                    if isinstance(gen_tokens, (float, int)):
-                        prev_metrics_gen_tokens = float(gen_tokens)
-                    if isinstance(prompt_tokens, (float, int)):
-                        prev_metrics_prompt_tokens = float(prompt_tokens)
-                    prev_metrics_time = now
-
-            elapsed_seconds = max(0.001, time.monotonic() - started_at)
-            overall_output_tps = global_output_tokens / elapsed_seconds
-            rate = global_processed / elapsed_seconds if global_processed > 0 else 0.0
-            remaining_total = total_pending - global_processed
-            eta_seconds = int(remaining_total / rate) if rate > 0 else -1
-            expected_total_seconds = int(total_pending / rate) if rate > 0 else -1
-            eta_text = f"{eta_seconds}s" if eta_seconds >= 0 else "?"
-            expected_total_text = f"{expected_total_seconds}s" if expected_total_seconds >= 0 else "?"
-
-            if progress is not None:
-                postfix: dict[str, Any] = {
-                    "done": f"{global_processed}/{total_pending}",
-                    "retry": global_retry_count,
-                    "out_tok/s": f"{overall_output_tps:.1f}",
-                    "eta": eta_text,
-                    "exp_total": expected_total_text,
+                    "graders": graders,
                 }
-                if latest_gen_tps is not None:
-                    postfix["gen_tok/s"] = f"{latest_gen_tps:.1f}"
-                if latest_prompt_tps is not None:
-                    postfix["prompt_tok/s"] = f"{latest_prompt_tps:.1f}"
-                if latest_running is not None:
-                    postfix["running"] = int(latest_running)
-                if latest_waiting is not None:
-                    postfix["waiting"] = int(latest_waiting)
-                progress.update(1)
-                progress.set_postfix(postfix)
-            else:
-                print(
-                    f"[hinted_inference] processed={global_processed}/{total_pending} "
-                    f"retry={global_retry_count} out_tok/s={overall_output_tps:.1f} eta={eta_text}",
-                    flush=True,
-                )
 
-            if global_processed % checkpoint_every == 0 or remaining_total == 0:
-                for checkpoint_state in states:
-                    _save_fraction_checkpoint(
-                        state=checkpoint_state,
-                        benchmark_name=benchmark_name,
-                        model=model,
-                        hint_type=hint_type,
-                        fractioner=fractioner,
-                        run_id=run_id,
-                        run_metadata=run_metadata,
-                        elapsed_seconds=elapsed_seconds,
-                    )
-                print(
-                    f"[hinted_inference] checkpoint chunk processed={global_processed}/{total_pending} "
-                    f"eta={eta_text} expected_total={expected_total_text}",
-                    flush=True,
+        work_iter = iter(work_items)
+        pending_tasks: set[asyncio.Task[dict[str, Any]]] = set()
+
+        def _enqueue_next() -> bool:
+            try:
+                next_state, next_candidate = next(work_iter)
+            except StopIteration:
+                return False
+            pending_tasks.add(asyncio.create_task(_generate_one(next_state, next_candidate)))
+            return True
+
+        initial = min(max_connections, total_pending)
+        for _ in range(initial):
+            _enqueue_next()
+
+        while pending_tasks:
+            done, pending_tasks = await asyncio.wait(
+                pending_tasks, return_when=asyncio.FIRST_COMPLETED
+            )
+
+            for task in done:
+                result = task.result()
+                state = result["state"]
+                candidate = result["candidate"]
+                hint = candidate.hint
+                inference_id = candidate.inference_id
+                state.last_inference_id = inference_id
+                hint_fraction = state.hint_fraction
+                fraction_meta = candidate.fraction_metadata
+                hint_text_used = candidate.hint_text_used
+
+                model_output = str(result["model_output"])
+                input_token_count = int(result["input_token_count"])
+                output_token_count = int(result["output_token_count"])
+                stop_reason = result["stop_reason"]
+                is_error = bool(result["is_error"])
+                error_text = result["error_text"]
+                attempts = int(result["attempts"])
+                retries_used = int(result["retries_used"])
+                graders = result["graders"]
+
+                state.retry_count += retries_used
+                global_retry_count += retries_used
+                if is_error:
+                    state.written_error += 1
+                else:
+                    state.written_success += 1
+
+                record = HintedInferenceRecord(
+                    inference_id=inference_id,
+                    problem_id=hint.problem_id,
+                    benchmark_name=benchmark_name,
+                    model=model,
+                    hint_type=hint.hint_type,
+                    fractioner=fractioner,
+                    hint_fraction=hint_fraction,
+                    hint_text_used=hint_text_used,
+                    model_output=model_output,
+                    input_token_count=input_token_count,
+                    output_token_count=output_token_count,
+                    cost=0.0,
+                    is_error=is_error,
+                    graders=graders,
+                    hint=hint,
+                    metadata={
+                        "run_id": run_id,
+                        "backend": "inspect_vllm",
+                        "inspect_model_id": inspect_model_id,
+                        "prompt_version": "hinted_inference_v1",
+                        "prompt_id": candidate.prompt_id,
+                        "expanded_prompt_path": str(state.expanded_prompt_path),
+                        "prompt": candidate.prompt,
+                        "do_sample": do_sample,
+                        "temperature": temperature,
+                        "top_p": top_p,
+                        "top_k": top_k,
+                        "repetition_penalty": repetition_penalty,
+                        "max_tokens": max_tokens,
+                        "max_connections": max_connections,
+                        "timeout_seconds": timeout_seconds,
+                        "vllm_metrics_url": vllm_metrics_url,
+                        "fraction_metadata": fraction_meta,
+                        "stop_reason": stop_reason,
+                        "host": host,
+                        "pid": pid,
+                        "slurm_job_id": slurm_job_id,
+                        "error": error_text,
+                        "attempts": attempts,
+                        "max_retries": max_retries,
+                        "retries_used": retries_used,
+                        "answer_extractor": "last_boxed_expression",
+                        "run_metadata": run_metadata,
+                    },
                 )
+                append_jsonl(state.output_path, record)
+
+                state.processed_this_run += 1
+                state.total_input_tokens += input_token_count
+                state.total_output_tokens += output_token_count
+                global_processed += 1
+                global_output_tokens += output_token_count
+
+                now = time.monotonic()
+                if vllm_metrics_url and (now - last_metrics_poll >= metrics_poll_interval_seconds):
+                    last_metrics_poll = now
+                    snapshot = _read_vllm_metrics(vllm_metrics_url)
+                    if snapshot is not None:
+                        latest_waiting = snapshot.get("waiting")
+                        latest_running = snapshot.get("running")
+                        gen_tokens = snapshot.get("gen_tokens_total")
+                        prompt_tokens = snapshot.get("prompt_tokens_total")
+                        if (
+                            isinstance(gen_tokens, (float, int))
+                            and prev_metrics_gen_tokens is not None
+                            and prev_metrics_time is not None
+                        ):
+                            dt = now - prev_metrics_time
+                            if dt > 0:
+                                latest_gen_tps = (float(gen_tokens) - prev_metrics_gen_tokens) / dt
+                                if isinstance(prompt_tokens, (float, int)) and prev_metrics_prompt_tokens is not None:
+                                    latest_prompt_tps = (
+                                        float(prompt_tokens) - prev_metrics_prompt_tokens
+                                    ) / dt
+                        if isinstance(gen_tokens, (float, int)):
+                            prev_metrics_gen_tokens = float(gen_tokens)
+                        if isinstance(prompt_tokens, (float, int)):
+                            prev_metrics_prompt_tokens = float(prompt_tokens)
+                        prev_metrics_time = now
+
+                elapsed_seconds = max(0.001, time.monotonic() - started_at)
+                overall_output_tps = global_output_tokens / elapsed_seconds
+                remaining_total = total_pending - global_processed
+
+                if progress is not None:
+                    postfix: dict[str, Any] = {
+                        "retry": global_retry_count,
+                        "out_tok/s": f"{overall_output_tps:.1f}",
+                    }
+                    if latest_gen_tps is not None:
+                        postfix["gen_tok/s"] = f"{latest_gen_tps:.1f}"
+                    if latest_prompt_tps is not None:
+                        postfix["prompt_tok/s"] = f"{latest_prompt_tps:.1f}"
+                    if latest_running is not None:
+                        postfix["running"] = int(latest_running)
+                    if latest_waiting is not None:
+                        postfix["waiting"] = int(latest_waiting)
+                    progress.update(1)
+                    progress.set_postfix(postfix)
+                else:
+                    print(
+                        f"[hinted_inference] processed={global_processed}/{total_pending} "
+                        f"retry={global_retry_count} out_tok/s={overall_output_tps:.1f}",
+                        flush=True,
+                    )
+
+                if global_processed % checkpoint_every == 0 or remaining_total == 0:
+                    for checkpoint_state in states:
+                        _save_fraction_checkpoint(
+                            state=checkpoint_state,
+                            benchmark_name=benchmark_name,
+                            model=model,
+                            hint_type=hint_type,
+                            fractioner=fractioner,
+                            run_id=run_id,
+                            run_metadata=run_metadata,
+                            elapsed_seconds=elapsed_seconds,
+                        )
+                    print(
+                        f"[hinted_inference] checkpoint chunk processed={global_processed}/{total_pending}",
+                        flush=True,
+                    )
+
+                _enqueue_next()
 
     if progress is not None:
         progress.close()
@@ -915,6 +977,7 @@ def run_hinted_inference(
         raise ValueError("timeout_seconds must be >= 1")
     if max_retries < 0:
         raise ValueError("max_retries must be >= 0")
+    _configure_inspect_openai_http_timeout(float(timeout_seconds))
 
     normalized_fractions = [_normalize_fraction(v) for v in hint_fractions]
     normalized_fractions = sorted(set(normalized_fractions))

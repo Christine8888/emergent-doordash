@@ -490,11 +490,22 @@ MISO
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
+    --fractioner truncate_sentence \
+    --model Qwen/Qwen3-4B \
+    --executor submitit \
+    --cluster miso \
+    --max-connections 160 \
+    --num-gpus 8 \
+    --checkpoint-every 1000
+
+python -m runs.generate_hinted \
+    --benchmark aime2025_2026 \
+    --hint-type answer_not_revealed \
     --fractioner mask_word \
     --model Qwen/Qwen3-4B \
     --executor submitit \
     --cluster miso \
-    --max-connections 120 \
+    --max-connections 160 \
     --num-gpus 8 \
     --checkpoint-every 1000
 
@@ -515,8 +526,9 @@ CREATING HINTS
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
-    --fractioner truncate_sentence \
+    --fractioner truncate_word \
     --model Qwen/Qwen3-4B \
     --executor local \
     --build-only true
+
 """

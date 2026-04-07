@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import socket
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -65,12 +66,12 @@ class VLLMServer:
             return
 
         cmd = self._cmd()
-        print(f"[vllm] starting: {' '.join(cmd)}", flush=True)
+        print(f"[vllm] starting: {' '.join(cmd)}", flush=True, file=sys.stderr)
         self.process = subprocess.Popen(
             cmd,
-            # Inherit parent stdio so vLLM logs are visible in real time.
-            stdout=None,
-            stderr=None,
+            # Route all vLLM output to stderr.
+            stdout=sys.stderr,
+            stderr=sys.stderr,
         )
         self._wait_for_health(timeout=health_timeout)
 
@@ -86,7 +87,7 @@ class VLLMServer:
             try:
                 with urllib.request.urlopen(url, timeout=2) as resp:
                     if int(resp.status) == 200:
-                        print(f"[vllm] healthy on port={self.port}", flush=True)
+                        print(f"[vllm] healthy on port={self.port}", flush=True, file=sys.stderr)
                         return
             except (urllib.error.URLError, TimeoutError):
                 pass
@@ -103,7 +104,7 @@ class VLLMServer:
             self.process.kill()
             self.process.wait()
         self.process = None
-        print(f"[vllm] stopped port={self.port}", flush=True)
+        print(f"[vllm] stopped port={self.port}", flush=True, file=sys.stderr)
 
     def __enter__(self) -> "VLLMServer":
         self.start()
