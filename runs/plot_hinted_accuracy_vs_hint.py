@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import re
 from pathlib import Path
@@ -31,6 +30,17 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--benchmark", type=str, required=True)
     parser.add_argument("--hint-type", type=str, required=True)
     parser.add_argument("--model", type=str, default="all", help="Model name or 'all'.")
+    parser.add_argument(
+        "--fractioner",
+        type=str,
+        default=None,
+        help="Optional specific fractioner to plot. If omitted, use all complete fractioners.",
+    )
+    parser.add_argument(
+        "--show-values",
+        action="store_true",
+        help="Annotate plotted points with their mean accuracy values.",
+    )
     return parser.parse_args()
 
 
@@ -264,6 +274,7 @@ def _plot(
     *,
     fit_map: dict[tuple[str, str], dict[str, float]],
     output_png: Path,
+    show_values: bool,
     title: str,
 ) -> None:
     models = sorted({row["model"] for row in results})
@@ -301,12 +312,24 @@ def _plot(
                 yerr=yerr,
                 fmt="o",
                 alpha=0.9,
-                linewidth=0.0,
                 markersize=3.8,
                 capsize=2.0,
+                elinewidth=1.0,
+                capthick=1.0,
                 color=color,
                 label=fractioner,
             )
+            if show_values:
+                for x_i, y_i in zip(x, y):
+                    ax.annotate(
+                        f"{y_i:.2f}",
+                        (float(x_i), float(y_i)),
+                        xytext=(4, 4),
+                        textcoords="offset points",
+                        fontsize=6,
+                        color=color,
+                        alpha=0.9,
+                    )
 
             fit_key = (str(model), str(fractioner))
             fit = fit_map.get(fit_key)
@@ -359,11 +382,14 @@ def main() -> None:
     expected_fraction_set = {float(f"{value:.6f}") for value in EXPECTED_FRACTIONS}
 
     for model in models_to_plot:
-        fractioners = _discover_fractioners(
-            benchmark=args.benchmark,
-            model=model,
-            hint_type=args.hint_type,
-        )
+        if args.fractioner is not None:
+            fractioners = [args.fractioner]
+        else:
+            fractioners = _discover_fractioners(
+                benchmark=args.benchmark,
+                model=model,
+                hint_type=args.hint_type,
+            )
         if not fractioners:
             print(
                 f"[plot_hinted_accuracy_vs_hint][WARN] no fractioners for "
@@ -379,32 +405,38 @@ def main() -> None:
                 fractioner=fractioner,
             )
             if not fraction_files:
-                continue
-
-            by_fraction = {float(f"{frac:.6f}"): path for frac, path in fraction_files}
-            available_fraction_set = set(by_fraction.keys())
-            missing = sorted(expected_fraction_set - available_fraction_set)
-            if missing:
                 print(
-                    f"[plot_hinted_accuracy_vs_hint][WARN] skipping incomplete fractioner "
-                    f"model={model} fractioner={fractioner} missing_fractions={missing}"
+                    f"[plot_hinted_accuracy_vs_hint][WARN] no files for "
+                    f"model={model} fractioner={fractioner}"
                 )
                 continue
 
             fraction_rows: list[dict[str, Any]] = []
-            usable = True
-            for hint_fraction in EXPECTED_FRACTIONS:
-                key = float(f"{hint_fraction:.6f}")
-                path = by_fraction[key]
+            usable = False
+
+            if args.fractioner is None:
+                by_fraction = {float(f"{frac:.6f}"): path for frac, path in fraction_files}
+                available_fraction_set = set(by_fraction.keys())
+                missing = sorted(expected_fraction_set - available_fraction_set)
+                if missing:
+                    print(
+                        f"[plot_hinted_accuracy_vs_hint][WARN] skipping incomplete fractioner "
+                        f"model={model} fractioner={fractioner} missing_fractions={missing}"
+                    )
+                    continue
+                fractions_to_use = [(float(h), by_fraction[float(f"{h:.6f}")]) for h in EXPECTED_FRACTIONS]
+            else:
+                fractions_to_use = [(float(hint_fraction), path) for hint_fraction, path in fraction_files]
+
+            for hint_fraction, path in fractions_to_use:
                 stats = _collect_stats_for_fraction(path=path, rng=rng)
                 if stats is None:
                     print(
-                        f"[plot_hinted_accuracy_vs_hint][WARN] skipping fractioner due to "
+                        f"[plot_hinted_accuracy_vs_hint][WARN] skipping fraction point due to "
                         f"unusable fraction rows model={model} fractioner={fractioner} "
                         f"fraction={hint_fraction} path={path}"
                     )
-                    usable = False
-                    break
+                    continue
                 fraction_rows.append(
                     {
                         "model": model,
@@ -414,6 +446,7 @@ def main() -> None:
                         "path": str(path),
                     }
                 )
+                usable = True
 
             if not usable:
                 continue
@@ -422,6 +455,14 @@ def main() -> None:
             print(
                 f"[plot_hinted_accuracy_vs_hint] included model={model} "
                 f"fractioner={fractioner} n_points={len(fraction_rows)}"
+            )
+            means_text = ", ".join(
+                f"{float(row['hint_fraction']):.1f}:{float(row['accuracy']):.4f}"
+                for row in fraction_rows
+            )
+            print(
+                f"[plot_hinted_accuracy_vs_hint] means model={model} "
+                f"fractioner={fractioner} {means_text}"
             )
 
     if not rows:
@@ -436,7 +477,6 @@ def main() -> None:
         key = (str(row["model"]), str(row["fractioner"]))
         series_map.setdefault(key, []).append(row)
 
-    fit_rows: list[dict[str, Any]] = []
     fit_map: dict[tuple[str, str], dict[str, float]] = {}
     for key, series_rows in sorted(series_map.items()):
         model, fractioner = key
@@ -447,13 +487,6 @@ def main() -> None:
                 f"model={model} fractioner={fractioner}"
             )
             continue
-        fit_row = {
-            "model": model,
-            "fractioner": fractioner,
-            "n_points": int(len(series_rows)),
-            **fit,
-        }
-        fit_rows.append(fit_row)
         fit_map[key] = fit
         print(
             f"[plot_hinted_accuracy_vs_hint] fit model={model} fractioner={fractioner} "
@@ -463,87 +496,58 @@ def main() -> None:
 
     stem = (
         f"{_safe_component(args.benchmark)}__{_safe_component(args.hint_type)}__"
-        f"all_complete_fractioners__{_safe_component(args.model)}"
+        f"{_safe_component(args.fractioner) if args.fractioner is not None else 'all_complete_fractioners'}__"
+        f"{_safe_component(args.model)}"
     )
     PLOTS_ROOT.mkdir(parents=True, exist_ok=True)
-    csv_path = PLOTS_ROOT / f"{stem}__bootstrap.csv"
-    fit_csv_path = PLOTS_ROOT / f"{stem}__sigmoid_fits.csv"
-    json_path = PLOTS_ROOT / f"{stem}__bootstrap.json"
+    means_json_path = PLOTS_ROOT / f"{stem}__means_percent.json"
+    summary_json_path = PLOTS_ROOT / f"{stem}__summary_percent.json"
     png_path = PLOTS_ROOT / f"{stem}__bootstrap.png"
 
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=[
-                "model",
-                "fractioner",
-                "hint_fraction",
-                "accuracy",
-                "ci_low",
-                "ci_high",
-                "n_samples",
-                "n_rollouts",
-                "rows_total",
-                "rows_with_known_label",
-                "rows_without_known_label",
-                "path",
-            ],
-        )
-        writer.writeheader()
-        writer.writerows(rows_sorted)
+    means_payload: dict[str, dict[str, dict[str, float]]] = {}
+    summary_payload: dict[str, dict[str, dict[str, dict[str, float]]]] = {}
+    for (model, fractioner), series_rows in sorted(series_map.items()):
+        means_payload.setdefault(model, {})
+        summary_payload.setdefault(model, {})
+        means_payload[model][fractioner] = {
+            f"{float(row['hint_fraction']):.1f}": round(100.0 * float(row["accuracy"]), 1)
+            for row in sorted(series_rows, key=lambda row: float(row["hint_fraction"]))
+        }
+        summary_payload[model][fractioner] = {
+            f"{float(row['hint_fraction']):.1f}": {
+                "mean": round(100.0 * float(row["accuracy"]), 1),
+                "ci_low": round(100.0 * float(row["ci_low"]), 1),
+                "ci_high": round(100.0 * float(row["ci_high"]), 1),
+            }
+            for row in sorted(series_rows, key=lambda row: float(row["hint_fraction"]))
+        }
 
-    with open(fit_csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=[
-                "model",
-                "fractioner",
-                "n_points",
-                "sigmoid_lower",
-                "sigmoid_slope",
-                "sigmoid_bias",
-                "sigmoid_midpoint",
-                "sigmoid_rmse",
-            ],
-        )
-        writer.writeheader()
-        writer.writerows(sorted(fit_rows, key=lambda r: (str(r["model"]), str(r["fractioner"]))))
+    with open(means_json_path, "w", encoding="utf-8") as f:
+        json.dump(means_payload, f, indent=2, sort_keys=True)
+        f.write("\n")
 
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "benchmark": args.benchmark,
-                "hint_type": args.hint_type,
-                "fractioners_mode": "all_complete",
-                "model": args.model,
-                "n_bootstrap": N_BOOTSTRAP,
-                "random_seed": RANDOM_SEED,
-                "rows": rows_sorted,
-                "sigmoid_fits": fit_rows,
-            },
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
+    with open(summary_json_path, "w", encoding="utf-8") as f:
+        json.dump(summary_payload, f, indent=2, sort_keys=True)
+        f.write("\n")
 
     _plot(
         rows_sorted,
         fit_map=fit_map,
         output_png=png_path,
+        show_values=args.show_values,
         title=(
             f"Hinted Accuracy vs Hint Fraction\n"
             f"benchmark={args.benchmark} hint_type={args.hint_type} "
-            f"(all complete fractioners)"
+            f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'})"
         ),
     )
 
-    print(f"[plot_hinted_accuracy_vs_hint] wrote_csv={csv_path}")
-    print(f"[plot_hinted_accuracy_vs_hint] wrote_fit_csv={fit_csv_path}")
-    print(f"[plot_hinted_accuracy_vs_hint] wrote_json={json_path}")
+    print(f"[plot_hinted_accuracy_vs_hint] wrote_means_json={means_json_path}")
+    print(f"[plot_hinted_accuracy_vs_hint] wrote_summary_json={summary_json_path}")
     print(f"[plot_hinted_accuracy_vs_hint] wrote_plot={png_path}")
 
 
 if __name__ == "__main__":
-    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --model Qwen3-4B
     # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed
+    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner mask_word
     main()
