@@ -140,6 +140,7 @@ celerybeat.pid
 *.jsonl 
 *.json
 *.zip
+*.csv
 
 submitit_logs/
 

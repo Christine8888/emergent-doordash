@@ -9,6 +9,7 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.optimize import curve_fit
 
 
 DATA_ROOT = Path("data")
@@ -141,6 +142,67 @@ def _bootstrap_accuracy(
     return point_accuracy, float(ci_low), float(ci_high)
 
 
+def _sigmoid_curve(x: np.ndarray, lower: float, slope: float, bias: float) -> np.ndarray:
+    return lower + (1.0 - lower) * (1.0 / (1.0 + np.exp(-(slope * x + bias))))
+
+
+def _fit_sigmoid_for_series(series_rows: list[dict[str, Any]]) -> dict[str, float] | None:
+    if len(series_rows) < 4:
+        return None
+
+    rows_sorted = sorted(series_rows, key=lambda row: float(row["hint_fraction"]))
+    x = np.asarray([float(row["hint_fraction"]) for row in rows_sorted], dtype=float)
+    y = np.asarray([float(row["accuracy"]) for row in rows_sorted], dtype=float)
+    if np.allclose(y, y[0]):
+        return None
+
+    # Approximate per-point standard error from 95% CI half-width.
+    ci_half_width = np.asarray(
+        [
+            max(
+                1e-6,
+                0.5 * (float(row["ci_high"]) - float(row["ci_low"])),
+            )
+            for row in rows_sorted
+        ],
+        dtype=float,
+    )
+    sigma = np.maximum(ci_half_width / 1.96, 1e-4)
+
+    lower0 = float(np.clip(np.min(y) - 0.02, 0.0, 0.95))
+    y_mid = 0.5 * (float(np.min(y)) + float(np.max(y)))
+    mid_idx = int(np.argmin(np.abs(y - y_mid)))
+    x_mid = float(x[mid_idx])
+    slope0 = 8.0
+    bias0 = -slope0 * x_mid
+
+    try:
+        params, _ = curve_fit(
+            _sigmoid_curve,
+            x,
+            y,
+            p0=[lower0, slope0, bias0],
+            sigma=sigma,
+            absolute_sigma=True,
+            bounds=([0.0, 1e-6, -50.0], [0.99, 100.0, 50.0]),
+            maxfev=20000,
+        )
+    except Exception:
+        return None
+
+    lower, slope, bias = [float(v) for v in params]
+    midpoint = float(-bias / slope) if slope > 0 else float("nan")
+    y_hat = _sigmoid_curve(x, lower, slope, bias)
+    rmse = float(np.sqrt(np.mean((y - y_hat) ** 2)))
+    return {
+        "sigmoid_lower": lower,
+        "sigmoid_slope": slope,
+        "sigmoid_bias": bias,
+        "sigmoid_midpoint": midpoint,
+        "sigmoid_rmse": rmse,
+    }
+
+
 def _collect_stats_for_fraction(
     *,
     path: Path,
@@ -197,7 +259,13 @@ def _collect_stats_for_fraction(
     }
 
 
-def _plot(results: list[dict[str, Any]], *, output_png: Path, title: str) -> None:
+def _plot(
+    results: list[dict[str, Any]],
+    *,
+    fit_map: dict[tuple[str, str], dict[str, float]],
+    output_png: Path,
+    title: str,
+) -> None:
     models = sorted({row["model"] for row in results})
     n_models = len(models)
 
@@ -214,7 +282,9 @@ def _plot(results: list[dict[str, Any]], *, output_png: Path, title: str) -> Non
         ax = axes[idx]
         model_rows = [row for row in results if row["model"] == model]
         fractioners = sorted({str(row["fractioner"]) for row in model_rows})
-        for fractioner in fractioners:
+        cmap = plt.cm.tab10
+        for j, fractioner in enumerate(fractioners):
+            color = cmap(j / max(len(fractioners) - 1, 1))
             series_rows = sorted(
                 [row for row in model_rows if row["fractioner"] == fractioner],
                 key=lambda row: float(row["hint_fraction"]),
@@ -229,13 +299,26 @@ def _plot(results: list[dict[str, Any]], *, output_png: Path, title: str) -> Non
                 x,
                 y,
                 yerr=yerr,
-                fmt="o-",
+                fmt="o",
                 alpha=0.9,
-                linewidth=1.5,
+                linewidth=0.0,
                 markersize=3.8,
                 capsize=2.0,
+                color=color,
                 label=fractioner,
             )
+
+            fit_key = (str(model), str(fractioner))
+            fit = fit_map.get(fit_key)
+            if fit is not None:
+                x_fit = np.linspace(0.0, 1.0, 200, dtype=float)
+                y_fit = _sigmoid_curve(
+                    x_fit,
+                    float(fit["sigmoid_lower"]),
+                    float(fit["sigmoid_slope"]),
+                    float(fit["sigmoid_bias"]),
+                )
+                ax.plot(x_fit, y_fit, "-", color=color, linewidth=1.25, alpha=0.85)
         ax.set_title(model, fontsize=9)
         ax.set_xlabel("Hint Fraction")
         ax.set_ylabel("Accuracy")
@@ -348,6 +431,35 @@ def main() -> None:
         rows,
         key=lambda r: (str(r["model"]), str(r["fractioner"]), float(r["hint_fraction"])),
     )
+    series_map: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in rows_sorted:
+        key = (str(row["model"]), str(row["fractioner"]))
+        series_map.setdefault(key, []).append(row)
+
+    fit_rows: list[dict[str, Any]] = []
+    fit_map: dict[tuple[str, str], dict[str, float]] = {}
+    for key, series_rows in sorted(series_map.items()):
+        model, fractioner = key
+        fit = _fit_sigmoid_for_series(series_rows)
+        if fit is None:
+            print(
+                f"[plot_hinted_accuracy_vs_hint][WARN] sigmoid fit failed/skipped "
+                f"model={model} fractioner={fractioner}"
+            )
+            continue
+        fit_row = {
+            "model": model,
+            "fractioner": fractioner,
+            "n_points": int(len(series_rows)),
+            **fit,
+        }
+        fit_rows.append(fit_row)
+        fit_map[key] = fit
+        print(
+            f"[plot_hinted_accuracy_vs_hint] fit model={model} fractioner={fractioner} "
+            f"midpoint={float(fit['sigmoid_midpoint']):.4f} "
+            f"rmse={float(fit['sigmoid_rmse']):.4f}"
+        )
 
     stem = (
         f"{_safe_component(args.benchmark)}__{_safe_component(args.hint_type)}__"
@@ -355,6 +467,7 @@ def main() -> None:
     )
     PLOTS_ROOT.mkdir(parents=True, exist_ok=True)
     csv_path = PLOTS_ROOT / f"{stem}__bootstrap.csv"
+    fit_csv_path = PLOTS_ROOT / f"{stem}__sigmoid_fits.csv"
     json_path = PLOTS_ROOT / f"{stem}__bootstrap.json"
     png_path = PLOTS_ROOT / f"{stem}__bootstrap.png"
 
@@ -379,6 +492,23 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(rows_sorted)
 
+    with open(fit_csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "model",
+                "fractioner",
+                "n_points",
+                "sigmoid_lower",
+                "sigmoid_slope",
+                "sigmoid_bias",
+                "sigmoid_midpoint",
+                "sigmoid_rmse",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(sorted(fit_rows, key=lambda r: (str(r["model"]), str(r["fractioner"]))))
+
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(
             {
@@ -389,6 +519,7 @@ def main() -> None:
                 "n_bootstrap": N_BOOTSTRAP,
                 "random_seed": RANDOM_SEED,
                 "rows": rows_sorted,
+                "sigmoid_fits": fit_rows,
             },
             f,
             ensure_ascii=False,
@@ -397,6 +528,7 @@ def main() -> None:
 
     _plot(
         rows_sorted,
+        fit_map=fit_map,
         output_png=png_path,
         title=(
             f"Hinted Accuracy vs Hint Fraction\n"
@@ -406,10 +538,12 @@ def main() -> None:
     )
 
     print(f"[plot_hinted_accuracy_vs_hint] wrote_csv={csv_path}")
+    print(f"[plot_hinted_accuracy_vs_hint] wrote_fit_csv={fit_csv_path}")
     print(f"[plot_hinted_accuracy_vs_hint] wrote_json={json_path}")
     print(f"[plot_hinted_accuracy_vs_hint] wrote_plot={png_path}")
 
 
 if __name__ == "__main__":
     # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --model Qwen3-4B
+    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed
     main()
