@@ -486,7 +486,7 @@ python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner truncate_sentence \
-    --model Qwen/Qwen3-4B \
+    --model meta-llama/Llama-3.1-8B-Instruct \
     --executor submitit \
     --cluster miso \
     --max-connections 160 \
@@ -497,7 +497,7 @@ python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --model Qwen/Qwen3-4B \
+    --model meta-llama/Llama-3.1-8B-Instruct \
     --executor submitit \
     --cluster miso \
     --max-connections 160 \
