@@ -485,24 +485,16 @@ MISO
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
-    --fractioner truncate_sentence \
-    --model meta-llama/Llama-3.1-8B-Instruct \
+    --fractioner truncate_word \
+    --model meta-llama/Llama-3.1-70B-Instruct \
     --executor submitit \
     --cluster miso \
-    --max-connections 160 \
+    --max-connections 400 \
     --num-gpus 8 \
     --checkpoint-every 1000
 
-python -m runs.generate_hinted \
-    --benchmark aime2025_2026 \
-    --hint-type answer_not_revealed \
-    --fractioner mask_word \
-    --model meta-llama/Llama-3.1-8B-Instruct \
-    --executor submitit \
-    --cluster miso \
-    --max-connections 160 \
-    --num-gpus 8 \
-    --checkpoint-every 1000
+^260 works well, 400 untested
+
 
 NLP
 python -m runs.generate_hinted \
