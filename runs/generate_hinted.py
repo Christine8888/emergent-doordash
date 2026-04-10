@@ -688,6 +688,16 @@ if __name__ == "__main__":
 
 
 """
+    "google/gemma-3-27b-it",
+    "meta-llama/Llama-3.1-70B-Instruct",
+    "Qwen/Qwen3-32B",
+    "Qwen/Qwen3-14B",
+    "Qwen/Qwen2.5-32B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
+    "google/gemma-3-12b-it",
+
+
+
 MISO
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
@@ -722,7 +732,6 @@ python -m runs.generate_hinted \
     --checkpoint-every 500
 
 CREATING HINTS
-
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
