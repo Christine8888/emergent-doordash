@@ -23,6 +23,12 @@ def _safe_component(text: str) -> str:
     return cleaned or "unknown"
 
 
+def _model_storage_component(model: str) -> str:
+    # Store hinted inference under the actual model name, not the provider prefix.
+    model_leaf = model.strip().split("/")[-1]
+    return _safe_component(model_leaf)
+
+
 def build_hint_generation_path(
     benchmark_name: str,
     hint_type: str,
@@ -44,7 +50,7 @@ def build_hinted_inference_path(
     data_root: str | Path,
 ) -> Path:
     benchmark = _safe_component(benchmark_name)
-    model_name = _safe_component(model)
+    model_name = _model_storage_component(model)
     hint = _safe_component(hint_type)
     fractioner_name = _safe_component(fractioner)
     hint_fractioner = f"{hint}__{fractioner_name}"

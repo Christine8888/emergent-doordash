@@ -7,6 +7,15 @@ from src.hinted_progress import ModelHintProgress, compute_model_hint_progress, 
 from src.model_config import ALL_MODEL_PATHS, get_model_spec
 
 DEFAULT_HINT_FRACTIONS = [i / 10 for i in range(11)]
+MODEL_PATHS = [
+    "google/gemma-3-27b-it",
+    "meta-llama/Llama-3.1-70B-Instruct",
+    "Qwen/Qwen3-32B",
+    "Qwen/Qwen3-14B",
+    "Qwen/Qwen2.5-32B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
+    "google/gemma-3-12b-it",
+]
 
 
 def _parse_hint_fractions(value: str) -> list[float]:
@@ -26,12 +35,6 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--benchmark", type=str, required=True)
     parser.add_argument("--fractioner", type=str, required=True)
     parser.add_argument(
-        "--model",
-        type=str,
-        choices=["all"] + list(ALL_MODEL_PATHS),
-        default="all",
-    )
-    parser.add_argument(
         "--hint-type",
         type=str,
         choices=["all"] + [h.value for h in HintType],
@@ -47,10 +50,10 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _selected_models(model: str) -> list[str]:
-    if model == "all":
+def _selected_models(model_paths: list[str]) -> list[str]:
+    if not model_paths:
         return [get_model_spec(path).name for path in ALL_MODEL_PATHS]
-    return [get_model_spec(model).name]
+    return [get_model_spec(model_path).name for model_path in model_paths]
 
 
 def _selected_hint_types(hint_type: str) -> list[str]:
@@ -63,7 +66,7 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
-    model_names = _selected_models(args.model)
+    model_names = _selected_models(MODEL_PATHS)
     hint_types = _selected_hint_types(args.hint_type)
 
     rows: list[ModelHintProgress] = []
@@ -84,4 +87,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # python -m runs.print_hinted_progress --benchmark aime2025_2026 --fractioner mask_word --hint-type answer_not_revealed
+    # python -m runs.print_hinted_progress --benchmark aime2025_2026 --fractioner truncate_word --hint-type answer_not_revealed
     main()

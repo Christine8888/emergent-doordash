@@ -688,13 +688,6 @@ if __name__ == "__main__":
 
 
 """
-    "google/gemma-3-27b-it",
-    "meta-llama/Llama-3.1-70B-Instruct",
-    "Qwen/Qwen3-32B",
-    "Qwen/Qwen3-14B",
-    "Qwen/Qwen2.5-32B-Instruct",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "google/gemma-3-12b-it",
 
 
 
@@ -706,7 +699,7 @@ python -m runs.generate_hinted \
     --model Qwen/Qwen2.5-14B-Instruct \
     --executor submitit \
     --cluster miso \
-    --max-connections 320 \
+    --max-connections 260 \
     --num-gpus 8 \
     --checkpoint-every 1000
 
@@ -714,10 +707,8 @@ python -m runs.generate_hinted \
 ^ 260 is too much for Qwen3-32B but good for 14B
 ^260 is not enough for gemma 12B
 
-Qwen/Qwen2.5-32B-Instruct
-Qwen/Qwen2.5-14B-Instruct
-Qwen/Qwen3-32B
-Qwen/Qwen3-14B
+Qwen2.5-32B-Instruct
+Qwen2.5-14B-Instruct
 
 NLP
 python -m runs.generate_hinted \

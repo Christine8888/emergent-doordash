@@ -135,9 +135,18 @@ def print_progress_report(progress_rows: list[ModelHintProgress]) -> None:
         return
 
     for row in progress_rows:
+        is_complete = (
+            row.total > 0
+            and row.remaining == 0
+            and row.fractions_complete >= row.fractions_total
+        )
+        if is_complete:
+            print(f"  {row.model} complete", flush=True)
+            continue
+
         print(
             (
-                f"  model={row.model} hint_type={row.hint_type} "
+                f"  {row.model} hint_type={row.hint_type} "
                 f"completed={row.completed}/{row.total} ({row.percent_complete:.1f}%) "
                 f"remaining={row.remaining} "
                 f"fractions={row.fractions_complete}/{row.fractions_total}"

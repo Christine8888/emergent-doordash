@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import socket
 import sys
 import time
@@ -19,6 +20,7 @@ import httpx
 from src.datasets import Problem, get_dataset_spec
 from src.hint_fractioners import fraction_hint
 from src.storage import (
+    _model_storage_component,
     append_jsonl,
     build_expanded_hinted_prompt_path,
     build_hint_generation_path,
@@ -56,6 +58,25 @@ def _normalize_fraction(value: float) -> float:
     return float(f"{value:.6f}")
 
 
+def _extract_allowed_max_tokens_from_error(error_text: str) -> int | None:
+    patterns = [
+        r"\((\d+)\s*>\s*(\d+)\s*-\s*(\d+)\)",
+        r"maximum context length is\s*(\d+)\s*and your request has\s*(\d+)\s*input tokens",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, error_text)
+        if match is None:
+            continue
+        numbers = [int(group) for group in match.groups()]
+        if len(numbers) == 3:
+            _, context_limit, input_tokens = numbers
+            return max(1, context_limit - input_tokens)
+        if len(numbers) == 2:
+            context_limit, input_tokens = numbers
+            return max(1, context_limit - input_tokens)
+    return None
+
+
 def _default_prompt(*, question: str, hint_text: str) -> str:
     instructions = (
         "You will be given a problem and a hint to the problem.\n"
@@ -77,9 +98,10 @@ def _inference_id(
     hint_fraction: float,
     hint_id: str,
 ) -> str:
+    canonical_model = _model_storage_component(model)
     return make_stable_id(
         benchmark_name,
-        model,
+        canonical_model,
         hint_type,
         fractioner,
         f"{hint_fraction:.6f}",
@@ -890,6 +912,7 @@ async def _run_all_candidates(
     checkpoint_every: int,
     run_metadata: dict[str, Any] | None = None,
 ) -> float:
+    canonical_model = _model_storage_component(model)
     try:
         from tqdm.auto import tqdm
     except Exception:
@@ -971,6 +994,8 @@ async def _run_all_candidates(
             is_error = False
             error_text: str | None = None
             attempts = 0
+            request_max_tokens = max_tokens
+            effective_max_tokens_used = max_tokens
 
             for attempt_idx in range(max_retries + 1):
                 attempts = attempt_idx + 1
@@ -981,13 +1006,14 @@ async def _run_all_candidates(
                         api_key=backend_config.api_key,
                         model=model,
                         prompt=prompt,
-                        max_tokens=max_tokens,
+                        max_tokens=request_max_tokens,
                         do_sample=do_sample,
                         temperature=temperature,
                         top_p=top_p,
                         top_k=top_k,
                         repetition_penalty=repetition_penalty,
                     )
+                    effective_max_tokens_used = request_max_tokens
                     model_output = _extract_completion_text(response)
                     reasoning_text = _extract_reasoning_text(response)
                     usage = response.get("usage") if isinstance(response, dict) else None
@@ -1015,6 +1041,21 @@ async def _run_all_candidates(
                     break
                 except Exception as exc:
                     error_text = str(exc)
+                    allowed_max_tokens = _extract_allowed_max_tokens_from_error(error_text)
+                    if (
+                        allowed_max_tokens is not None
+                        and allowed_max_tokens < request_max_tokens
+                        and attempt_idx < max_retries
+                    ):
+                        request_max_tokens = allowed_max_tokens
+                        print(
+                            f"[hinted_inference] clip_max_tokens model={model} "
+                            f"fraction={hint_fraction} inference_id={item_candidate.inference_id} "
+                            f"attempt={attempt_idx + 1}/{max_retries + 1} "
+                            f"new_max_tokens={request_max_tokens}",
+                            flush=True,
+                        )
+                        continue
                     if attempt_idx < max_retries:
                         print(
                             f"[hinted_inference] retry model={model} fraction={hint_fraction} "
@@ -1048,6 +1089,7 @@ async def _run_all_candidates(
                 "error_text": error_text,
                 "attempts": attempts,
                 "retries_used": max(0, attempts - 1),
+                "effective_max_tokens_used": effective_max_tokens_used,
                 "graders": graders,
             }
 
@@ -1092,6 +1134,7 @@ async def _run_all_candidates(
                 error_text = result["error_text"]
                 attempts = int(result["attempts"])
                 retries_used = int(result["retries_used"])
+                effective_max_tokens_used = int(result["effective_max_tokens_used"])
                 graders = result["graders"]
 
                 state.retry_count += retries_used
@@ -1105,7 +1148,7 @@ async def _run_all_candidates(
                     inference_id=inference_id,
                     problem_id=hint.problem_id,
                     benchmark_name=benchmark_name,
-                    model=model,
+                    model=canonical_model,
                     hint_type=hint.hint_type,
                     fractioner=fractioner,
                     hint_fraction=hint_fraction,
@@ -1130,6 +1173,7 @@ async def _run_all_candidates(
                         "top_k": top_k,
                         "repetition_penalty": repetition_penalty,
                         "max_tokens": max_tokens,
+                        "effective_max_tokens_used": effective_max_tokens_used,
                         "max_connections": max_connections,
                         "timeout_seconds": timeout_seconds,
                         "provider": backend_config.provider_label,
