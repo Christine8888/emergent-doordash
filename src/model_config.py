@@ -6,7 +6,6 @@ from dataclasses import dataclass
 SMALL_MODEL_CONSTRAINT = "80G|141G|40G|48G"
 MEDIUM_MODEL_CONSTRAINT = "80G|141G|48G"
 LARGE_MODEL_CONSTRAINT = "80G|141G"
-GEMMA_12B_CONSTRAINT = "80G|141G"
 H200_CONSTRAINT = "141G"
 
 
@@ -61,6 +60,14 @@ QWEN25_SAMPLING = {
     "repetition_penalty": 1.05,
 }
 
+QWEN35_SAMPLING = {
+    "do_sample": True,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "repetition_penalty": 1.0,
+}
+
 LLAMA_SAMPLING = {
     "do_sample": True,
     "temperature": 0.6,
@@ -74,6 +81,14 @@ GEMMA_SAMPLING = {
     "temperature": 1.0,
     "top_p": 0.95,
     "top_k": 64,
+    "repetition_penalty": 1.0,
+}
+
+OPENAI_SAMPLING = {
+    "do_sample": True,
+    "temperature": 1.0,
+    "top_p": 1.0,
+    "top_k": 50,
     "repetition_penalty": 1.0,
 }
 
@@ -95,6 +110,10 @@ QWEN25_MODELS = [
     ModelSpec("Qwen/Qwen2.5-32B-Instruct", constraint=H200_CONSTRAINT, **QWEN25_SAMPLING),
 ]
 
+QWEN35_MODELS = [
+    ModelSpec("Qwen/Qwen3.5-397B-A17B", constraint=LARGE_MODEL_CONSTRAINT, **QWEN35_SAMPLING),
+]
+
 LLAMA_MODELS = [
     ModelSpec("meta-llama/Llama-3.1-8B-Instruct", constraint=MEDIUM_MODEL_CONSTRAINT, **LLAMA_SAMPLING),
     ModelSpec("meta-llama/Llama-3.1-70B-Instruct", tp=2, constraint=H200_CONSTRAINT, **LLAMA_SAMPLING),
@@ -102,11 +121,16 @@ LLAMA_MODELS = [
 
 GEMMA_MODELS = [
     ModelSpec("google/gemma-3-4b-it", constraint=SMALL_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
-    ModelSpec("google/gemma-3-12b-it", constraint=GEMMA_12B_CONSTRAINT, **GEMMA_SAMPLING),
+    ModelSpec("google/gemma-3-12b-it", constraint=LARGE_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
     ModelSpec("google/gemma-3-27b-it", tp=2, constraint=MEDIUM_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
 ]
 
-ALL_MODELS = QWEN3_MODELS + QWEN25_MODELS + LLAMA_MODELS + GEMMA_MODELS
+OPENAI_MODELS = [
+    ModelSpec("openai/gpt-oss-120b", tp=4, constraint=LARGE_MODEL_CONSTRAINT, **OPENAI_SAMPLING),
+    ModelSpec("openai/gpt-oss-20b", tp=4, constraint=LARGE_MODEL_CONSTRAINT, **OPENAI_SAMPLING),
+]
+
+ALL_MODELS = QWEN3_MODELS + QWEN25_MODELS + LLAMA_MODELS + GEMMA_MODELS + OPENAI_MODELS + QWEN35_MODELS
 ALL_MODEL_PATHS = [m.path for m in ALL_MODELS]
 
 

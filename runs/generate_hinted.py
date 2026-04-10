@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from src.hint_types import HintType
-from src.hinted_inference import run_hinted_inference
+from src.hinted_inference import build_expanded_hinted_prompt_dataset, run_hinted_inference
 from src.model_config import ALL_MODEL_PATHS, ModelSpec, get_model_spec
-from src.storage import build_hinted_inference_path
+from src.storage import build_hint_generation_path, build_hinted_inference_path, read_jsonl
+from src.types import ExpandedHintedPromptRecord, HintGenerationRecord, HintedInferenceRecord
 from src.vllm_server import VLLMServer, VLLMServerConfig
 
 MODELS_TO_RUN = list(ALL_MODEL_PATHS)
@@ -31,6 +32,12 @@ SPHINX_SLURM_ACCOUNT = "nlp"
 SPHINX_SLURM_PARTITION = "sphinx"
 MISO_SLURM_ACCOUNT = "miso"
 MISO_SLURM_PARTITION = "miso"
+TOGETHER_SERVERLESS_PRICING_PER_MILLION: dict[str, dict[str, float]] = {
+    "openai/gpt-oss-120b": {"input": 0.15, "output": 0.60},
+    "moonshotai/Kimi-K2.5": {"input": 0.50, "output": 2.80},
+    "openai/gpt-oss-20b": {"input": 0.05, "output": 0.20},
+    "Qwen/Qwen3.5-397B-A17B": {"input": 0.60, "output": 3.60},
+}
 
 
 def _parse_bool(value: str) -> bool:
@@ -59,6 +66,7 @@ def _run_single_model_job(
     sampling_params: dict[str, bool | float | int],
     run_metadata: dict[str, Any],
     max_connections: int,
+    max_requests: int | None,
     checkpoint_every: int,
     gpu_memory_utilization: float,
     dtype: str,
@@ -79,6 +87,7 @@ def _run_single_model_job(
             repetition_penalty=sampling_params.get("repetition_penalty"),
             max_tokens=MAX_TOKENS,
             max_connections=max_connections,
+            max_requests=max_requests,
             timeout_seconds=REQUEST_TIMEOUT_SECONDS,
             max_retries=MAX_RETRIES,
             checkpoint_every=checkpoint_every,
@@ -116,6 +125,7 @@ def _run_single_model_job(
                     repetition_penalty=sampling_params.get("repetition_penalty"),
                     max_tokens=MAX_TOKENS,
                     max_connections=max_connections,
+                    max_requests=max_requests,
                     timeout_seconds=REQUEST_TIMEOUT_SECONDS,
                     max_retries=MAX_RETRIES,
                     checkpoint_every=checkpoint_every,
@@ -138,6 +148,7 @@ def _run_single_model_job(
                 repetition_penalty=sampling_params.get("repetition_penalty"),
                 max_tokens=MAX_TOKENS,
                 max_connections=max_connections,
+                max_requests=max_requests,
                 timeout_seconds=REQUEST_TIMEOUT_SECONDS,
                 max_retries=MAX_RETRIES,
                 checkpoint_every=checkpoint_every,
@@ -173,6 +184,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--executor", choices=["local", "submitit"], default="local")
 
     parser.add_argument("--max-connections", type=int, default=32)
+    parser.add_argument(
+        "--max-requests",
+        type=int,
+        default=None,
+        help="Optional global cap on the number of pending requests to launch across all hint fractions.",
+    )
     parser.add_argument("--checkpoint-every", type=int, default=500)
 
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9)
@@ -190,6 +207,159 @@ def _build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--dry-run", type=_parse_bool, default=False)
     return parser
+
+
+def _load_hint_ids(*, benchmark: str, hint_type: str) -> list[str]:
+    path = build_hint_generation_path(
+        benchmark_name=benchmark,
+        hint_type=hint_type,
+        data_root="data",
+    )
+    rows = read_jsonl(path, model_cls=HintGenerationRecord)
+    typed_rows = [row for row in rows if isinstance(row, HintGenerationRecord)]
+    return [row.hint_id for row in typed_rows]
+
+
+def _load_hinted_rows(path: Path) -> list[HintedInferenceRecord]:
+    rows = read_jsonl(path, model_cls=HintedInferenceRecord)
+    return [row for row in rows if isinstance(row, HintedInferenceRecord)]
+
+
+def _get_together_pricing_per_million(model_name: str) -> dict[str, float]:
+    pricing = TOGETHER_SERVERLESS_PRICING_PER_MILLION.get(model_name)
+    if pricing is None:
+        raise ValueError(
+            f"Missing Together serverless pricing for model={model_name!r}. "
+            "Add it to TOGETHER_SERVERLESS_PRICING_PER_MILLION in runs/generate_hinted.py."
+        )
+    if "input" not in pricing or "output" not in pricing:
+        raise ValueError(
+            f"Incomplete Together serverless pricing for model={model_name!r}. "
+            "Expected both 'input' and 'output' prices per million tokens."
+        )
+    return pricing
+
+
+def _load_tokenizer(model_name: str) -> Any:
+    from transformers import AutoTokenizer
+
+    return AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+
+
+def _count_prompt_tokens(tokenizer: Any, prompt: str) -> int:
+    messages = [{"role": "user", "content": prompt}]
+    apply_chat_template = getattr(tokenizer, "apply_chat_template", None)
+    if callable(apply_chat_template):
+        token_ids = apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+        )
+        return len(token_ids)
+    return len(tokenizer.encode(prompt, add_special_tokens=True))
+
+
+def _estimate_together_cost_for_model(
+    *,
+    args: argparse.Namespace,
+    spec: ModelSpec,
+) -> dict[str, Any]:
+    hint_ids = _load_hint_ids(benchmark=args.benchmark, hint_type=args.hint_type)
+    hint_id_set = set(hint_ids)
+    pricing = _get_together_pricing_per_million(spec.path)
+    tokenizer = _load_tokenizer(spec.path)
+    fraction_paths = build_expanded_hinted_prompt_dataset(
+        benchmark_name=args.benchmark,
+        hint_type=args.hint_type,
+        fractioner=args.fractioner,
+        hint_fractions=HINT_FRACTIONS,
+        data_root="data",
+    )
+
+    total_pending_requests = 0
+    total_input_tokens = 0
+    total_max_output_tokens = 0
+    per_fraction: list[dict[str, Any]] = []
+    remaining_request_budget = args.max_requests
+
+    for fraction in HINT_FRACTIONS:
+        expanded_rows = read_jsonl(fraction_paths[fraction], model_cls=ExpandedHintedPromptRecord)
+        typed_expanded_rows = [row for row in expanded_rows if isinstance(row, ExpandedHintedPromptRecord)]
+        output_path = build_hinted_inference_path(
+            benchmark_name=args.benchmark,
+            model=spec.path,
+            hint_type=args.hint_type,
+            fractioner=args.fractioner,
+            hint_fraction=fraction,
+            data_root="data",
+        )
+        existing_rows = _load_hinted_rows(output_path) if output_path.exists() else []
+        completed_hint_ids = {
+            row.hint.hint_id
+            for row in existing_rows
+            if isinstance(row.hint.hint_id, str) and row.hint.hint_id
+        }
+        pending_rows = [
+            row
+            for row in typed_expanded_rows
+            if row.hint_id in hint_id_set and row.hint_id not in completed_hint_ids
+        ]
+        if remaining_request_budget is not None:
+            pending_rows = pending_rows[:remaining_request_budget]
+            remaining_request_budget -= len(pending_rows)
+        input_tokens = sum(
+            _count_prompt_tokens(tokenizer=tokenizer, prompt=row.prompt)
+            for row in pending_rows
+        )
+        max_output_tokens = len(pending_rows) * MAX_TOKENS
+
+        total_pending_requests += len(pending_rows)
+        total_input_tokens += input_tokens
+        total_max_output_tokens += max_output_tokens
+        per_fraction.append(
+            {
+                "hint_fraction": fraction,
+                "output_path": str(output_path),
+                "expanded_prompt_path": str(fraction_paths[fraction]),
+                "pending_requests": len(pending_rows),
+                "input_tokens": input_tokens,
+                "max_output_tokens": max_output_tokens,
+            }
+        )
+
+    input_cost = None
+    input_cost = (total_input_tokens / 1_000_000.0) * pricing["input"]
+    output_cost = None
+    output_cost = (total_max_output_tokens / 1_000_000.0) * pricing["output"]
+    max_total_cost = None
+    if input_cost is not None or output_cost is not None:
+        max_total_cost = (input_cost or 0.0) + (output_cost or 0.0)
+
+    return {
+        "model": spec.path,
+        "backend": args.backend,
+        "request_count": total_pending_requests,
+        "max_requests": args.max_requests,
+        "input_tokens": total_input_tokens,
+        "max_output_tokens": total_max_output_tokens,
+        "input_cost_per_million": pricing["input"],
+        "output_cost_per_million": pricing["output"],
+        "estimated_input_cost_usd": input_cost,
+        "max_output_cost_usd": output_cost,
+        "max_total_cost_usd": max_total_cost,
+        "token_count_method": "exact tokenizer count over expanded prompts for pending requests",
+        "per_fraction": per_fraction,
+    }
+
+
+def _print_dry_run_estimates(args: argparse.Namespace, models: list[ModelSpec]) -> None:
+    if args.backend != "together-serverless":
+        print("[generate_hinted] dry_run=true: exiting before launch", flush=True)
+        return
+
+    estimates = [_estimate_together_cost_for_model(args=args, spec=spec) for spec in models]
+    print("[generate_hinted] together dry-run estimate", flush=True)
+    print(json.dumps(estimates, indent=2), flush=True)
 
 
 def _apply_job_cap(models: list[ModelSpec], max_jobs: int | None) -> list[ModelSpec]:
@@ -259,6 +429,13 @@ def _load_sampling_params(models: list[ModelSpec]) -> dict[str, dict[str, Any]]:
     return {spec.path: dict(spec.sampling_params) for spec in models}
 
 
+def _validate_together_pricing(models: list[ModelSpec], *, backend: str) -> None:
+    if backend != "together-serverless":
+        return
+    for spec in models:
+        _get_together_pricing_per_million(spec.path)
+
+
 def _build_run_metadata(
     *,
     args: argparse.Namespace,
@@ -326,6 +503,7 @@ def _build_run_metadata(
             "repetition_penalty": sampling_params.get("repetition_penalty"),
             "max_tokens": MAX_TOKENS,
             "max_connections": args.max_connections,
+            "max_requests": args.max_requests,
             "timeout_seconds": REQUEST_TIMEOUT_SECONDS,
             "max_retries": MAX_RETRIES,
             "checkpoint_every": args.checkpoint_every,
@@ -403,6 +581,7 @@ def _run_local(
             sampling_params=sampling_params,
             run_metadata=run_metadata,
             max_connections=args.max_connections,
+            max_requests=args.max_requests,
             checkpoint_every=args.checkpoint_every,
             gpu_memory_utilization=args.gpu_memory_utilization,
             dtype=args.dtype,
@@ -470,6 +649,7 @@ def _run_submitit(
             sampling_params=sampling_params,
             run_metadata=run_metadata,
             max_connections=args.max_connections,
+            max_requests=args.max_requests,
             checkpoint_every=args.checkpoint_every,
             gpu_memory_utilization=args.gpu_memory_utilization,
             dtype=args.dtype,
@@ -487,11 +667,12 @@ def main() -> None:
 
     models = _selected_models(args.model)
     models = _apply_job_cap(models, args.max_jobs)
+    _validate_together_pricing(models, backend=args.backend)
     sampling_params_by_model = _load_sampling_params(models)
     _print_plan(args, models)
 
     if args.dry_run:
-        print("[generate_hinted] dry_run=true: exiting before launch", flush=True)
+        _print_dry_run_estimates(args, models)
         return
 
     if args.executor == "local":
@@ -550,4 +731,20 @@ python -m runs.generate_hinted \
     --executor local \
     --build-only true
 
+
+TOGETHER
+python -m runs.generate_hinted \
+    --benchmark aime2025_2026 \
+    --hint-type answer_not_revealed \
+    --fractioner mask_word \
+    --model Qwen/Qwen3.5-397B-A17B \
+    --max-connections 48 \
+    --checkpoint-every 1000 \
+    --backend together-serverless \
+    --dry-run true
+
+
+"max_total_cost_usd": 128.26805549999997, (for openai/gpt-oss-120b)
+"max_total_cost_usd": 42.7560185, (for openai/gpt-oss-20b)
+(for Qwen/Qwen3.5-397B-A17B)
 """

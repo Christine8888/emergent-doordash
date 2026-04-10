@@ -181,6 +181,47 @@ def _extract_completion_text(response: dict[str, Any]) -> str:
     return ""
 
 
+def _extract_reasoning_text(response: dict[str, Any]) -> str | None:
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    first = choices[0]
+    if not isinstance(first, dict):
+        return None
+
+    message = first.get("message")
+    if not isinstance(message, dict):
+        return None
+
+    reasoning = message.get("reasoning")
+    if isinstance(reasoning, str):
+        return reasoning
+    if isinstance(reasoning, list):
+        parts: list[str] = []
+        for part in reasoning:
+            if not isinstance(part, dict):
+                continue
+            text = part.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+        if parts:
+            return "".join(parts)
+
+    content = message.get("content")
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "reasoning_text":
+                text = part.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        if parts:
+            return "".join(parts)
+    return None
+
+
 def _vllm_chat_completion(
     *,
     chat_completions_url: str,
@@ -925,6 +966,7 @@ async def _run_all_candidates(
             input_token_count = 0
             output_token_count = 0
             stop_reason: str | None = None
+            reasoning_text: str | None = None
             graders: list[GraderResult]
             is_error = False
             error_text: str | None = None
@@ -947,6 +989,7 @@ async def _run_all_candidates(
                         repetition_penalty=repetition_penalty,
                     )
                     model_output = _extract_completion_text(response)
+                    reasoning_text = _extract_reasoning_text(response)
                     usage = response.get("usage") if isinstance(response, dict) else None
                     input_token_count = _safe_usage_tokens(usage, "prompt_tokens", "input_tokens")
                     output_token_count = _safe_usage_tokens(
@@ -1000,6 +1043,7 @@ async def _run_all_candidates(
                 "input_token_count": input_token_count,
                 "output_token_count": output_token_count,
                 "stop_reason": stop_reason,
+                "reasoning_text": reasoning_text,
                 "is_error": is_error,
                 "error_text": error_text,
                 "attempts": attempts,
@@ -1043,6 +1087,7 @@ async def _run_all_candidates(
                 input_token_count = int(result["input_token_count"])
                 output_token_count = int(result["output_token_count"])
                 stop_reason = result["stop_reason"]
+                reasoning_text = result["reasoning_text"]
                 is_error = bool(result["is_error"])
                 error_text = result["error_text"]
                 attempts = int(result["attempts"])
@@ -1093,6 +1138,7 @@ async def _run_all_candidates(
                         "provider_model_id": model,
                         "fraction_metadata": fraction_meta,
                         "stop_reason": stop_reason,
+                        "provider_reasoning": reasoning_text,
                         "host": host,
                         "pid": pid,
                         "slurm_job_id": slurm_job_id,
@@ -1249,6 +1295,7 @@ def run_hinted_inference(
     repetition_penalty: float | None = None,
     max_tokens: int = 32768,
     max_connections: int = 32,
+    max_requests: int | None = None,
     timeout_seconds: int = 3600,
     max_retries: int = 2,
     checkpoint_every: int = 25,
@@ -1261,6 +1308,8 @@ def run_hinted_inference(
         raise ValueError("checkpoint_every must be >= 1")
     if max_connections < 1:
         raise ValueError("max_connections must be >= 1")
+    if max_requests is not None and max_requests < 1:
+        raise ValueError("max_requests must be >= 1")
     if timeout_seconds < 1:
         raise ValueError("timeout_seconds must be >= 1")
     if max_retries < 0:
@@ -1307,8 +1356,10 @@ def run_hinted_inference(
         },
     }
     effective_run_metadata["build_only"] = build_only
+    effective_run_metadata["max_requests"] = max_requests
 
     states: list[FractionRunState] = []
+    remaining_request_budget = max_requests
     for hint_fraction in normalized_fractions:
         output_path = build_hinted_inference_path(
             benchmark_name=benchmark_name,
@@ -1321,9 +1372,13 @@ def run_hinted_inference(
         ckpt_path = _checkpoint_path_for_output(output_path)
         existing_ids = _read_existing_inference_ids(output_path)
         candidates = candidates_by_fraction[hint_fraction]
-        pending_candidates = [
+        full_pending_candidates = [
             candidate for candidate in candidates if candidate.inference_id not in existing_ids
         ]
+        pending_candidates = full_pending_candidates
+        if remaining_request_budget is not None:
+            pending_candidates = full_pending_candidates[:remaining_request_budget]
+            remaining_request_budget -= len(pending_candidates)
         state = FractionRunState(
             hint_fraction=hint_fraction,
             expanded_prompt_path=fraction_paths[hint_fraction],
@@ -1331,7 +1386,7 @@ def run_hinted_inference(
             ckpt_path=ckpt_path,
             total_candidates=len(candidates),
             existing_records=len(existing_ids),
-            skipped_existing=len(candidates) - len(pending_candidates),
+            skipped_existing=len(candidates) - len(full_pending_candidates),
             pending_candidates=pending_candidates,
         )
         _save_fraction_checkpoint(
@@ -1348,6 +1403,13 @@ def run_hinted_inference(
             print(
                 f"[hinted_inference] fraction={hint_fraction} model={model} "
                 f"skip(all existing) total={len(candidates)} output={output_path}",
+                flush=True,
+            )
+        elif len(pending_candidates) != len(full_pending_candidates):
+            print(
+                f"[hinted_inference] fraction={hint_fraction} model={model} "
+                f"limited pending={len(pending_candidates)}/{len(full_pending_candidates)} "
+                f"max_requests={max_requests}",
                 flush=True,
             )
         states.append(state)
