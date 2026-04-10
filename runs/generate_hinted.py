@@ -486,10 +486,10 @@ python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner truncate_word \
-    --model meta-llama/Llama-3.1-70B-Instruct \
+    --model google/gemma-3-27b-it \
     --executor submitit \
     --cluster miso \
-    --max-connections 400 \
+    --max-connections 260 \
     --num-gpus 8 \
     --checkpoint-every 1000
 
@@ -497,6 +497,8 @@ python -m runs.generate_hinted \
 ^ 260 is too much for Qwen3-32B but good for 14B
 ^260 is not enough for gemma 12B
 
+Qwen/Qwen2.5-32B-Instruct
+Qwen/Qwen2.5-14B-Instruct
 
 NLP
 python -m runs.generate_hinted \

@@ -106,6 +106,50 @@ def _discover_fraction_files(
     return sorted(out, key=lambda pair: pair[0])
 
 
+def _checkpoint_path_for_fraction(path: Path) -> Path:
+    if path.suffix != ".jsonl":
+        raise ValueError(f"Expected .jsonl path, got: {path}")
+    return path.with_suffix(".ckpt.json")
+
+
+def _is_complete_fraction(path: Path) -> tuple[bool, str | None]:
+    ckpt_path = _checkpoint_path_for_fraction(path)
+    if not ckpt_path.exists():
+        return False, f"missing checkpoint {ckpt_path}"
+
+    try:
+        with open(ckpt_path, "r", encoding="utf-8") as f:
+            ckpt = json.load(f)
+    except Exception as exc:
+        return False, f"failed to read checkpoint {ckpt_path}: {exc}"
+
+    if not isinstance(ckpt, dict):
+        return False, f"invalid checkpoint payload {ckpt_path}"
+
+    total_candidates = ckpt.get("total_candidates")
+    processed_this_run = ckpt.get("processed_this_run")
+    skipped_existing = ckpt.get("skipped_existing")
+    remaining = ckpt.get("remaining")
+
+    if not isinstance(total_candidates, int) or total_candidates < 0:
+        return False, f"invalid total_candidates in {ckpt_path}"
+    if not isinstance(processed_this_run, int) or processed_this_run < 0:
+        return False, f"invalid processed_this_run in {ckpt_path}"
+    if not isinstance(skipped_existing, int) or skipped_existing < 0:
+        return False, f"invalid skipped_existing in {ckpt_path}"
+    if not isinstance(remaining, int) or remaining < 0:
+        return False, f"invalid remaining in {ckpt_path}"
+
+    completed_total = processed_this_run + skipped_existing
+    if remaining != 0:
+        return False, f"remaining={remaining}"
+    if completed_total < total_candidates:
+        return False, (
+            f"incomplete completed_total={completed_total} total_candidates={total_candidates}"
+        )
+    return True, None
+
+
 def _discover_fractioners(
     *,
     benchmark: str,
@@ -413,20 +457,32 @@ def main() -> None:
 
             fraction_rows: list[dict[str, Any]] = []
             usable = False
-
-            if args.fractioner is None:
-                by_fraction = {float(f"{frac:.6f}"): path for frac, path in fraction_files}
-                available_fraction_set = set(by_fraction.keys())
-                missing = sorted(expected_fraction_set - available_fraction_set)
-                if missing:
-                    print(
-                        f"[plot_hinted_accuracy_vs_hint][WARN] skipping incomplete fractioner "
-                        f"model={model} fractioner={fractioner} missing_fractions={missing}"
+            complete_fraction_files: list[tuple[float, Path]] = []
+            incomplete_fraction_reasons: list[str] = []
+            for hint_fraction, path in fraction_files:
+                is_complete, reason = _is_complete_fraction(path)
+                if is_complete:
+                    complete_fraction_files.append((float(hint_fraction), path))
+                else:
+                    incomplete_fraction_reasons.append(
+                        f"{float(hint_fraction):.1f}:{reason or 'incomplete'}"
                     )
-                    continue
-                fractions_to_use = [(float(h), by_fraction[float(f"{h:.6f}")]) for h in EXPECTED_FRACTIONS]
-            else:
-                fractions_to_use = [(float(hint_fraction), path) for hint_fraction, path in fraction_files]
+
+            by_fraction = {
+                float(f"{frac:.6f}"): path for frac, path in complete_fraction_files
+            }
+            available_fraction_set = set(by_fraction.keys())
+            missing = sorted(expected_fraction_set - available_fraction_set)
+            if missing:
+                print(
+                    f"[plot_hinted_accuracy_vs_hint][WARN] skipping incomplete fractioner "
+                    f"model={model} fractioner={fractioner} missing_fractions={missing} "
+                    f"incomplete_points={incomplete_fraction_reasons}"
+                )
+                continue
+            fractions_to_use = [
+                (float(h), by_fraction[float(f"{h:.6f}")]) for h in EXPECTED_FRACTIONS
+            ]
 
             for hint_fraction, path in fractions_to_use:
                 stats = _collect_stats_for_fraction(path=path, rng=rng)
