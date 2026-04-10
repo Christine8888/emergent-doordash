@@ -494,6 +494,8 @@ python -m runs.generate_hinted \
     --checkpoint-every 1000
 
 ^260 works well, 400 untested
+^ 260 is too much for Qwen3-32B but good for 14B
+^260 is not enough for gemma 12B
 
 
 NLP

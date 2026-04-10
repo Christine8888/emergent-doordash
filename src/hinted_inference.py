@@ -625,7 +625,7 @@ def _parse_prometheus_value(text: str, metric_names: list[str], *, is_counter: b
 
 
 def _read_vllm_metrics(metrics_url: str) -> dict[str, float | None] | None:
-    gen_names = ["vllm:generation_tokens_total", "vllm_generation_tokens_total"]
+    out_names = ["vllm:generation_tokens_total", "vllm_generation_tokens_total"]
     prompt_names = ["vllm:prompt_tokens_total", "vllm_prompt_tokens_total"]
     running_names = ["vllm:num_requests_running", "vllm_num_requests_running"]
     waiting_names = ["vllm:num_requests_waiting", "vllm_num_requests_waiting"]
@@ -635,11 +635,20 @@ def _read_vllm_metrics(metrics_url: str) -> dict[str, float | None] | None:
     except (urllib.error.URLError, TimeoutError, ValueError):
         return None
     return {
-        "gen_tokens_total": _parse_prometheus_value(text, gen_names, is_counter=True),
+        "out_tokens_total": _parse_prometheus_value(text, out_names, is_counter=True),
         "prompt_tokens_total": _parse_prometheus_value(text, prompt_names, is_counter=True),
         "running": _parse_prometheus_value(text, running_names, is_counter=False),
         "waiting": _parse_prometheus_value(text, waiting_names, is_counter=False),
     }
+
+
+def _format_eta_seconds(seconds: float) -> str:
+    total_seconds = max(0, int(round(seconds)))
+    hours, rem = divmod(total_seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours > 0:
+        return f"{hours:d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
 
 
 def _save_fraction_checkpoint(
@@ -737,19 +746,27 @@ async def _run_all_candidates(
         flush=True,
     )
     progress = (
-        tqdm(total=total_pending, desc=f"{model} hinted", leave=True, file=sys.stdout)
+        tqdm(
+            total=total_pending,
+            desc=f"{model} hinted",
+            leave=True,
+            file=sys.stdout,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}{postfix}]",
+        )
         if tqdm is not None
         else None
     )
     last_metrics_poll = 0.0
     metrics_poll_interval_seconds = 1.0
-    prev_metrics_gen_tokens: float | None = None
+    prev_metrics_out_tokens: float | None = None
     prev_metrics_prompt_tokens: float | None = None
     prev_metrics_time: float | None = None
-    latest_gen_tps: float | None = None
+    latest_out_tps: float | None = None
     latest_prompt_tps: float | None = None
     latest_waiting: float | None = None
     latest_running: float | None = None
+    smoothed_eta_seconds: float | None = None
+    eta_ewma_alpha = 0.2
 
     vllm_base_url = os.environ.get("VLLM_BASE_URL")
     if not vllm_base_url:
@@ -766,6 +783,7 @@ async def _run_all_candidates(
 
     global_processed = 0
     global_retry_count = 0
+    global_input_tokens = 0
     global_output_tokens = 0
 
     semaphore = asyncio.Semaphore(max_connections)
@@ -967,6 +985,7 @@ async def _run_all_candidates(
             state.total_input_tokens += input_token_count
             state.total_output_tokens += output_token_count
             global_processed += 1
+            global_input_tokens += input_token_count
             global_output_tokens += output_token_count
 
             now = time.monotonic()
@@ -976,16 +995,16 @@ async def _run_all_candidates(
                 if snapshot is not None:
                     latest_waiting = snapshot.get("waiting")
                     latest_running = snapshot.get("running")
-                    gen_tokens = snapshot.get("gen_tokens_total")
+                    out_tokens = snapshot.get("out_tokens_total")
                     prompt_tokens = snapshot.get("prompt_tokens_total")
                     if (
-                        isinstance(gen_tokens, (float, int))
-                        and prev_metrics_gen_tokens is not None
+                        isinstance(out_tokens, (float, int))
+                        and prev_metrics_out_tokens is not None
                         and prev_metrics_time is not None
                     ):
                         dt = now - prev_metrics_time
                         if dt > 0:
-                            latest_gen_tps = (float(gen_tokens) - prev_metrics_gen_tokens) / dt
+                            latest_out_tps = (float(out_tokens) - prev_metrics_out_tokens) / dt
                             if (
                                 isinstance(prompt_tokens, (float, int))
                                 and prev_metrics_prompt_tokens is not None
@@ -993,23 +1012,46 @@ async def _run_all_candidates(
                                 latest_prompt_tps = (
                                     float(prompt_tokens) - prev_metrics_prompt_tokens
                                 ) / dt
-                    if isinstance(gen_tokens, (float, int)):
-                        prev_metrics_gen_tokens = float(gen_tokens)
+                    if isinstance(out_tokens, (float, int)):
+                        prev_metrics_out_tokens = float(out_tokens)
                     if isinstance(prompt_tokens, (float, int)):
                         prev_metrics_prompt_tokens = float(prompt_tokens)
                     prev_metrics_time = now
 
-            elapsed_seconds = max(0.001, time.monotonic() - started_at)
-            overall_output_tps = global_output_tokens / elapsed_seconds
             remaining_total = total_pending - global_processed
+            eta_seconds: float | None = None
+            if (
+                global_processed > 0
+                and remaining_total > 0
+                and latest_out_tps is not None
+                and latest_prompt_tps is not None
+                and latest_out_tps > 0
+                and latest_prompt_tps > 0
+            ):
+                avg_input_tokens = global_input_tokens / global_processed
+                avg_output_tokens = global_output_tokens / global_processed
+                remaining_prompt_tokens = remaining_total * avg_input_tokens
+                remaining_output_tokens = remaining_total * avg_output_tokens
+                eta_seconds = (
+                    remaining_prompt_tokens / latest_prompt_tps
+                    + remaining_output_tokens / latest_out_tps
+                )
+                if smoothed_eta_seconds is None:
+                    smoothed_eta_seconds = eta_seconds
+                else:
+                    smoothed_eta_seconds = (
+                        eta_ewma_alpha * eta_seconds
+                        + (1.0 - eta_ewma_alpha) * smoothed_eta_seconds
+                    )
+            elif remaining_total == 0:
+                smoothed_eta_seconds = 0.0
 
             if progress is not None:
-                postfix: dict[str, Any] = {
-                    "retry": global_retry_count,
-                    "out_tok/s": f"{overall_output_tps:.1f}",
-                }
-                if latest_gen_tps is not None:
-                    postfix["gen_tok/s"] = f"{latest_gen_tps:.1f}"
+                postfix: dict[str, Any] = {"retry": global_retry_count}
+                if smoothed_eta_seconds is not None:
+                    postfix["eta"] = _format_eta_seconds(smoothed_eta_seconds)
+                if latest_out_tps is not None:
+                    postfix["out_tok/s"] = f"{latest_out_tps:.1f}"
                 if latest_prompt_tps is not None:
                     postfix["prompt_tok/s"] = f"{latest_prompt_tps:.1f}"
                 if latest_running is not None:
@@ -1019,12 +1061,26 @@ async def _run_all_candidates(
                 progress.update(1)
                 progress.set_postfix(postfix)
             else:
+                status_parts = [
+                    f"[hinted_inference] processed={global_processed}/{total_pending}",
+                    f"retry={global_retry_count}",
+                ]
+                if smoothed_eta_seconds is not None:
+                    status_parts.append(f"eta={_format_eta_seconds(smoothed_eta_seconds)}")
+                if latest_out_tps is not None:
+                    status_parts.append(f"out_tok/s={latest_out_tps:.1f}")
+                if latest_prompt_tps is not None:
+                    status_parts.append(f"prompt_tok/s={latest_prompt_tps:.1f}")
+                if latest_running is not None:
+                    status_parts.append(f"running={int(latest_running)}")
+                if latest_waiting is not None:
+                    status_parts.append(f"waiting={int(latest_waiting)}")
                 print(
-                    f"[hinted_inference] processed={global_processed}/{total_pending} "
-                    f"retry={global_retry_count} out_tok/s={overall_output_tps:.1f}",
+                    " ".join(status_parts),
                     flush=True,
                 )
 
+            elapsed_seconds = max(0.001, time.monotonic() - started_at)
             if global_processed % checkpoint_every == 0 or remaining_total == 0:
                 for checkpoint_state in states:
                     _save_fraction_checkpoint(
