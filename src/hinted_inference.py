@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import socket
@@ -12,6 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from src.datasets import Problem, get_dataset_spec
 from src.hint_fractioners import fraction_hint
@@ -30,6 +33,18 @@ from src.types import (
     HintGenerationRecord,
     HintedInferenceRecord,
 )
+
+
+def _load_project_env() -> None:
+    try:
+        from dotenv import load_dotenv
+    except Exception:
+        return
+    project_root = Path(__file__).resolve().parents[1]
+    load_dotenv(project_root / ".env")
+
+
+_load_project_env()
 
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -223,6 +238,67 @@ def _vllm_chat_completion(
         raise RuntimeError(f"Failed to parse vLLM response as JSON: {body[:800]}") from exc
     if not isinstance(parsed, dict):
         raise RuntimeError(f"Unexpected vLLM response type: {type(parsed).__name__}")
+    return parsed
+
+
+async def _chat_completion_request(
+    *,
+    client: httpx.AsyncClient,
+    chat_completions_url: str,
+    api_key: str | None,
+    model: str,
+    prompt: str,
+    max_tokens: int,
+    do_sample: bool | None,
+    temperature: float | None,
+    top_p: float | None,
+    top_k: int | None,
+    repetition_penalty: float | None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+    }
+    if do_sample is False:
+        payload["temperature"] = 0.0
+        payload["top_p"] = 1.0
+    else:
+        if temperature is not None:
+            payload["temperature"] = temperature
+        if top_p is not None:
+            payload["top_p"] = top_p
+    if top_k is not None:
+        payload["top_k"] = top_k
+    if repetition_penalty is not None:
+        payload["repetition_penalty"] = repetition_penalty
+
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        response = await client.post(
+            chat_completions_url,
+            json=payload,
+            headers=headers,
+        )
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise RuntimeError(
+            f"HTTP {exc.response.status_code} from chat completions: {exc.response.text[:800]}"
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise RuntimeError(f"chat completions request failed: {exc}") from exc
+
+    try:
+        parsed = response.json()
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Failed to parse chat completions response as JSON: {response.text[:800]}"
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise RuntimeError(f"Unexpected chat completions response type: {type(parsed).__name__}")
     return parsed
 
 
@@ -439,6 +515,16 @@ class FractionRunState:
     total_input_tokens: int = 0
     total_output_tokens: int = 0
     last_inference_id: str | None = None
+
+
+@dataclass(frozen=True)
+class InferenceBackendConfig:
+    backend_label: str
+    provider_label: str
+    chat_completions_url: str
+    api_key: str | None
+    metrics_url: str | None
+    base_url: str
 
 
 def _build_expanded_prompt_records_for_fraction(
@@ -704,6 +790,42 @@ def _to_fraction_summary(state: FractionRunState, *, elapsed_seconds: float) -> 
     )
 
 
+def _resolve_backend_config(
+    *,
+    backend: str,
+    vllm_metrics_url: str | None,
+) -> InferenceBackendConfig:
+    if backend == "local-vllm":
+        vllm_base_url = os.environ.get("VLLM_BASE_URL")
+        if not vllm_base_url:
+            raise RuntimeError(
+                "VLLM_BASE_URL is required for local-vllm hinted inference. "
+                "Expected format like http://localhost:8000/v1"
+            )
+        return InferenceBackendConfig(
+            backend_label="local_vllm",
+            provider_label="vllm_openai_compat",
+            chat_completions_url=f"{vllm_base_url.rstrip('/')}/chat/completions",
+            api_key=os.environ.get("VLLM_API_KEY") or os.environ.get("OPENAI_API_KEY"),
+            metrics_url=vllm_metrics_url,
+            base_url=vllm_base_url,
+        )
+    if backend == "together-serverless":
+        api_key = os.environ.get("TOGETHER_API_KEY")
+        if not api_key:
+            raise RuntimeError("TOGETHER_API_KEY is required for together-serverless hinted inference.")
+        base_url = "https://api.together.xyz/v1"
+        return InferenceBackendConfig(
+            backend_label="together_serverless",
+            provider_label="together_openai_compat",
+            chat_completions_url=f"{base_url}/chat/completions",
+            api_key=api_key,
+            metrics_url=None,
+            base_url=base_url,
+        )
+    raise ValueError(f"Unsupported backend: {backend!r}")
+
+
 async def _run_all_candidates(
     *,
     benchmark_name: str,
@@ -722,6 +844,7 @@ async def _run_all_candidates(
     timeout_seconds: int,
     max_retries: int,
     vllm_metrics_url: str | None,
+    backend: str,
     run_id: str,
     checkpoint_every: int,
     run_metadata: dict[str, Any] | None = None,
@@ -768,14 +891,10 @@ async def _run_all_candidates(
     smoothed_eta_seconds: float | None = None
     eta_ewma_alpha = 0.2
 
-    vllm_base_url = os.environ.get("VLLM_BASE_URL")
-    if not vllm_base_url:
-        raise RuntimeError(
-            "VLLM_BASE_URL is required for hinted inference. "
-            "Expected format like http://localhost:8000/v1"
-        )
-    chat_completions_url = f"{vllm_base_url.rstrip('/')}/chat/completions"
-    api_key = os.environ.get("VLLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    backend_config = _resolve_backend_config(
+        backend=backend,
+        vllm_metrics_url=vllm_metrics_url,
+    )
 
     host = socket.gethostname()
     pid = os.getpid()
@@ -787,6 +906,13 @@ async def _run_all_candidates(
     global_output_tokens = 0
 
     semaphore = asyncio.Semaphore(max_connections)
+    client = httpx.AsyncClient(
+        timeout=httpx.Timeout(timeout_seconds + 5, connect=min(timeout_seconds, 30)),
+        limits=httpx.Limits(
+            max_connections=max_connections,
+            max_keepalive_connections=max_connections,
+        ),
+    )
 
     async def _generate_one(
         item_state: FractionRunState, item_candidate: PromptCandidate
@@ -807,22 +933,18 @@ async def _run_all_candidates(
             for attempt_idx in range(max_retries + 1):
                 attempts = attempt_idx + 1
                 try:
-                    response = await asyncio.wait_for(
-                        asyncio.to_thread(
-                            _vllm_chat_completion,
-                            chat_completions_url=chat_completions_url,
-                            api_key=api_key,
-                            model=model,
-                            prompt=prompt,
-                            max_tokens=max_tokens,
-                            do_sample=do_sample,
-                            temperature=temperature,
-                            top_p=top_p,
-                            top_k=top_k,
-                            repetition_penalty=repetition_penalty,
-                            timeout_seconds=timeout_seconds,
-                        ),
-                        timeout=timeout_seconds + 5,
+                    response = await _chat_completion_request(
+                        client=client,
+                        chat_completions_url=backend_config.chat_completions_url,
+                        api_key=backend_config.api_key,
+                        model=model,
+                        prompt=prompt,
+                        max_tokens=max_tokens,
+                        do_sample=do_sample,
+                        temperature=temperature,
+                        top_p=top_p,
+                        top_k=top_k,
+                        repetition_penalty=repetition_penalty,
                     )
                     model_output = _extract_completion_text(response)
                     usage = response.get("usage") if isinstance(response, dict) else None
@@ -900,208 +1022,215 @@ async def _run_all_candidates(
     for _ in range(initial):
         _enqueue_next()
 
-    while pending_tasks:
-        done, pending_tasks = await asyncio.wait(
-            pending_tasks, return_when=asyncio.FIRST_COMPLETED
-        )
-
-        for task in done:
-            result = task.result()
-            state = result["state"]
-            candidate = result["candidate"]
-            hint = candidate.hint
-            inference_id = candidate.inference_id
-            state.last_inference_id = inference_id
-            hint_fraction = state.hint_fraction
-            fraction_meta = candidate.fraction_metadata
-            hint_text_used = candidate.hint_text_used
-
-            model_output = str(result["model_output"])
-            input_token_count = int(result["input_token_count"])
-            output_token_count = int(result["output_token_count"])
-            stop_reason = result["stop_reason"]
-            is_error = bool(result["is_error"])
-            error_text = result["error_text"]
-            attempts = int(result["attempts"])
-            retries_used = int(result["retries_used"])
-            graders = result["graders"]
-
-            state.retry_count += retries_used
-            global_retry_count += retries_used
-            if is_error:
-                state.written_error += 1
-            else:
-                state.written_success += 1
-
-            record = HintedInferenceRecord(
-                inference_id=inference_id,
-                problem_id=hint.problem_id,
-                benchmark_name=benchmark_name,
-                model=model,
-                hint_type=hint.hint_type,
-                fractioner=fractioner,
-                hint_fraction=hint_fraction,
-                hint_text_used=hint_text_used,
-                model_output=model_output,
-                input_token_count=input_token_count,
-                output_token_count=output_token_count,
-                cost=0.0,
-                is_error=is_error,
-                graders=graders,
-                hint=hint,
-                metadata={
-                    "run_id": run_id,
-                    "backend": "vllm_openai_compat",
-                    "prompt_version": "hinted_inference_v1",
-                    "prompt_id": candidate.prompt_id,
-                    "expanded_prompt_path": str(state.expanded_prompt_path),
-                    "prompt": candidate.prompt,
-                    "do_sample": do_sample,
-                    "temperature": temperature,
-                    "top_p": top_p,
-                    "top_k": top_k,
-                    "repetition_penalty": repetition_penalty,
-                    "max_tokens": max_tokens,
-                    "max_connections": max_connections,
-                    "timeout_seconds": timeout_seconds,
-                    "vllm_base_url": vllm_base_url,
-                    "vllm_metrics_url": vllm_metrics_url,
-                    "fraction_metadata": fraction_meta,
-                    "stop_reason": stop_reason,
-                    "host": host,
-                    "pid": pid,
-                    "slurm_job_id": slurm_job_id,
-                    "error": error_text,
-                    "attempts": attempts,
-                    "max_retries": max_retries,
-                    "retries_used": retries_used,
-                    "answer_extractor": "last_boxed_expression",
-                    "run_metadata": run_metadata,
-                },
+    try:
+        while pending_tasks:
+            done, pending_tasks = await asyncio.wait(
+                pending_tasks, return_when=asyncio.FIRST_COMPLETED
             )
-            append_jsonl(state.output_path, record)
 
-            state.processed_this_run += 1
-            state.total_input_tokens += input_token_count
-            state.total_output_tokens += output_token_count
-            global_processed += 1
-            global_input_tokens += input_token_count
-            global_output_tokens += output_token_count
+            for task in done:
+                result = task.result()
+                state = result["state"]
+                candidate = result["candidate"]
+                hint = candidate.hint
+                inference_id = candidate.inference_id
+                state.last_inference_id = inference_id
+                hint_fraction = state.hint_fraction
+                fraction_meta = candidate.fraction_metadata
+                hint_text_used = candidate.hint_text_used
 
-            now = time.monotonic()
-            if vllm_metrics_url and (now - last_metrics_poll >= metrics_poll_interval_seconds):
-                last_metrics_poll = now
-                snapshot = _read_vllm_metrics(vllm_metrics_url)
-                if snapshot is not None:
-                    latest_waiting = snapshot.get("waiting")
-                    latest_running = snapshot.get("running")
-                    out_tokens = snapshot.get("out_tokens_total")
-                    prompt_tokens = snapshot.get("prompt_tokens_total")
-                    if (
-                        isinstance(out_tokens, (float, int))
-                        and prev_metrics_out_tokens is not None
-                        and prev_metrics_time is not None
-                    ):
-                        dt = now - prev_metrics_time
-                        if dt > 0:
-                            latest_out_tps = (float(out_tokens) - prev_metrics_out_tokens) / dt
-                            if (
-                                isinstance(prompt_tokens, (float, int))
-                                and prev_metrics_prompt_tokens is not None
-                            ):
-                                latest_prompt_tps = (
-                                    float(prompt_tokens) - prev_metrics_prompt_tokens
-                                ) / dt
-                    if isinstance(out_tokens, (float, int)):
-                        prev_metrics_out_tokens = float(out_tokens)
-                    if isinstance(prompt_tokens, (float, int)):
-                        prev_metrics_prompt_tokens = float(prompt_tokens)
-                    prev_metrics_time = now
+                model_output = str(result["model_output"])
+                input_token_count = int(result["input_token_count"])
+                output_token_count = int(result["output_token_count"])
+                stop_reason = result["stop_reason"]
+                is_error = bool(result["is_error"])
+                error_text = result["error_text"]
+                attempts = int(result["attempts"])
+                retries_used = int(result["retries_used"])
+                graders = result["graders"]
 
-            remaining_total = total_pending - global_processed
-            eta_seconds: float | None = None
-            if (
-                global_processed > 0
-                and remaining_total > 0
-                and latest_out_tps is not None
-                and latest_prompt_tps is not None
-                and latest_out_tps > 0
-                and latest_prompt_tps > 0
-            ):
-                avg_input_tokens = global_input_tokens / global_processed
-                avg_output_tokens = global_output_tokens / global_processed
-                remaining_prompt_tokens = remaining_total * avg_input_tokens
-                remaining_output_tokens = remaining_total * avg_output_tokens
-                eta_seconds = (
-                    remaining_prompt_tokens / latest_prompt_tps
-                    + remaining_output_tokens / latest_out_tps
-                )
-                if smoothed_eta_seconds is None:
-                    smoothed_eta_seconds = eta_seconds
+                state.retry_count += retries_used
+                global_retry_count += retries_used
+                if is_error:
+                    state.written_error += 1
                 else:
-                    smoothed_eta_seconds = (
-                        eta_ewma_alpha * eta_seconds
-                        + (1.0 - eta_ewma_alpha) * smoothed_eta_seconds
-                    )
-            elif remaining_total == 0:
-                smoothed_eta_seconds = 0.0
+                    state.written_success += 1
 
-            if progress is not None:
-                postfix: dict[str, Any] = {"retry": global_retry_count}
-                if smoothed_eta_seconds is not None:
-                    postfix["eta"] = _format_eta_seconds(smoothed_eta_seconds)
-                if latest_out_tps is not None:
-                    postfix["out_tok/s"] = f"{latest_out_tps:.1f}"
-                if latest_prompt_tps is not None:
-                    postfix["prompt_tok/s"] = f"{latest_prompt_tps:.1f}"
-                if latest_running is not None:
-                    postfix["running"] = int(latest_running)
-                if latest_waiting is not None:
-                    postfix["waiting"] = int(latest_waiting)
-                progress.update(1)
-                progress.set_postfix(postfix)
-            else:
-                status_parts = [
-                    f"[hinted_inference] processed={global_processed}/{total_pending}",
-                    f"retry={global_retry_count}",
-                ]
-                if smoothed_eta_seconds is not None:
-                    status_parts.append(f"eta={_format_eta_seconds(smoothed_eta_seconds)}")
-                if latest_out_tps is not None:
-                    status_parts.append(f"out_tok/s={latest_out_tps:.1f}")
-                if latest_prompt_tps is not None:
-                    status_parts.append(f"prompt_tok/s={latest_prompt_tps:.1f}")
-                if latest_running is not None:
-                    status_parts.append(f"running={int(latest_running)}")
-                if latest_waiting is not None:
-                    status_parts.append(f"waiting={int(latest_waiting)}")
-                print(
-                    " ".join(status_parts),
-                    flush=True,
+                record = HintedInferenceRecord(
+                    inference_id=inference_id,
+                    problem_id=hint.problem_id,
+                    benchmark_name=benchmark_name,
+                    model=model,
+                    hint_type=hint.hint_type,
+                    fractioner=fractioner,
+                    hint_fraction=hint_fraction,
+                    hint_text_used=hint_text_used,
+                    model_output=model_output,
+                    input_token_count=input_token_count,
+                    output_token_count=output_token_count,
+                    cost=0.0,
+                    is_error=is_error,
+                    graders=graders,
+                    hint=hint,
+                    metadata={
+                        "run_id": run_id,
+                        "backend": backend_config.backend_label,
+                        "prompt_version": "hinted_inference_v1",
+                        "prompt_id": candidate.prompt_id,
+                        "expanded_prompt_path": str(state.expanded_prompt_path),
+                        "prompt": candidate.prompt,
+                        "do_sample": do_sample,
+                        "temperature": temperature,
+                        "top_p": top_p,
+                        "top_k": top_k,
+                        "repetition_penalty": repetition_penalty,
+                        "max_tokens": max_tokens,
+                        "max_connections": max_connections,
+                        "timeout_seconds": timeout_seconds,
+                        "provider": backend_config.provider_label,
+                        "provider_base_url": backend_config.base_url,
+                        "provider_metrics_url": backend_config.metrics_url,
+                        "provider_model_id": model,
+                        "fraction_metadata": fraction_meta,
+                        "stop_reason": stop_reason,
+                        "host": host,
+                        "pid": pid,
+                        "slurm_job_id": slurm_job_id,
+                        "error": error_text,
+                        "attempts": attempts,
+                        "max_retries": max_retries,
+                        "retries_used": retries_used,
+                        "answer_extractor": "last_boxed_expression",
+                        "run_metadata": run_metadata,
+                    },
                 )
+                append_jsonl(state.output_path, record)
 
-            elapsed_seconds = max(0.001, time.monotonic() - started_at)
-            if global_processed % checkpoint_every == 0 or remaining_total == 0:
-                for checkpoint_state in states:
-                    _save_fraction_checkpoint(
-                        state=checkpoint_state,
-                        benchmark_name=benchmark_name,
-                        model=model,
-                        hint_type=hint_type,
-                        fractioner=fractioner,
-                        run_id=run_id,
-                        run_metadata=run_metadata,
-                        elapsed_seconds=elapsed_seconds,
+                state.processed_this_run += 1
+                state.total_input_tokens += input_token_count
+                state.total_output_tokens += output_token_count
+                global_processed += 1
+                global_input_tokens += input_token_count
+                global_output_tokens += output_token_count
+
+                now = time.monotonic()
+                if backend_config.metrics_url and (now - last_metrics_poll >= metrics_poll_interval_seconds):
+                    last_metrics_poll = now
+                    snapshot = _read_vllm_metrics(backend_config.metrics_url)
+                    if snapshot is not None:
+                        latest_waiting = snapshot.get("waiting")
+                        latest_running = snapshot.get("running")
+                        out_tokens = snapshot.get("out_tokens_total")
+                        prompt_tokens = snapshot.get("prompt_tokens_total")
+                        if (
+                            isinstance(out_tokens, (float, int))
+                            and prev_metrics_out_tokens is not None
+                            and prev_metrics_time is not None
+                        ):
+                            dt = now - prev_metrics_time
+                            if dt > 0:
+                                latest_out_tps = (float(out_tokens) - prev_metrics_out_tokens) / dt
+                                if (
+                                    isinstance(prompt_tokens, (float, int))
+                                    and prev_metrics_prompt_tokens is not None
+                                ):
+                                    latest_prompt_tps = (
+                                        float(prompt_tokens) - prev_metrics_prompt_tokens
+                                    ) / dt
+                        if isinstance(out_tokens, (float, int)):
+                            prev_metrics_out_tokens = float(out_tokens)
+                        if isinstance(prompt_tokens, (float, int)):
+                            prev_metrics_prompt_tokens = float(prompt_tokens)
+                        prev_metrics_time = now
+
+                remaining_total = total_pending - global_processed
+                eta_seconds: float | None = None
+                if (
+                    global_processed > 0
+                    and remaining_total > 0
+                    and latest_out_tps is not None
+                    and latest_prompt_tps is not None
+                    and latest_out_tps > 0
+                    and latest_prompt_tps > 0
+                ):
+                    avg_input_tokens = global_input_tokens / global_processed
+                    avg_output_tokens = global_output_tokens / global_processed
+                    remaining_prompt_tokens = remaining_total * avg_input_tokens
+                    remaining_output_tokens = remaining_total * avg_output_tokens
+                    eta_seconds = (
+                        remaining_prompt_tokens / latest_prompt_tps
+                        + remaining_output_tokens / latest_out_tps
                     )
-                print(
-                    f"[hinted_inference] checkpoint chunk processed={global_processed}/{total_pending}",
-                    flush=True,
-                )
+                    if smoothed_eta_seconds is None:
+                        smoothed_eta_seconds = eta_seconds
+                    else:
+                        smoothed_eta_seconds = (
+                            eta_ewma_alpha * eta_seconds
+                            + (1.0 - eta_ewma_alpha) * smoothed_eta_seconds
+                        )
+                elif remaining_total == 0:
+                    smoothed_eta_seconds = 0.0
 
-            _enqueue_next()
+                if progress is not None:
+                    postfix: dict[str, Any] = {"retry": global_retry_count}
+                    if smoothed_eta_seconds is not None:
+                        postfix["eta"] = _format_eta_seconds(smoothed_eta_seconds)
+                    if latest_out_tps is not None:
+                        postfix["out_tok/s"] = f"{latest_out_tps:.1f}"
+                    if latest_prompt_tps is not None:
+                        postfix["prompt_tok/s"] = f"{latest_prompt_tps:.1f}"
+                    if latest_running is not None:
+                        postfix["running"] = int(latest_running)
+                    if latest_waiting is not None:
+                        postfix["waiting"] = int(latest_waiting)
+                    progress.update(1)
+                    progress.set_postfix(postfix)
+                else:
+                    status_parts = [
+                        f"[hinted_inference] processed={global_processed}/{total_pending}",
+                        f"retry={global_retry_count}",
+                    ]
+                    if smoothed_eta_seconds is not None:
+                        status_parts.append(f"eta={_format_eta_seconds(smoothed_eta_seconds)}")
+                    if latest_out_tps is not None:
+                        status_parts.append(f"out_tok/s={latest_out_tps:.1f}")
+                    if latest_prompt_tps is not None:
+                        status_parts.append(f"prompt_tok/s={latest_prompt_tps:.1f}")
+                    if latest_running is not None:
+                        status_parts.append(f"running={int(latest_running)}")
+                    if latest_waiting is not None:
+                        status_parts.append(f"waiting={int(latest_waiting)}")
+                    print(
+                        " ".join(status_parts),
+                        flush=True,
+                    )
 
-    if progress is not None:
-        progress.close()
+                elapsed_seconds = max(0.001, time.monotonic() - started_at)
+                if global_processed % checkpoint_every == 0 or remaining_total == 0:
+                    for checkpoint_state in states:
+                        _save_fraction_checkpoint(
+                            state=checkpoint_state,
+                            benchmark_name=benchmark_name,
+                            model=model,
+                            hint_type=hint_type,
+                            fractioner=fractioner,
+                            run_id=run_id,
+                            run_metadata=run_metadata,
+                            elapsed_seconds=elapsed_seconds,
+                        )
+                    print(
+                        f"[hinted_inference] checkpoint chunk processed={global_processed}/{total_pending}",
+                        flush=True,
+                    )
+
+                _enqueue_next()
+    finally:
+        for task in pending_tasks:
+            task.cancel()
+        with contextlib.suppress(Exception):
+            await client.aclose()
+        if progress is not None:
+            progress.close()
     return max(0.001, time.monotonic() - started_at)
 
 
@@ -1124,6 +1253,7 @@ def run_hinted_inference(
     max_retries: int = 2,
     checkpoint_every: int = 25,
     vllm_metrics_url: str | None = None,
+    backend: str = "local-vllm",
     build_only: bool = False,
     run_metadata: dict[str, Any] | None = None,
 ) -> list[FractionRunSummary]:
@@ -1254,6 +1384,7 @@ def run_hinted_inference(
             timeout_seconds=timeout_seconds,
             max_retries=max_retries,
             vllm_metrics_url=vllm_metrics_url,
+            backend=backend,
             run_id=run_id,
             checkpoint_every=checkpoint_every,
             run_metadata=effective_run_metadata,

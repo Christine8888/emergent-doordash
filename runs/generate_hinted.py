@@ -63,15 +63,14 @@ def _run_single_model_job(
     checkpoint_every: int,
     gpu_memory_utilization: float,
     dtype: str,
+    backend: str,
     build_only: bool,
 ) -> dict[str, Any]:
-    model_name = model_path.split("/")[-1]
-
     if build_only:
         summaries = run_hinted_inference(
             benchmark_name=benchmark,
             hint_type=hint_type,
-            model=model_name,
+            model=model_path,
             fractioner=fractioner,
             hint_fractions=hint_fractions,
             do_sample=sampling_params.get("do_sample"),
@@ -85,29 +84,53 @@ def _run_single_model_job(
             max_retries=MAX_RETRIES,
             checkpoint_every=checkpoint_every,
             vllm_metrics_url=None,
+            backend=backend,
             build_only=True,
             run_metadata=run_metadata,
         )
     else:
-        server_config = VLLMServerConfig(
-            model_path=model_path,
-            served_model_name=model_name,
-            tensor_parallel_size=tensor_parallel_size,
-            data_parallel_size=data_parallel_size,
-            max_model_len=MAX_MODEL_LEN,
-            gpu_memory_utilization=gpu_memory_utilization,
-            max_num_batched_tokens=MAX_NUM_BATCHED_TOKENS,
-            dtype=dtype,
-        )
-
-        with VLLMServer(server_config) as server:
-            _setup_vllm_env(
-                port=server.port,
+        if backend == "local-vllm":
+            server_config = VLLMServerConfig(
+                model_path=model_path,
+                served_model_name=model_path,
+                tensor_parallel_size=tensor_parallel_size,
+                data_parallel_size=data_parallel_size,
+                max_model_len=MAX_MODEL_LEN,
+                gpu_memory_utilization=gpu_memory_utilization,
+                max_num_batched_tokens=MAX_NUM_BATCHED_TOKENS,
+                dtype=dtype,
             )
+
+            with VLLMServer(server_config) as server:
+                _setup_vllm_env(
+                    port=server.port,
+                )
+                summaries = run_hinted_inference(
+                    benchmark_name=benchmark,
+                    hint_type=hint_type,
+                    model=model_path,
+                    fractioner=fractioner,
+                    hint_fractions=hint_fractions,
+                    do_sample=sampling_params.get("do_sample"),
+                    temperature=sampling_params.get("temperature"),
+                    top_p=sampling_params.get("top_p"),
+                    top_k=sampling_params.get("top_k"),
+                    repetition_penalty=sampling_params.get("repetition_penalty"),
+                    max_tokens=MAX_TOKENS,
+                    max_connections=max_connections,
+                    timeout_seconds=REQUEST_TIMEOUT_SECONDS,
+                    max_retries=MAX_RETRIES,
+                    checkpoint_every=checkpoint_every,
+                    vllm_metrics_url=f"http://localhost:{server.port}/metrics",
+                    backend=backend,
+                    build_only=False,
+                    run_metadata=run_metadata,
+                )
+        elif backend == "together-serverless":
             summaries = run_hinted_inference(
                 benchmark_name=benchmark,
                 hint_type=hint_type,
-                model=model_name,
+                model=model_path,
                 fractioner=fractioner,
                 hint_fractions=hint_fractions,
                 do_sample=sampling_params.get("do_sample"),
@@ -120,23 +143,27 @@ def _run_single_model_job(
                 timeout_seconds=REQUEST_TIMEOUT_SECONDS,
                 max_retries=MAX_RETRIES,
                 checkpoint_every=checkpoint_every,
-                vllm_metrics_url=f"http://localhost:{server.port}/metrics",
+                vllm_metrics_url=None,
+                backend=backend,
                 build_only=False,
                 run_metadata=run_metadata,
             )
+        else:
+            raise ValueError(f"Unsupported backend: {backend!r}")
     return {
-        "model": model_name,
+        "model": model_path,
         "model_path": model_path,
         "run_metadata": run_metadata,
         "summaries": [asdict(summary) for summary in summaries],
     }
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run hinted inference with local vLLM.")
+    parser = argparse.ArgumentParser(description="Run hinted inference with local vLLM or Together serverless.")
     parser.add_argument("--benchmark", type=str, required=True)
     parser.add_argument("--hint-type", choices=[h.value for h in HintType], required=True)
     parser.add_argument("--fractioner", type=str, required=True)
     parser.add_argument("--model", type=str, choices=["all"] + MODELS_TO_RUN, default="all")
+    parser.add_argument("--backend", choices=["local-vllm", "together-serverless"], default="local-vllm")
     parser.add_argument(
         "--cluster",
         choices=["nlp", "sphinx", "miso"],
@@ -268,6 +295,7 @@ def _build_run_metadata(
         },
         "job": {
             "executor": args.executor,
+            "backend": args.backend,
             "benchmark": args.benchmark,
             "hint_type": args.hint_type,
             "fractioner": args.fractioner,
@@ -325,6 +353,7 @@ def _print_plan(args: argparse.Namespace, models: list[ModelSpec]) -> None:
         json.dumps(
             {
                 "executor": args.executor,
+                "backend": args.backend,
                 "benchmark": args.benchmark,
                 "hint_type": args.hint_type,
                 "fractioner": args.fractioner,
@@ -337,11 +366,10 @@ def _print_plan(args: argparse.Namespace, models: list[ModelSpec]) -> None:
     )
 
     for spec in models:
-        model_name = spec.path.split("/")[-1]
         for fraction in HINT_FRACTIONS:
             path = build_hinted_inference_path(
                 benchmark_name=args.benchmark,
-                model=model_name,
+                model=spec.path,
                 hint_type=args.hint_type,
                 fractioner=args.fractioner,
                 hint_fraction=fraction,
@@ -382,6 +410,7 @@ def _run_local(
             checkpoint_every=args.checkpoint_every,
             gpu_memory_utilization=args.gpu_memory_utilization,
             dtype=args.dtype,
+            backend=args.backend,
             build_only=args.build_only,
         )
         results.append(result)
@@ -448,6 +477,7 @@ def _run_submitit(
             checkpoint_every=args.checkpoint_every,
             gpu_memory_utilization=args.gpu_memory_utilization,
             dtype=args.dtype,
+            backend=args.backend,
             build_only=args.build_only,
         )
         jobs.append(job)
