@@ -23,7 +23,6 @@ class VLLMServerConfig:
     served_model_name: str
     tensor_parallel_size: int
     data_parallel_size: int
-    max_model_len: int
     gpu_memory_utilization: float
     max_num_batched_tokens: int | None
     dtype: str
@@ -48,8 +47,6 @@ class VLLMServer:
             str(self.config.tensor_parallel_size),
             "--data-parallel-size",
             str(self.config.data_parallel_size),
-            "--max-model-len",
-            str(self.config.max_model_len),
             "--gpu-memory-utilization",
             str(self.config.gpu_memory_utilization),
             "--dtype",

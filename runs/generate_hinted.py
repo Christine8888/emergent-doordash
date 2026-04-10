@@ -18,7 +18,6 @@ HINT_FRACTIONS = [i / 10 for i in range(11)]
 REQUEST_TIMEOUT_SECONDS = 3600
 MAX_NUM_BATCHED_TOKENS = 32768
 MAX_TOKENS = 32000
-MAX_MODEL_LEN = 40000
 MAX_RETRIES = 2
 # Leave as None for auto policy: 60h default, 6h on miso.
 SLURM_TIME_HOURS_OVERRIDE: int | None = None
@@ -95,7 +94,6 @@ def _run_single_model_job(
                 served_model_name=model_path,
                 tensor_parallel_size=tensor_parallel_size,
                 data_parallel_size=data_parallel_size,
-                max_model_len=MAX_MODEL_LEN,
                 gpu_memory_utilization=gpu_memory_utilization,
                 max_num_batched_tokens=MAX_NUM_BATCHED_TOKENS,
                 dtype=dtype,
@@ -286,7 +284,6 @@ def _build_run_metadata(
             "max_num_batched_tokens": MAX_NUM_BATCHED_TOKENS,
             "max_tokens": MAX_TOKENS,
             "max_retries": MAX_RETRIES,
-            "max_model_len": MAX_MODEL_LEN,
             "slurm_time_hours_override": SLURM_TIME_HOURS_OVERRIDE,
             "default_slurm_cpus_per_task": DEFAULT_SLURM_CPUS_PER_TASK,
             "default_slurm_mem_gb": DEFAULT_SLURM_MEM_GB,
@@ -315,7 +312,6 @@ def _build_run_metadata(
             "data_parallel_size": dp,
         },
         "vllm_server": {
-            "max_model_len": MAX_MODEL_LEN,
             "gpu_memory_utilization": args.gpu_memory_utilization,
             "max_num_batched_tokens": MAX_NUM_BATCHED_TOKENS,
             "dtype": args.dtype,
@@ -529,6 +525,7 @@ python -m runs.generate_hinted \
 
 Qwen/Qwen2.5-32B-Instruct
 Qwen/Qwen2.5-14B-Instruct
+Qwen/Qwen3-32B
 
 NLP
 python -m runs.generate_hinted \
