@@ -13,6 +13,7 @@ from scipy.optimize import curve_fit
 
 DATA_ROOT = Path("data")
 PLOTS_ROOT = Path("plots/accuracy_vs_hint")
+MASK_WORD_RESULTS_WITH_CI_PATH = DATA_ROOT / "results_with_ci_mask_word.json"
 N_BOOTSTRAP = 5000
 RANDOM_SEED = 0
 EXPECTED_FRACTIONS = [i / 10 for i in range(11)]
@@ -72,6 +73,44 @@ def _discover_models(benchmark: str) -> list[str]:
     if not benchmark_dir.exists():
         raise FileNotFoundError(f"Missing benchmark directory: {benchmark_dir}")
     return sorted(path.name for path in benchmark_dir.iterdir() if path.is_dir())
+
+
+def _load_external_mask_word_results() -> dict[str, dict[float, dict[str, float]]] | None:
+    if not MASK_WORD_RESULTS_WITH_CI_PATH.exists():
+        return None
+
+    with open(MASK_WORD_RESULTS_WITH_CI_PATH, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+    if not isinstance(payload, dict):
+        raise ValueError(
+            f"Expected top-level object in {MASK_WORD_RESULTS_WITH_CI_PATH}, got {type(payload).__name__}"
+        )
+
+    out: dict[str, dict[float, dict[str, float]]] = {}
+    for model, model_payload in payload.items():
+        if not isinstance(model, str) or not isinstance(model_payload, dict):
+            continue
+        fraction_map: dict[float, dict[str, float]] = {}
+        for hint_fraction_raw, stats in model_payload.items():
+            if not isinstance(stats, dict):
+                continue
+            try:
+                hint_fraction = float(hint_fraction_raw)
+            except (TypeError, ValueError):
+                continue
+            mean = stats.get("mean")
+            ci_lower = stats.get("ci_lower")
+            ci_upper = stats.get("ci_upper")
+            if not all(isinstance(value, (float, int)) for value in (mean, ci_lower, ci_upper)):
+                continue
+            fraction_map[float(hint_fraction)] = {
+                "accuracy": float(mean),
+                "ci_low": float(ci_lower),
+                "ci_high": float(ci_upper),
+            }
+        if fraction_map:
+            out[model] = fraction_map
+    return out
 
 
 def _parse_fraction_from_filename(name: str) -> float:
@@ -317,11 +356,13 @@ def _plot(
     results: list[dict[str, Any]],
     *,
     fit_map: dict[tuple[str, str], dict[str, float]],
+    external_results: list[dict[str, Any]],
+    external_fit_map: dict[tuple[str, str], dict[str, float]],
     output_png: Path,
     show_values: bool,
     title: str,
 ) -> None:
-    models = sorted({row["model"] for row in results})
+    models = sorted({row["model"] for row in results} | {row["model"] for row in external_results})
     n_models = len(models)
 
     if n_models == 1:
@@ -336,6 +377,7 @@ def _plot(
     for idx, model in enumerate(models):
         ax = axes[idx]
         model_rows = [row for row in results if row["model"] == model]
+        external_model_rows = [row for row in external_results if row["model"] == model]
         fractioners = sorted({str(row["fractioner"]) for row in model_rows})
         cmap = plt.cm.tab10
         for j, fractioner in enumerate(fractioners):
@@ -386,6 +428,58 @@ def _plot(
                     float(fit["sigmoid_bias"]),
                 )
                 ax.plot(x_fit, y_fit, "-", color=color, linewidth=1.25, alpha=0.85)
+
+        external_fractioners = sorted({str(row["fractioner"]) for row in external_model_rows})
+        for fractioner in external_fractioners:
+            series_rows = sorted(
+                [row for row in external_model_rows if row["fractioner"] == fractioner],
+                key=lambda row: float(row["hint_fraction"]),
+            )
+            x = np.asarray([float(row["hint_fraction"]) for row in series_rows], dtype=float)
+            y = np.asarray([float(row["accuracy"]) for row in series_rows], dtype=float)
+            low = np.asarray([float(row["ci_low"]) for row in series_rows], dtype=float)
+            high = np.asarray([float(row["ci_high"]) for row in series_rows], dtype=float)
+            yerr = np.vstack([y - low, high - y])
+
+            overlay_color = "#111111"
+            ax.errorbar(
+                x,
+                y,
+                yerr=yerr,
+                fmt="s",
+                alpha=0.95,
+                markersize=3.8,
+                capsize=2.0,
+                elinewidth=1.0,
+                capthick=1.0,
+                color=overlay_color,
+                linestyle="none",
+                linewidth=1.0,
+                label=f"{fractioner}_luke",
+            )
+            if show_values:
+                for x_i, y_i in zip(x, y):
+                    ax.annotate(
+                        f"{y_i:.2f}",
+                        (float(x_i), float(y_i)),
+                        xytext=(4, -9),
+                        textcoords="offset points",
+                        fontsize=6,
+                        color=overlay_color,
+                        alpha=0.9,
+                    )
+
+            fit_key = (str(model), str(fractioner))
+            fit = external_fit_map.get(fit_key)
+            if fit is not None:
+                x_fit = np.linspace(0.0, 1.0, 200, dtype=float)
+                y_fit = _sigmoid_curve(
+                    x_fit,
+                    float(fit["sigmoid_lower"]),
+                    float(fit["sigmoid_slope"]),
+                    float(fit["sigmoid_bias"]),
+                )
+                ax.plot(x_fit, y_fit, "--", color=overlay_color, linewidth=1.25, alpha=0.9)
         ax.set_title(model, fontsize=9)
         ax.set_xlabel("Hint Fraction")
         ax.set_ylabel("Accuracy")
@@ -407,21 +501,25 @@ def _plot(
 def main() -> None:
     args = _parse_args()
     models_available = _discover_models(args.benchmark)
-    if not models_available:
+    external_mask_word = _load_external_mask_word_results()
+    external_models_available = sorted(external_mask_word.keys()) if external_mask_word else []
+    if not models_available and not external_models_available:
         raise ValueError(f"No models found for benchmark={args.benchmark!r}.")
 
     if args.model == "all":
-        models_to_plot = models_available
+        models_to_plot = sorted(set(models_available) | set(external_models_available))
     else:
-        if args.model not in models_available:
+        available_models = sorted(set(models_available) | set(external_models_available))
+        if args.model not in available_models:
             raise ValueError(
                 f"Requested model {args.model!r} not found. "
-                f"Available: {models_available}"
+                f"Available: {available_models}"
             )
         models_to_plot = [args.model]
 
     rng = np.random.default_rng(RANDOM_SEED)
     rows: list[dict[str, Any]] = []
+    external_rows: list[dict[str, Any]] = []
 
     expected_fraction_set = {float(f"{value:.6f}") for value in EXPECTED_FRACTIONS}
 
@@ -521,7 +619,50 @@ def main() -> None:
                 f"fractioner={fractioner} {means_text}"
             )
 
-    if not rows:
+    if args.fractioner == "mask_word" and external_mask_word:
+        for model in models_to_plot:
+            model_payload = external_mask_word.get(model)
+            if not model_payload:
+                continue
+            missing = sorted(expected_fraction_set - set(model_payload.keys()))
+            if missing:
+                print(
+                    f"[plot_hinted_accuracy_vs_hint][WARN] external mask_word data missing "
+                    f"fractions model={model} missing_fractions={missing}"
+                )
+                continue
+
+            fraction_rows: list[dict[str, Any]] = []
+            for hint_fraction in EXPECTED_FRACTIONS:
+                stats = model_payload[float(hint_fraction)]
+                fraction_rows.append(
+                    {
+                        "model": model,
+                        "fractioner": "mask_word",
+                        "hint_fraction": float(hint_fraction),
+                        "accuracy": float(stats["accuracy"]),
+                        "ci_low": float(stats["ci_low"]),
+                        "ci_high": float(stats["ci_high"]),
+                        "n_samples": 0,
+                        "n_rollouts": 0,
+                        "rows_total": 0,
+                        "rows_with_known_label": 0,
+                        "rows_without_known_label": 0,
+                        "path": str(MASK_WORD_RESULTS_WITH_CI_PATH),
+                        "source": "external_mask_word",
+                    }
+                )
+            external_rows.extend(fraction_rows)
+            means_text = ", ".join(
+                f"{float(row['hint_fraction']):.1f}:{float(row['accuracy']):.4f}"
+                for row in fraction_rows
+            )
+            print(
+                f"[plot_hinted_accuracy_vs_hint] external means model={model} "
+                f"fractioner=mask_word {means_text}"
+            )
+
+    if not rows and not external_rows:
         raise ValueError("No usable rows collected. Check benchmark/model/hint_type/fractioner.")
 
     rows_sorted = sorted(
@@ -549,6 +690,22 @@ def main() -> None:
             f"midpoint={float(fit['sigmoid_midpoint']):.4f} "
             f"rmse={float(fit['sigmoid_rmse']):.4f}"
         )
+
+    external_fit_map: dict[tuple[str, str], dict[str, float]] = {}
+    external_rows_sorted = sorted(
+        external_rows,
+        key=lambda r: (str(r["model"]), str(r["fractioner"]), float(r["hint_fraction"])),
+    )
+    external_series_map: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in external_rows_sorted:
+        key = (str(row["model"]), str(row["fractioner"]))
+        external_series_map.setdefault(key, []).append(row)
+
+    for key, series_rows in sorted(external_series_map.items()):
+        fit = _fit_sigmoid_for_series(series_rows)
+        if fit is None:
+            continue
+        external_fit_map[key] = fit
 
     stem = (
         f"{_safe_component(args.benchmark)}__{_safe_component(args.hint_type)}__"
@@ -589,6 +746,8 @@ def main() -> None:
     _plot(
         rows_sorted,
         fit_map=fit_map,
+        external_results=external_rows_sorted,
+        external_fit_map=external_fit_map,
         output_png=png_path,
         show_values=args.show_values,
         title=(

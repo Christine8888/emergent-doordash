@@ -511,11 +511,11 @@ MISO
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
-    --fractioner truncate_word \
-    --model google/gemma-3-27b-it \
+    --fractioner mask_word \
+    --model Qwen/Qwen2.5-14B-Instruct \
     --executor submitit \
     --cluster miso \
-    --max-connections 260 \
+    --max-connections 320 \
     --num-gpus 8 \
     --checkpoint-every 1000
 
@@ -526,6 +526,7 @@ python -m runs.generate_hinted \
 Qwen/Qwen2.5-32B-Instruct
 Qwen/Qwen2.5-14B-Instruct
 Qwen/Qwen3-32B
+Qwen/Qwen3-14B
 
 NLP
 python -m runs.generate_hinted \
