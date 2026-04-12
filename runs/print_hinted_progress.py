@@ -89,4 +89,5 @@ def main() -> None:
 if __name__ == "__main__":
     # python -m runs.print_hinted_progress --benchmark aime2025_2026 --fractioner mask_word --hint-type answer_not_revealed
     # python -m runs.print_hinted_progress --benchmark aime2025_2026 --fractioner truncate_word --hint-type answer_not_revealed
+    # python -m runs.print_hinted_progress --benchmark aime2025_2026 --fractioner truncate_sentence --hint-type answer_not_revealed
     main()

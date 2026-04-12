@@ -695,11 +695,11 @@ MISO
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
-    --fractioner mask_word \
-    --model Qwen/Qwen2.5-14B-Instruct \
+    --fractioner truncate_sentence \
+    --model google/gemma-3-12b-it \
     --executor submitit \
     --cluster miso \
-    --max-connections 260 \
+    --max-connections 360 \
     --num-gpus 8 \
     --checkpoint-every 1000
 
