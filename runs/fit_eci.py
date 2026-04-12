@@ -121,6 +121,39 @@ def load_epoch_eci() -> dict[str, float]:
     return dict(zip(df["Model version"], df["ECI Score"]))
 
 
+def print_score_summary(scores_df: pd.DataFrame) -> None:
+    benchmark_order = [EVAL_TO_ECI[eval_name] for eval_name in EVAL_TO_ECI]
+    benchmark_alias = {
+        "HellaSwag": "Hella",
+        "PIQA": "PIQA",
+        "MMLU": "MMLU",
+        "BBH": "BBH",
+        "ARC AI2": "ARC",
+        "Winogrande": "Wino",
+        "MATH level 5": "MATH5",
+    }
+    model_width = max(len("Model"), max(len(str(model)) for model in scores_df["model"].unique()))
+    score_width = 8
+
+    header = ["Model".ljust(model_width)] + [
+        benchmark_alias.get(benchmark, benchmark)[:score_width].rjust(score_width)
+        for benchmark in benchmark_order
+    ]
+    separator = ["-" * model_width] + ["-" * score_width for _ in benchmark_order]
+
+    print("\nBenchmark scores per model:")
+    print("  " + " ".join(header))
+    print("  " + " ".join(separator))
+    for model in sorted(scores_df["model"].unique()):
+        model_df = scores_df[scores_df["model"] == model]
+        score_map = dict(zip(model_df["benchmark"], model_df["score"]))
+        row = [str(model).ljust(model_width)]
+        for benchmark in benchmark_order:
+            value = score_map.get(benchmark)
+            row.append("--".rjust(score_width) if value is None else f"{float(value):.4f}".rjust(score_width))
+        print("  " + " ".join(row))
+
+
 def sigmoid(x: np.ndarray) -> np.ndarray:
     return np.where(x >= 0, 1 / (1 + np.exp(-x)), np.exp(x) / (1 + np.exp(x)))
 
@@ -170,6 +203,7 @@ def main() -> None:
     user_models = sorted(user_scores["model"].unique().tolist())
     print(f"\nTotal user scores: {len(user_scores)}")
     print(f"User models: {len(user_models)}")
+    print_score_summary(user_scores)
 
     fitted_eci = estimate_eci(user_scores)
 

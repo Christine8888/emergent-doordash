@@ -9,6 +9,7 @@ import numpy as np
 
 
 DATA_ROOT = Path("data")
+RESULTS_WITH_CI_BY_COMBO_ROOT = DATA_ROOT / "results_with_ci_by_combo"
 EXTERNAL_RESULTS_WITH_CI_PATHS = {
     "mask_word": DATA_ROOT / "results_with_ci_mask_word.json",
     "truncate_word": DATA_ROOT / "results_with_ci_truncate_word.json",
@@ -211,11 +212,64 @@ def load_external_results_with_ci(
     return out
 
 
+def load_external_results_with_ci_for_fractioner(
+    fractioner: str,
+) -> dict[str, dict[float, dict[str, float]]]:
+    path = EXTERNAL_RESULTS_WITH_CI_PATHS.get(fractioner)
+    if path is None:
+        return {}
+    return load_external_results_with_ci(path) or {}
+
+
+def parse_results_with_ci_payload(
+    payload: dict[str, Any] | None,
+) -> dict[str, dict[float, dict[str, float]]]:
+    out: dict[str, dict[float, dict[str, float]]] = {}
+    if not isinstance(payload, dict):
+        return out
+
+    for model, model_payload in payload.items():
+        if not isinstance(model, str) or not isinstance(model_payload, dict):
+            continue
+        fraction_map: dict[float, dict[str, float]] = {}
+        for hint_fraction_raw, stats in model_payload.items():
+            if not isinstance(stats, dict):
+                continue
+            try:
+                hint_fraction = float(hint_fraction_raw)
+            except (TypeError, ValueError):
+                continue
+            mean = stats.get("mean")
+            ci_lower = stats.get("ci_lower")
+            ci_upper = stats.get("ci_upper")
+            if not all(isinstance(value, (float, int)) for value in (mean, ci_lower, ci_upper)):
+                continue
+            fraction_map[float(hint_fraction)] = {
+                "accuracy": float(mean),
+                "ci_low": float(ci_lower),
+                "ci_high": float(ci_upper),
+            }
+        if fraction_map:
+            out[model] = fraction_map
+    return out
+
+
 def discover_models_for_benchmark(benchmark: str, *, data_root: Path = DATA_ROOT) -> list[str]:
     benchmark_dir = data_root / "hinted_inference" / safe_component(benchmark)
     if not benchmark_dir.exists():
         return []
     return sorted(path.name for path in benchmark_dir.iterdir() if path.is_dir())
+
+
+def results_with_ci_by_combo_path(
+    *,
+    benchmark: str,
+    hint_type: str,
+    fractioner: str,
+    data_root: Path = DATA_ROOT,
+) -> Path:
+    combo_name = f"{safe_component(hint_type)}__{safe_component(fractioner)}.json"
+    return (data_root / "results_with_ci_by_combo" / safe_component(benchmark) / combo_name)
 
 
 def discover_fractioners(
@@ -372,3 +426,86 @@ def external_results_to_payload(
             }
     return payload
 
+
+def merge_results_with_ci_payloads(
+    base: dict[str, dict[str, dict[str, float]]],
+    override: dict[str, dict[str, dict[str, float]]],
+) -> dict[str, dict[str, dict[str, float]]]:
+    out: dict[str, dict[str, dict[str, float]]] = {
+        model: dict(frac_map) for model, frac_map in base.items()
+    }
+    for model, frac_map in override.items():
+        out.setdefault(model, {}).update(frac_map)
+    return out
+
+
+def build_results_with_ci_for_combo(
+    *,
+    benchmark: str,
+    hint_type: str,
+    fractioner: str,
+    data_root: Path = DATA_ROOT,
+) -> dict[str, dict[float, dict[str, float]]]:
+    external_payload = external_results_to_payload(
+        load_external_results_with_ci(
+            EXTERNAL_RESULTS_WITH_CI_PATHS.get(fractioner, Path("__missing__"))
+        )
+        if fractioner in EXTERNAL_RESULTS_WITH_CI_PATHS
+        else None
+    )
+
+    rows: list[dict[str, Any]] = []
+    for model in discover_models_for_benchmark(benchmark, data_root=data_root):
+        model_rows, _warnings = collect_complete_fraction_stats(
+            benchmark=benchmark,
+            model=model,
+            hint_type=hint_type,
+            fractioner=fractioner,
+            data_root=data_root,
+        )
+        rows.extend(model_rows)
+
+    local_payload = rows_to_results_with_ci_payload(rows)
+    merged_payload = merge_results_with_ci_payloads(external_payload, local_payload)
+    return parse_results_with_ci_payload(merged_payload)
+
+
+def load_results_with_ci_for_combo(
+    *,
+    benchmark: str,
+    hint_type: str,
+    fractioner: str,
+    data_root: Path = DATA_ROOT,
+) -> dict[str, dict[float, dict[str, float]]]:
+    combo_path = results_with_ci_by_combo_path(
+        benchmark=benchmark,
+        hint_type=hint_type,
+        fractioner=fractioner,
+        data_root=data_root,
+    )
+    if combo_path.exists():
+        with open(combo_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        return parse_results_with_ci_payload(payload)
+    return build_results_with_ci_for_combo(
+        benchmark=benchmark,
+        hint_type=hint_type,
+        fractioner=fractioner,
+        data_root=data_root,
+    )
+
+
+def discover_models_for_combo(
+    *,
+    benchmark: str,
+    hint_type: str,
+    fractioner: str,
+    data_root: Path = DATA_ROOT,
+) -> list[str]:
+    payload = load_results_with_ci_for_combo(
+        benchmark=benchmark,
+        hint_type=hint_type,
+        fractioner=fractioner,
+        data_root=data_root,
+    )
+    return sorted(payload.keys())

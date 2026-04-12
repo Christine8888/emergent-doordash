@@ -10,18 +10,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import curve_fit
 
+from src.hinted_accuracy import (
+    discover_fractioners as canonical_discover_fractioners,
+    discover_models_for_benchmark as canonical_discover_models_for_benchmark,
+    discover_models_for_combo,
+    load_external_results_with_ci_for_fractioner,
+    load_results_with_ci_for_combo,
+)
+
 
 DATA_ROOT = Path("data")
 PLOTS_ROOT = Path("plots/accuracy_vs_hint")
-MASK_WORD_RESULTS_WITH_CI_PATH = DATA_ROOT / "results_with_ci_mask_word.json"
-TRUNCATE_WORD_RESULTS_WITH_CI_PATH = DATA_ROOT / "results_with_ci_truncate_word.json"
-EXTERNAL_RESULTS_WITH_CI_PATHS = {
-    "mask_word": MASK_WORD_RESULTS_WITH_CI_PATH,
-    "truncate_word": TRUNCATE_WORD_RESULTS_WITH_CI_PATH,
-}
 
-N_BOOTSTRAP = 5000
-RANDOM_SEED = 0
 EXPECTED_FRACTIONS = [i / 10 for i in range(11)]
 
 
@@ -32,7 +32,7 @@ def _safe_component(text: str) -> str:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Plot hinted inference accuracy vs hint fraction with bootstrap CIs."
+        description="Plot hinted inference accuracy vs hint fraction."
     )
     parser.add_argument("--benchmark", type=str, required=True)
     parser.add_argument("--hint-type", type=str, required=True)
@@ -51,194 +51,46 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _iter_jsonl(path: Path):
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            yield json.loads(line)
-
-
-def _extract_is_correct(row: dict[str, Any]) -> bool | None:
-    graders = row.get("graders")
-    if not isinstance(graders, list):
-        return None
-
-    for grader in graders:
-        if not isinstance(grader, dict):
-            continue
-        is_correct = grader.get("is_correct")
-        if isinstance(is_correct, bool):
-            return is_correct
-    return None
-
-
-def _discover_models(benchmark: str) -> list[str]:
-    benchmark_dir = DATA_ROOT / "hinted_inference" / _safe_component(benchmark)
-    if not benchmark_dir.exists():
-        raise FileNotFoundError(f"Missing benchmark directory: {benchmark_dir}")
-    return sorted(path.name for path in benchmark_dir.iterdir() if path.is_dir())
-
-
-def _load_external_results_with_ci(
-    path: Path,
-) -> dict[str, dict[float, dict[str, float]]] | None:
-    if not path.exists():
-        return None
-
-    with open(path, "r", encoding="utf-8") as f:
-        payload = json.load(f)
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected top-level object in {path}, got {type(payload).__name__}")
-
-    out: dict[str, dict[float, dict[str, float]]] = {}
-    for model, model_payload in payload.items():
-        if not isinstance(model, str) or not isinstance(model_payload, dict):
-            continue
-        fraction_map: dict[float, dict[str, float]] = {}
-        for hint_fraction_raw, stats in model_payload.items():
-            if not isinstance(stats, dict):
-                continue
-            try:
-                hint_fraction = float(hint_fraction_raw)
-            except (TypeError, ValueError):
-                continue
-            mean = stats.get("mean")
-            ci_lower = stats.get("ci_lower")
-            ci_upper = stats.get("ci_upper")
-            if not all(isinstance(value, (float, int)) for value in (mean, ci_lower, ci_upper)):
-                continue
-            fraction_map[float(hint_fraction)] = {
-                "accuracy": float(mean),
-                "ci_low": float(ci_lower),
-                "ci_high": float(ci_upper),
-            }
-        if fraction_map:
-            out[model] = fraction_map
-    return out
-
-
-def _parse_fraction_from_filename(name: str) -> float:
-    match = re.match(r"^fraction_(.+)\.jsonl$", name)
-    if not match:
-        raise ValueError(f"Unexpected fraction filename: {name}")
-    return float(match.group(1))
-
-
-def _discover_fraction_files(
+def _discover_models(
     *,
     benchmark: str,
-    model: str,
     hint_type: str,
-    fractioner: str,
-) -> list[tuple[float, Path]]:
-    benchmark_name = _safe_component(benchmark)
-    model_name = _safe_component(model)
-    hint_fractioner = f"{_safe_component(hint_type)}__{_safe_component(fractioner)}"
-    combo_dir = DATA_ROOT / "hinted_inference" / benchmark_name / model_name / hint_fractioner
-
-    if not combo_dir.exists():
-        return []
-
-    out: list[tuple[float, Path]] = []
-    for path in combo_dir.glob("fraction_*.jsonl"):
-        try:
-            fraction = _parse_fraction_from_filename(path.name)
-        except ValueError:
-            continue
-        out.append((fraction, path))
-    return sorted(out, key=lambda pair: pair[0])
-
-
-def _checkpoint_path_for_fraction(path: Path) -> Path:
-    if path.suffix != ".jsonl":
-        raise ValueError(f"Expected .jsonl path, got: {path}")
-    return path.with_suffix(".ckpt.json")
-
-
-def _is_complete_fraction(path: Path) -> tuple[bool, str | None]:
-    ckpt_path = _checkpoint_path_for_fraction(path)
-    if not ckpt_path.exists():
-        return False, f"missing checkpoint {ckpt_path}"
-
-    try:
-        with open(ckpt_path, "r", encoding="utf-8") as f:
-            ckpt = json.load(f)
-    except Exception as exc:
-        return False, f"failed to read checkpoint {ckpt_path}: {exc}"
-
-    if not isinstance(ckpt, dict):
-        return False, f"invalid checkpoint payload {ckpt_path}"
-
-    total_candidates = ckpt.get("total_candidates")
-    processed_this_run = ckpt.get("processed_this_run")
-    skipped_existing = ckpt.get("skipped_existing")
-    remaining = ckpt.get("remaining")
-
-    if not isinstance(total_candidates, int) or total_candidates < 0:
-        return False, f"invalid total_candidates in {ckpt_path}"
-    if not isinstance(processed_this_run, int) or processed_this_run < 0:
-        return False, f"invalid processed_this_run in {ckpt_path}"
-    if not isinstance(skipped_existing, int) or skipped_existing < 0:
-        return False, f"invalid skipped_existing in {ckpt_path}"
-    if not isinstance(remaining, int) or remaining < 0:
-        return False, f"invalid remaining in {ckpt_path}"
-
-    completed_total = processed_this_run + skipped_existing
-    if remaining != 0:
-        return False, f"remaining={remaining}"
-    if completed_total < total_candidates:
-        return False, (
-            f"incomplete completed_total={completed_total} total_candidates={total_candidates}"
-        )
-    return True, None
-
-
-def _discover_fractioners(
-    *,
-    benchmark: str,
-    model: str,
-    hint_type: str,
+    fractioner: str | None,
 ) -> list[str]:
-    benchmark_name = _safe_component(benchmark)
-    model_name = _safe_component(model)
-    hint_prefix = f"{_safe_component(hint_type)}__"
-    model_dir = DATA_ROOT / "hinted_inference" / benchmark_name / model_name
-    if not model_dir.exists():
-        return []
+    if fractioner is not None:
+        models = discover_models_for_combo(
+            benchmark=benchmark,
+            hint_type=hint_type,
+            fractioner=fractioner,
+        )
+        if models:
+            return models
 
-    fractioners: list[str] = []
-    for path in model_dir.iterdir():
-        if not path.is_dir():
-            continue
-        if not path.name.startswith(hint_prefix):
-            continue
-        parts = path.name.split("__", 1)
-        if len(parts) != 2 or not parts[1]:
-            continue
-        fractioners.append(parts[1])
-    return sorted(set(fractioners))
+    models = set(canonical_discover_models_for_benchmark(benchmark))
 
+    fractioners = [fractioner] if fractioner is not None else []
+    if not fractioners:
+        for local_model in sorted(models):
+            fractioners.extend(
+                canonical_discover_fractioners(
+                    benchmark=benchmark,
+                    model=local_model,
+                    hint_type=hint_type,
+                )
+            )
+    for current_fractioner in sorted(set(fractioners)):
+        models.update(
+            discover_models_for_combo(
+                benchmark=benchmark,
+                hint_type=hint_type,
+                fractioner=current_fractioner,
+            )
+        )
 
-def _bootstrap_accuracy(
-    *,
-    sample_to_scores: dict[str, np.ndarray],
-    rng: np.random.Generator,
-) -> tuple[float, float, float]:
-    sample_arrays = list(sample_to_scores.values())
-    if not sample_arrays:
-        raise ValueError("No sample arrays available for bootstrap.")
-
-    point_accuracy = float(np.mean([arr.mean() for arr in sample_arrays]))
-
-    boot_sums = np.zeros(N_BOOTSTRAP, dtype=float)
-    for arr in sample_arrays:
-        draw_idx = rng.integers(low=0, high=arr.size, size=N_BOOTSTRAP)
-        boot_sums += arr[draw_idx]
-    boot_means = boot_sums / float(len(sample_arrays))
-    ci_low, ci_high = np.quantile(boot_means, [0.025, 0.975])
-    return point_accuracy, float(ci_low), float(ci_high)
+    if not models:
+        benchmark_dir = DATA_ROOT / "hinted_inference" / _safe_component(benchmark)
+        raise FileNotFoundError(f"Missing benchmark directory: {benchmark_dir}")
+    return sorted(models)
 
 
 def _sigmoid_curve(x: np.ndarray, lower: float, slope: float, bias: float) -> np.ndarray:
@@ -302,69 +154,13 @@ def _fit_sigmoid_for_series(series_rows: list[dict[str, Any]]) -> dict[str, floa
     }
 
 
-def _collect_stats_for_fraction(
-    *,
-    path: Path,
-    rng: np.random.Generator,
-) -> dict[str, float | int] | None:
-    sample_to_scores: dict[str, list[float]] = {}
-    rows_total = 0
-    rows_with_known_label = 0
-    rows_without_known_label = 0
-
-    for row in _iter_jsonl(path):
-        rows_total += 1
-
-        if not isinstance(row, dict):
-            rows_without_known_label += 1
-            continue
-
-        problem_id = str(row.get("problem_id", "")).strip()
-        if not problem_id:
-            rows_without_known_label += 1
-            continue
-
-        is_correct = _extract_is_correct(row)
-        if is_correct is None:
-            rows_without_known_label += 1
-            continue
-
-        rows_with_known_label += 1
-        sample_to_scores.setdefault(problem_id, []).append(1.0 if is_correct else 0.0)
-
-    sample_to_arrays = {
-        sample_id: np.asarray(values, dtype=float)
-        for sample_id, values in sample_to_scores.items()
-        if len(values) > 0
-    }
-    if not sample_to_arrays:
-        return None
-
-    point_accuracy, ci_low, ci_high = _bootstrap_accuracy(
-        sample_to_scores=sample_to_arrays,
-        rng=rng,
-    )
-    n_rollouts = int(sum(arr.size for arr in sample_to_arrays.values()))
-
-    return {
-        "accuracy": point_accuracy,
-        "ci_low": ci_low,
-        "ci_high": ci_high,
-        "n_samples": int(len(sample_to_arrays)),
-        "n_rollouts": n_rollouts,
-        "rows_total": int(rows_total),
-        "rows_with_known_label": int(rows_with_known_label),
-        "rows_without_known_label": int(rows_without_known_label),
-    }
-
-
 def _plot(
     results: list[dict[str, Any]],
     *,
     fit_map: dict[tuple[str, str], dict[str, float]],
     external_results: list[dict[str, Any]],
     external_fit_map: dict[tuple[str, str], dict[str, float]],
-    output_png: Path,
+    output_png,
     show_values: bool,
     title: str,
 ) -> None:
@@ -506,44 +302,34 @@ def _plot(
 
 def main() -> None:
     args = _parse_args()
-    models_available = _discover_models(args.benchmark)
-    external_results_by_fractioner = {
-        fractioner: _load_external_results_with_ci(path)
-        for fractioner, path in EXTERNAL_RESULTS_WITH_CI_PATHS.items()
-    }
-    external_models_available = sorted(
-        {
-            model
-            for payload in external_results_by_fractioner.values()
-            if payload
-            for model in payload.keys()
-        }
+    models_available = _discover_models(
+        benchmark=args.benchmark,
+        hint_type=args.hint_type,
+        fractioner=args.fractioner,
     )
-    if not models_available and not external_models_available:
+    if not models_available:
         raise ValueError(f"No models found for benchmark={args.benchmark!r}.")
 
     if args.model == "all":
-        models_to_plot = sorted(set(models_available) | set(external_models_available))
+        models_to_plot = sorted(set(models_available))
     else:
-        available_models = sorted(set(models_available) | set(external_models_available))
-        if args.model not in available_models:
+        if args.model not in models_available:
             raise ValueError(
                 f"Requested model {args.model!r} not found. "
-                f"Available: {available_models}"
+                f"Available: {models_available}"
             )
         models_to_plot = [args.model]
 
-    rng = np.random.default_rng(RANDOM_SEED)
     rows: list[dict[str, Any]] = []
     external_rows: list[dict[str, Any]] = []
-
-    expected_fraction_set = {float(f"{value:.6f}") for value in EXPECTED_FRACTIONS}
+    combo_cache: dict[str, dict[str, dict[float, dict[str, float]]]] = {}
+    external_cache: dict[str, dict[str, dict[float, dict[str, float]]]] = {}
 
     for model in models_to_plot:
         if args.fractioner is not None:
             fractioners = [args.fractioner]
         else:
-            fractioners = _discover_fractioners(
+            fractioners = canonical_discover_fractioners(
                 benchmark=args.benchmark,
                 model=model,
                 hint_type=args.hint_type,
@@ -556,70 +342,57 @@ def main() -> None:
             continue
 
         for fractioner in fractioners:
-            fraction_files = _discover_fraction_files(
-                benchmark=args.benchmark,
-                model=model,
-                hint_type=args.hint_type,
-                fractioner=fractioner,
-            )
-            if not fraction_files:
+            combo_payload = combo_cache.get(fractioner)
+            if combo_payload is None:
+                combo_payload = load_results_with_ci_for_combo(
+                    benchmark=args.benchmark,
+                    hint_type=args.hint_type,
+                    fractioner=fractioner,
+                )
+                combo_cache[fractioner] = combo_payload
+
+            external_payload = external_cache.get(fractioner)
+            if external_payload is None:
+                external_payload = load_external_results_with_ci_for_fractioner(fractioner)
+                external_cache[fractioner] = external_payload
+
+            model_payload = combo_payload.get(model)
+            if not model_payload:
                 print(
-                    f"[plot_hinted_accuracy_vs_hint][WARN] no files for "
+                    f"[plot_hinted_accuracy_vs_hint][WARN] no combo results for "
                     f"model={model} fractioner={fractioner}"
                 )
                 continue
 
             fraction_rows: list[dict[str, Any]] = []
-            usable = False
-            complete_fraction_files: list[tuple[float, Path]] = []
-            incomplete_fraction_reasons: list[str] = []
-            for hint_fraction, path in fraction_files:
-                is_complete, reason = _is_complete_fraction(path)
-                if is_complete:
-                    complete_fraction_files.append((float(hint_fraction), path))
-                else:
-                    incomplete_fraction_reasons.append(
-                        f"{float(hint_fraction):.1f}:{reason or 'incomplete'}"
-                    )
-
-            by_fraction = {
-                float(f"{frac:.6f}"): path for frac, path in complete_fraction_files
-            }
-            available_fraction_set = set(by_fraction.keys())
-            missing = sorted(expected_fraction_set - available_fraction_set)
+            missing = sorted(
+                {float(f"{value:.6f}") for value in EXPECTED_FRACTIONS} - set(model_payload.keys())
+            )
             if missing:
                 print(
-                    f"[plot_hinted_accuracy_vs_hint][WARN] skipping incomplete fractioner "
-                    f"model={model} fractioner={fractioner} missing_fractions={missing} "
-                    f"incomplete_points={incomplete_fraction_reasons}"
+                    f"[plot_hinted_accuracy_vs_hint][WARN] missing combo fractions "
+                    f"model={model} fractioner={fractioner} missing_fractions={missing}"
                 )
                 continue
-            fractions_to_use = [
-                (float(h), by_fraction[float(f"{h:.6f}")]) for h in EXPECTED_FRACTIONS
-            ]
 
-            for hint_fraction, path in fractions_to_use:
-                stats = _collect_stats_for_fraction(path=path, rng=rng)
-                if stats is None:
-                    print(
-                        f"[plot_hinted_accuracy_vs_hint][WARN] skipping fraction point due to "
-                        f"unusable fraction rows model={model} fractioner={fractioner} "
-                        f"fraction={hint_fraction} path={path}"
-                    )
-                    continue
+            for hint_fraction in EXPECTED_FRACTIONS:
+                stats = model_payload[float(hint_fraction)]
                 fraction_rows.append(
                     {
                         "model": model,
                         "fractioner": fractioner,
                         "hint_fraction": float(hint_fraction),
-                        **stats,
-                        "path": str(path),
+                        "accuracy": float(stats["accuracy"]),
+                        "ci_low": float(stats["ci_low"]),
+                        "ci_high": float(stats["ci_high"]),
+                        "n_samples": 0,
+                        "n_rollouts": 0,
+                        "rows_total": 0,
+                        "rows_with_known_label": 0,
+                        "rows_without_known_label": 0,
+                        "path": f"combo::{args.benchmark}::{args.hint_type}::{fractioner}",
                     }
                 )
-                usable = True
-
-            if not usable:
-                continue
 
             rows.extend(fraction_rows)
             print(
@@ -635,56 +408,42 @@ def main() -> None:
                 f"fractioner={fractioner} {means_text}"
             )
 
-    external_fractioner_payload = (
-        external_results_by_fractioner.get(args.fractioner) if args.fractioner is not None else None
-    )
-    external_fractioner_path = (
-        EXTERNAL_RESULTS_WITH_CI_PATHS.get(args.fractioner) if args.fractioner is not None else None
-    )
-    if args.fractioner is not None and external_fractioner_payload and external_fractioner_path:
-        for model in models_to_plot:
-            model_payload = external_fractioner_payload.get(model)
-            if not model_payload:
-                continue
-            missing = sorted(expected_fraction_set - set(model_payload.keys()))
-            if missing:
-                print(
-                    f"[plot_hinted_accuracy_vs_hint][WARN] external {args.fractioner} data "
-                    f"missing fractions model={model} missing_fractions={missing}"
+            external_model_payload = external_payload.get(model)
+            if external_model_payload:
+                missing_external = sorted(
+                    {float(f"{value:.6f}") for value in EXPECTED_FRACTIONS}
+                    - set(external_model_payload.keys())
                 )
-                continue
+                if missing_external:
+                    print(
+                        f"[plot_hinted_accuracy_vs_hint][WARN] missing external fractions "
+                        f"model={model} fractioner={fractioner} missing_fractions={missing_external}"
+                    )
+                else:
+                    current_external_rows: list[dict[str, Any]] = []
+                    for hint_fraction in EXPECTED_FRACTIONS:
+                        stats = external_model_payload[float(hint_fraction)]
+                        current_external_rows.append(
+                            {
+                                "model": model,
+                                "fractioner": fractioner,
+                                "hint_fraction": float(hint_fraction),
+                                "accuracy": float(stats["accuracy"]),
+                                "ci_low": float(stats["ci_low"]),
+                                "ci_high": float(stats["ci_high"]),
+                            }
+                        )
+                    external_rows.extend(current_external_rows)
+                    external_means_text = ", ".join(
+                        f"{float(row['hint_fraction']):.1f}:{float(row['accuracy']):.4f}"
+                        for row in current_external_rows
+                    )
+                    print(
+                        f"[plot_hinted_accuracy_vs_hint] external means model={model} "
+                        f"fractioner={fractioner} {external_means_text}"
+                    )
 
-            fraction_rows: list[dict[str, Any]] = []
-            for hint_fraction in EXPECTED_FRACTIONS:
-                stats = model_payload[float(hint_fraction)]
-                fraction_rows.append(
-                    {
-                        "model": model,
-                        "fractioner": args.fractioner,
-                        "hint_fraction": float(hint_fraction),
-                        "accuracy": float(stats["accuracy"]),
-                        "ci_low": float(stats["ci_low"]),
-                        "ci_high": float(stats["ci_high"]),
-                        "n_samples": 0,
-                        "n_rollouts": 0,
-                        "rows_total": 0,
-                        "rows_with_known_label": 0,
-                        "rows_without_known_label": 0,
-                        "path": str(external_fractioner_path),
-                        "source": f"external_{args.fractioner}",
-                    }
-                )
-            external_rows.extend(fraction_rows)
-            means_text = ", ".join(
-                f"{float(row['hint_fraction']):.1f}:{float(row['accuracy']):.4f}"
-                for row in fraction_rows
-            )
-            print(
-                f"[plot_hinted_accuracy_vs_hint] external means model={model} "
-                f"fractioner={args.fractioner} {means_text}"
-            )
-
-    if not rows and not external_rows:
+    if not rows:
         raise ValueError("No usable rows collected. Check benchmark/model/hint_type/fractioner.")
 
     rows_sorted = sorted(
@@ -714,20 +473,18 @@ def main() -> None:
         )
 
     external_fit_map: dict[tuple[str, str], dict[str, float]] = {}
-    external_rows_sorted = sorted(
+    external_series_map: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in sorted(
         external_rows,
         key=lambda r: (str(r["model"]), str(r["fractioner"]), float(r["hint_fraction"])),
-    )
-    external_series_map: dict[tuple[str, str], list[dict[str, Any]]] = {}
-    for row in external_rows_sorted:
+    ):
         key = (str(row["model"]), str(row["fractioner"]))
         external_series_map.setdefault(key, []).append(row)
 
     for key, series_rows in sorted(external_series_map.items()):
         fit = _fit_sigmoid_for_series(series_rows)
-        if fit is None:
-            continue
-        external_fit_map[key] = fit
+        if fit is not None:
+            external_fit_map[key] = fit
 
     stem = (
         f"{_safe_component(args.benchmark)}__{_safe_component(args.hint_type)}__"
@@ -768,7 +525,7 @@ def main() -> None:
     _plot(
         rows_sorted,
         fit_map=fit_map,
-        external_results=external_rows_sorted,
+        external_results=external_rows,
         external_fit_map=external_fit_map,
         output_png=png_path,
         show_values=args.show_values,

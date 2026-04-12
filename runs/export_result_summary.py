@@ -118,7 +118,7 @@ def main() -> None:
         json.dump(payload, f, indent=2, sort_keys=True)
         f.write("\n")
 
-    print(f"[export_result_summary] wrote={output_path}")
+    print(f"[export_result_summary] {output_path}")
 
 
 if __name__ == "__main__":
