@@ -14,6 +14,12 @@ from scipy.optimize import curve_fit
 DATA_ROOT = Path("data")
 PLOTS_ROOT = Path("plots/accuracy_vs_hint")
 MASK_WORD_RESULTS_WITH_CI_PATH = DATA_ROOT / "results_with_ci_mask_word.json"
+TRUNCATE_WORD_RESULTS_WITH_CI_PATH = DATA_ROOT / "results_with_ci_truncate_word.json"
+EXTERNAL_RESULTS_WITH_CI_PATHS = {
+    "mask_word": MASK_WORD_RESULTS_WITH_CI_PATH,
+    "truncate_word": TRUNCATE_WORD_RESULTS_WITH_CI_PATH,
+}
+
 N_BOOTSTRAP = 5000
 RANDOM_SEED = 0
 EXPECTED_FRACTIONS = [i / 10 for i in range(11)]
@@ -75,16 +81,16 @@ def _discover_models(benchmark: str) -> list[str]:
     return sorted(path.name for path in benchmark_dir.iterdir() if path.is_dir())
 
 
-def _load_external_mask_word_results() -> dict[str, dict[float, dict[str, float]]] | None:
-    if not MASK_WORD_RESULTS_WITH_CI_PATH.exists():
+def _load_external_results_with_ci(
+    path: Path,
+) -> dict[str, dict[float, dict[str, float]]] | None:
+    if not path.exists():
         return None
 
-    with open(MASK_WORD_RESULTS_WITH_CI_PATH, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         payload = json.load(f)
     if not isinstance(payload, dict):
-        raise ValueError(
-            f"Expected top-level object in {MASK_WORD_RESULTS_WITH_CI_PATH}, got {type(payload).__name__}"
-        )
+        raise ValueError(f"Expected top-level object in {path}, got {type(payload).__name__}")
 
     out: dict[str, dict[float, dict[str, float]]] = {}
     for model, model_payload in payload.items():
@@ -501,8 +507,18 @@ def _plot(
 def main() -> None:
     args = _parse_args()
     models_available = _discover_models(args.benchmark)
-    external_mask_word = _load_external_mask_word_results()
-    external_models_available = sorted(external_mask_word.keys()) if external_mask_word else []
+    external_results_by_fractioner = {
+        fractioner: _load_external_results_with_ci(path)
+        for fractioner, path in EXTERNAL_RESULTS_WITH_CI_PATHS.items()
+    }
+    external_models_available = sorted(
+        {
+            model
+            for payload in external_results_by_fractioner.values()
+            if payload
+            for model in payload.keys()
+        }
+    )
     if not models_available and not external_models_available:
         raise ValueError(f"No models found for benchmark={args.benchmark!r}.")
 
@@ -619,16 +635,22 @@ def main() -> None:
                 f"fractioner={fractioner} {means_text}"
             )
 
-    if args.fractioner == "mask_word" and external_mask_word:
+    external_fractioner_payload = (
+        external_results_by_fractioner.get(args.fractioner) if args.fractioner is not None else None
+    )
+    external_fractioner_path = (
+        EXTERNAL_RESULTS_WITH_CI_PATHS.get(args.fractioner) if args.fractioner is not None else None
+    )
+    if args.fractioner is not None and external_fractioner_payload and external_fractioner_path:
         for model in models_to_plot:
-            model_payload = external_mask_word.get(model)
+            model_payload = external_fractioner_payload.get(model)
             if not model_payload:
                 continue
             missing = sorted(expected_fraction_set - set(model_payload.keys()))
             if missing:
                 print(
-                    f"[plot_hinted_accuracy_vs_hint][WARN] external mask_word data missing "
-                    f"fractions model={model} missing_fractions={missing}"
+                    f"[plot_hinted_accuracy_vs_hint][WARN] external {args.fractioner} data "
+                    f"missing fractions model={model} missing_fractions={missing}"
                 )
                 continue
 
@@ -638,7 +660,7 @@ def main() -> None:
                 fraction_rows.append(
                     {
                         "model": model,
-                        "fractioner": "mask_word",
+                        "fractioner": args.fractioner,
                         "hint_fraction": float(hint_fraction),
                         "accuracy": float(stats["accuracy"]),
                         "ci_low": float(stats["ci_low"]),
@@ -648,8 +670,8 @@ def main() -> None:
                         "rows_total": 0,
                         "rows_with_known_label": 0,
                         "rows_without_known_label": 0,
-                        "path": str(MASK_WORD_RESULTS_WITH_CI_PATH),
-                        "source": "external_mask_word",
+                        "path": str(external_fractioner_path),
+                        "source": f"external_{args.fractioner}",
                     }
                 )
             external_rows.extend(fraction_rows)
@@ -659,7 +681,7 @@ def main() -> None:
             )
             print(
                 f"[plot_hinted_accuracy_vs_hint] external means model={model} "
-                f"fractioner=mask_word {means_text}"
+                f"fractioner={args.fractioner} {means_text}"
             )
 
     if not rows and not external_rows:
@@ -765,4 +787,5 @@ def main() -> None:
 if __name__ == "__main__":
     # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed
     # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner mask_word
+    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner truncate_word
     main()
