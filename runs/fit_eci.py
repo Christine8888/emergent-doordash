@@ -200,5 +200,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # python -m runs.fit_eci_christine
+    # python -m runs.fit_eci
     main()
