@@ -11,11 +11,10 @@ import numpy as np
 from scipy.optimize import curve_fit
 
 from src.hinted_accuracy import (
+    collect_complete_fraction_stats,
     discover_fractioners as canonical_discover_fractioners,
     discover_models_for_benchmark as canonical_discover_models_for_benchmark,
-    discover_models_for_combo,
-    load_external_results_with_ci_for_fractioner,
-    load_results_with_ci_for_combo,
+    load_luke_results_with_ci_for_combo,
 )
 
 
@@ -57,15 +56,6 @@ def _discover_models(
     hint_type: str,
     fractioner: str | None,
 ) -> list[str]:
-    if fractioner is not None:
-        models = discover_models_for_combo(
-            benchmark=benchmark,
-            hint_type=hint_type,
-            fractioner=fractioner,
-        )
-        if models:
-            return models
-
     models = set(canonical_discover_models_for_benchmark(benchmark))
 
     fractioners = [fractioner] if fractioner is not None else []
@@ -78,14 +68,27 @@ def _discover_models(
                     hint_type=hint_type,
                 )
             )
+    local_models = set()
+    for local_model in sorted(models):
+        local_fractioners = canonical_discover_fractioners(
+            benchmark=benchmark,
+            model=local_model,
+            hint_type=hint_type,
+        )
+        if any(current_fractioner in local_fractioners for current_fractioner in set(fractioners)):
+            local_models.add(local_model)
+
+    luke_models = set()
     for current_fractioner in sorted(set(fractioners)):
-        models.update(
-            discover_models_for_combo(
+        luke_models.update(
+            load_luke_results_with_ci_for_combo(
                 benchmark=benchmark,
                 hint_type=hint_type,
                 fractioner=current_fractioner,
-            )
+            ).keys()
         )
+
+    models = local_models | luke_models
 
     if not models:
         benchmark_dir = DATA_ROOT / "hinted_inference" / _safe_component(benchmark)
@@ -322,7 +325,6 @@ def main() -> None:
 
     rows: list[dict[str, Any]] = []
     external_rows: list[dict[str, Any]] = []
-    combo_cache: dict[str, dict[str, dict[float, dict[str, float]]]] = {}
     external_cache: dict[str, dict[str, dict[float, dict[str, float]]]] = {}
 
     for model in models_to_plot:
@@ -342,71 +344,42 @@ def main() -> None:
             continue
 
         for fractioner in fractioners:
-            combo_payload = combo_cache.get(fractioner)
-            if combo_payload is None:
-                combo_payload = load_results_with_ci_for_combo(
+            local_fraction_rows, local_warnings = collect_complete_fraction_stats(
+                benchmark=args.benchmark,
+                model=model,
+                hint_type=args.hint_type,
+                fractioner=fractioner,
+                data_root=DATA_ROOT,
+            )
+            if not local_fraction_rows:
+                if local_warnings:
+                    print(
+                        f"[plot_hinted_accuracy_vs_hint][WARN] no local combo results for "
+                        f"model={model} fractioner={fractioner} warnings={local_warnings}"
+                    )
+            else:
+                rows.extend(local_fraction_rows)
+                print(
+                    f"[plot_hinted_accuracy_vs_hint] included model={model} "
+                    f"fractioner={fractioner} n_points={len(local_fraction_rows)}"
+                )
+                means_text = ", ".join(
+                    f"{float(row['hint_fraction']):.1f}:{float(row['accuracy']):.4f}"
+                    for row in local_fraction_rows
+                )
+                print(
+                    f"[plot_hinted_accuracy_vs_hint] means model={model} "
+                    f"fractioner={fractioner} {means_text}"
+                )
+
+            external_payload = external_cache.get(fractioner)
+            if external_payload is None:
+                external_payload = load_luke_results_with_ci_for_combo(
                     benchmark=args.benchmark,
                     hint_type=args.hint_type,
                     fractioner=fractioner,
                 )
-                combo_cache[fractioner] = combo_payload
-
-            external_payload = external_cache.get(fractioner)
-            if external_payload is None:
-                external_payload = load_external_results_with_ci_for_fractioner(fractioner)
                 external_cache[fractioner] = external_payload
-
-            model_payload = combo_payload.get(model)
-            if not model_payload:
-                print(
-                    f"[plot_hinted_accuracy_vs_hint][WARN] no combo results for "
-                    f"model={model} fractioner={fractioner}"
-                )
-                continue
-
-            fraction_rows: list[dict[str, Any]] = []
-            missing = sorted(
-                {float(f"{value:.6f}") for value in EXPECTED_FRACTIONS} - set(model_payload.keys())
-            )
-            if missing:
-                print(
-                    f"[plot_hinted_accuracy_vs_hint][WARN] missing combo fractions "
-                    f"model={model} fractioner={fractioner} missing_fractions={missing}"
-                )
-                continue
-
-            for hint_fraction in EXPECTED_FRACTIONS:
-                stats = model_payload[float(hint_fraction)]
-                fraction_rows.append(
-                    {
-                        "model": model,
-                        "fractioner": fractioner,
-                        "hint_fraction": float(hint_fraction),
-                        "accuracy": float(stats["accuracy"]),
-                        "ci_low": float(stats["ci_low"]),
-                        "ci_high": float(stats["ci_high"]),
-                        "n_samples": 0,
-                        "n_rollouts": 0,
-                        "rows_total": 0,
-                        "rows_with_known_label": 0,
-                        "rows_without_known_label": 0,
-                        "path": f"combo::{args.benchmark}::{args.hint_type}::{fractioner}",
-                    }
-                )
-
-            rows.extend(fraction_rows)
-            print(
-                f"[plot_hinted_accuracy_vs_hint] included model={model} "
-                f"fractioner={fractioner} n_points={len(fraction_rows)}"
-            )
-            means_text = ", ".join(
-                f"{float(row['hint_fraction']):.1f}:{float(row['accuracy']):.4f}"
-                for row in fraction_rows
-            )
-            print(
-                f"[plot_hinted_accuracy_vs_hint] means model={model} "
-                f"fractioner={fractioner} {means_text}"
-            )
 
             external_model_payload = external_payload.get(model)
             if external_model_payload:

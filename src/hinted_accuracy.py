@@ -10,10 +10,11 @@ import numpy as np
 
 DATA_ROOT = Path("data")
 RESULTS_WITH_CI_BY_COMBO_ROOT = DATA_ROOT / "results_with_ci_by_combo"
-EXTERNAL_RESULTS_WITH_CI_PATHS = {
-    "mask_word": DATA_ROOT / "results_with_ci_mask_word.json",
-    "truncate_word": DATA_ROOT / "results_with_ci_truncate_word.json",
-}
+EXTERNAL_RESULTS_WITH_CI_PATHS: dict[str, Path] = {}
+LUKE_AIME_RESULTS_ROOT = DATA_ROOT / "luke_aime2025_2026_results"
+LUKE_AIME_BENCHMARK = "aime2025_2026"
+LUKE_SUPPORTED_HINT_TYPE = "answer_not_revealed"
+LUKE_SUPPORTED_FRACTIONERS = {"mask_word", "truncate_word"}
 EXPECTED_FRACTIONS = [i / 10 for i in range(11)]
 N_BOOTSTRAP = 5000
 RANDOM_SEED = 0
@@ -38,6 +39,47 @@ def parse_fraction_from_filename(name: str) -> float:
     if not match:
         raise ValueError(f"Unexpected fraction filename: {name}")
     return float(match.group(1))
+
+
+def _is_luke_aime_combo(*, benchmark: str, hint_type: str, fractioner: str) -> bool:
+    return (
+        benchmark == LUKE_AIME_BENCHMARK
+        and hint_type == LUKE_SUPPORTED_HINT_TYPE
+        and fractioner in LUKE_SUPPORTED_FRACTIONERS
+    )
+
+
+def _expected_luke_problem_ids() -> list[str]:
+    return [f"{LUKE_AIME_BENCHMARK}_{idx:04d}" for idx in range(1, 61)]
+
+
+def _discover_luke_models_for_fractioner(fractioner: str) -> list[str]:
+    fractioner_dir = LUKE_AIME_RESULTS_ROOT / safe_component(fractioner)
+    if not fractioner_dir.exists():
+        return []
+    return sorted(
+        path.name
+        for path in fractioner_dir.iterdir()
+        if path.is_dir() and path.name != "submitit_logs"
+    )
+
+
+def _discover_luke_fraction_files(
+    *,
+    model: str,
+    fractioner: str,
+) -> list[tuple[float, Path]]:
+    model_dir = LUKE_AIME_RESULTS_ROOT / safe_component(fractioner) / safe_component(model)
+    if not model_dir.exists():
+        return []
+    out: list[tuple[float, Path]] = []
+    for path in model_dir.glob("fraction_*.jsonl"):
+        try:
+            fraction = parse_fraction_from_filename(path.name)
+        except ValueError:
+            continue
+        out.append((fraction, path))
+    return sorted(out, key=lambda pair: pair[0])
 
 
 def checkpoint_path_for_fraction(path: Path) -> Path:
@@ -84,7 +126,48 @@ def is_complete_fraction(path: Path) -> tuple[bool, str | None]:
     return True, None
 
 
+def is_complete_luke_fraction(path: Path) -> tuple[bool, str | None]:
+    expected_problem_ids = set(_expected_luke_problem_ids())
+    problem_counts: dict[str, int] = {}
+    rows_total = 0
+
+    try:
+        for row in iter_jsonl(path):
+            rows_total += 1
+            if not isinstance(row, dict):
+                return False, f"non-dict row at index={rows_total - 1}"
+            problem_id = str(row.get("problem_id", "")).strip()
+            if problem_id not in expected_problem_ids:
+                return False, f"unexpected problem_id={problem_id!r}"
+            hint_fraction = row.get("hint_fraction")
+            if not isinstance(hint_fraction, (float, int)):
+                return False, f"missing/invalid hint_fraction at row={rows_total - 1}"
+            if extract_is_correct(row) is None:
+                return False, f"missing/invalid correct label at row={rows_total - 1}"
+            problem_counts[problem_id] = problem_counts.get(problem_id, 0) + 1
+    except Exception as exc:
+        return False, f"failed to read {path}: {exc}"
+
+    if rows_total != 600:
+        return False, f"expected 600 rows, found {rows_total}"
+    if set(problem_counts.keys()) != expected_problem_ids:
+        missing = sorted(expected_problem_ids - set(problem_counts.keys()))
+        extra = sorted(set(problem_counts.keys()) - expected_problem_ids)
+        return False, f"problem_id coverage mismatch missing={missing} extra={extra}"
+    bad_counts = sorted(
+        problem_id for problem_id, count in problem_counts.items() if count != 10
+    )
+    if bad_counts:
+        preview = [(problem_id, problem_counts[problem_id]) for problem_id in bad_counts[:5]]
+        return False, f"expected 10 rows per problem, bad_counts={preview}"
+    return True, None
+
+
 def extract_is_correct(row: dict[str, Any]) -> bool | None:
+    direct_correct = row.get("correct")
+    if isinstance(direct_correct, bool):
+        return direct_correct
+
     graders = row.get("graders")
     if not isinstance(graders, list):
         return None
@@ -221,6 +304,31 @@ def load_external_results_with_ci_for_fractioner(
     return load_external_results_with_ci(path) or {}
 
 
+def load_luke_results_with_ci_for_combo(
+    *,
+    benchmark: str,
+    hint_type: str,
+    fractioner: str,
+) -> dict[str, dict[float, dict[str, float]]]:
+    if not _is_luke_aime_combo(
+        benchmark=benchmark,
+        hint_type=hint_type,
+        fractioner=fractioner,
+    ):
+        return {}
+
+    rows: list[dict[str, Any]] = []
+    for model in _discover_luke_models_for_fractioner(fractioner):
+        model_rows, _warnings = collect_complete_fraction_stats_from_luke(
+            benchmark=benchmark,
+            model=model,
+            hint_type=hint_type,
+            fractioner=fractioner,
+        )
+        rows.extend(model_rows)
+    return parse_results_with_ci_payload(rows_to_results_with_ci_payload(rows))
+
+
 def parse_results_with_ci_payload(
     payload: dict[str, Any] | None,
 ) -> dict[str, dict[float, dict[str, float]]]:
@@ -255,10 +363,11 @@ def parse_results_with_ci_payload(
 
 
 def discover_models_for_benchmark(benchmark: str, *, data_root: Path = DATA_ROOT) -> list[str]:
+    models: set[str] = set()
     benchmark_dir = data_root / "hinted_inference" / safe_component(benchmark)
-    if not benchmark_dir.exists():
-        return []
-    return sorted(path.name for path in benchmark_dir.iterdir() if path.is_dir())
+    if benchmark_dir.exists():
+        models.update(path.name for path in benchmark_dir.iterdir() if path.is_dir())
+    return sorted(models)
 
 
 def results_with_ci_by_combo_path(
@@ -392,6 +501,75 @@ def collect_complete_fraction_stats(
     return rows, warnings
 
 
+def collect_complete_fraction_stats_from_luke(
+    *,
+    benchmark: str,
+    model: str,
+    hint_type: str,
+    fractioner: str,
+    expected_fractions: list[float] | None = None,
+    random_seed: int = RANDOM_SEED,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    if not _is_luke_aime_combo(
+        benchmark=benchmark,
+        hint_type=hint_type,
+        fractioner=fractioner,
+    ):
+        return [], [f"unsupported_luke_combo benchmark={benchmark} hint_type={hint_type} fractioner={fractioner}"]
+
+    expected = EXPECTED_FRACTIONS if expected_fractions is None else expected_fractions
+    expected_fraction_set = {float(f"{value:.6f}") for value in expected}
+    rng = np.random.default_rng(random_seed)
+
+    fraction_files = _discover_luke_fraction_files(
+        model=model,
+        fractioner=fractioner,
+    )
+    if not fraction_files:
+        return [], [f"no luke files for model={model} fractioner={fractioner}"]
+
+    complete_fraction_files: list[tuple[float, Path]] = []
+    incomplete_fraction_reasons: list[str] = []
+    for hint_fraction, path in fraction_files:
+        complete, reason = is_complete_luke_fraction(path)
+        if complete:
+            complete_fraction_files.append((float(hint_fraction), path))
+        else:
+            incomplete_fraction_reasons.append(
+                f"{float(hint_fraction):.1f}:{reason or 'incomplete'}"
+            )
+
+    by_fraction = {float(f"{frac:.6f}"): path for frac, path in complete_fraction_files}
+    missing = sorted(expected_fraction_set - set(by_fraction.keys()))
+    if missing:
+        return [], [
+            f"missing_fractions={missing} incomplete_points={incomplete_fraction_reasons}"
+        ]
+
+    rows: list[dict[str, Any]] = []
+    warnings = list(incomplete_fraction_reasons)
+    for hint_fraction in expected:
+        path = by_fraction[float(f"{hint_fraction:.6f}")]
+        stats = collect_stats_for_fraction(path=path, rng=rng)
+        if stats is None:
+            warnings.append(
+                f"unusable luke fraction rows model={model} fractioner={fractioner} "
+                f"fraction={hint_fraction} path={path}"
+            )
+            continue
+        rows.append(
+            {
+                "model": model,
+                "fractioner": fractioner,
+                "hint_fraction": float(hint_fraction),
+                **stats,
+                "path": str(path),
+            }
+        )
+
+    return rows, warnings
+
+
 def rows_to_results_with_ci_payload(rows: list[dict[str, Any]]) -> dict[str, dict[str, dict[str, float]]]:
     payload: dict[str, dict[str, dict[str, float]]] = {}
     rows_sorted = sorted(
@@ -446,14 +624,6 @@ def build_results_with_ci_for_combo(
     fractioner: str,
     data_root: Path = DATA_ROOT,
 ) -> dict[str, dict[float, dict[str, float]]]:
-    external_payload = external_results_to_payload(
-        load_external_results_with_ci(
-            EXTERNAL_RESULTS_WITH_CI_PATHS.get(fractioner, Path("__missing__"))
-        )
-        if fractioner in EXTERNAL_RESULTS_WITH_CI_PATHS
-        else None
-    )
-
     rows: list[dict[str, Any]] = []
     for model in discover_models_for_benchmark(benchmark, data_root=data_root):
         model_rows, _warnings = collect_complete_fraction_stats(
@@ -466,8 +636,7 @@ def build_results_with_ci_for_combo(
         rows.extend(model_rows)
 
     local_payload = rows_to_results_with_ci_payload(rows)
-    merged_payload = merge_results_with_ci_payloads(external_payload, local_payload)
-    return parse_results_with_ci_payload(merged_payload)
+    return parse_results_with_ci_payload(local_payload)
 
 
 def load_results_with_ci_for_combo(
