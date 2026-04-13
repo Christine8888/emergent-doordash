@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -18,6 +20,28 @@ from src.hinted_accuracy import discover_models_for_benchmark, load_results_with
 
 PLOTS_ROOT = Path("plots/joint_scaling_plots")
 PC_BENCHMARK_ORDER = [EVAL_TO_ECI[eval_name] for eval_name in EVAL_TO_ECI]
+OLD_GPQA_ROOT = Path(
+    "/nlp/scr/suzeva/projects/emergent-doordash/christine_experiments/20251113/results/"
+    "gpqa/solution_intext_masked/0shot"
+)
+MODELS_TO_USE: list[str] | None = [
+    "google/gemma-3-27b-it",
+    "meta-llama/Llama-3.1-70B-Instruct",
+    "Qwen/Qwen3-32B",
+    "Qwen/Qwen3-14B",
+    "Qwen/Qwen2.5-32B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
+    "google/gemma-3-12b-it",
+    "Qwen/Qwen3-0.6B",
+    "Qwen/Qwen3-1.7B",
+    "Qwen/Qwen3-4B",
+    "Qwen/Qwen3-8B",
+    "Qwen/Qwen2.5-1.5B-Instruct",
+    "Qwen/Qwen2.5-3B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "google/gemma-3-4b-it",
+    "meta-llama/Llama-3.1-8B-Instruct",
+]
 
 
 def _parse_args() -> argparse.Namespace:
@@ -43,7 +67,7 @@ def _load_eci_map(path: Path) -> dict[str, float]:
             eci_raw = row.get("eci_our_fit")
             if not model or eci_raw in (None, ""):
                 continue
-            out[model] = float(eci_raw)
+            out[_canonicalize_old_gpqa_model_name(model)] = float(eci_raw)
     return out
 
 
@@ -58,9 +82,164 @@ def _eci_benchmark_label(path: Path) -> str:
     return ", ".join(encoded.split("--"))
 
 
+def _is_old_gpqa_combo(*, benchmark: str, hint_type: str, fractioner: str) -> bool:
+    return (
+        benchmark == "gpqa"
+        and hint_type == "answer_not_revealed"
+        and fractioner == "mask_word"
+    )
+
+
+def _validate_old_gpqa_combo(*, benchmark: str, hint_type: str, fractioner: str) -> None:
+    if benchmark != "gpqa":
+        return
+    if _is_old_gpqa_combo(
+        benchmark=benchmark,
+        hint_type=hint_type,
+        fractioner=fractioner,
+    ):
+        return
+    raise ValueError(
+        "GPQA is only supported via the old results directory for "
+        "hint_type=answer_not_revealed and fractioner=mask_word."
+    )
+
+
+def _parse_old_gpqa_fraction_from_filename(name: str) -> float:
+    match = re.match(r"^gpqa_solution_intext_masked_0shot_(.+)\.json$", name)
+    if not match:
+        raise ValueError(f"Unexpected GPQA filename: {name}")
+    return float(match.group(1))
+
+
+def _canonicalize_old_gpqa_model_name(model: str) -> str:
+    if "/" in model:
+        return model
+    if model.startswith("Qwen"):
+        return f"Qwen/{model}"
+    if model.startswith("Llama-"):
+        return f"meta-llama/{model}"
+    if model.startswith("gemma-"):
+        return f"google/{model}"
+    return model
+
+
+def _discover_old_gpqa_models() -> list[str]:
+    if not OLD_GPQA_ROOT.exists():
+        raise FileNotFoundError(f"Missing OLD_GPQA_ROOT: {OLD_GPQA_ROOT}")
+    return sorted(path.name for path in OLD_GPQA_ROOT.iterdir() if path.is_dir())
+
+
+def _load_old_gpqa_results_with_ci() -> dict[str, dict[float, dict[str, float]]]:
+    out: dict[str, dict[float, dict[str, float]]] = {}
+    for old_model in _discover_old_gpqa_models():
+        model = _canonicalize_old_gpqa_model_name(old_model)
+        model_dir = OLD_GPQA_ROOT / old_model
+        fraction_map: dict[float, dict[str, float]] = {}
+        for path in sorted(model_dir.glob("gpqa_solution_intext_masked_0shot_*.json")):
+            try:
+                hint_fraction = _parse_old_gpqa_fraction_from_filename(path.name)
+            except ValueError:
+                continue
+
+            with open(path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+
+            metric = payload.get("manual_bootstrap")
+            if not isinstance(metric, dict):
+                print(
+                    f"[plot_accuracy_vs_eci_by_hint][WARN] missing manual_bootstrap "
+                    f"model={old_model} canonical_model={model} path={path}"
+                )
+                continue
+
+            accuracy = metric.get("accuracy")
+            stderr = metric.get("stderr")
+            if not isinstance(accuracy, (int, float)) or not isinstance(stderr, (int, float)):
+                print(
+                    f"[plot_accuracy_vs_eci_by_hint][WARN] invalid manual_bootstrap metric "
+                    f"model={old_model} canonical_model={model} path={path}"
+                )
+                continue
+
+            ci_low = max(0.0, float(accuracy) - 1.96 * float(stderr))
+            ci_high = min(1.0, float(accuracy) + 1.96 * float(stderr))
+            fraction_map[float(hint_fraction)] = {
+                "accuracy": float(accuracy),
+                "ci_low": float(ci_low),
+                "ci_high": float(ci_high),
+            }
+
+        if fraction_map:
+            out[model] = dict(sorted(fraction_map.items()))
+    return out
+
+
+def _load_combo_results(
+    *,
+    benchmark: str,
+    hint_type: str,
+    fractioner: str,
+) -> tuple[dict[str, dict[float, dict[str, float]]], list[str]]:
+    _validate_old_gpqa_combo(
+        benchmark=benchmark,
+        hint_type=hint_type,
+        fractioner=fractioner,
+    )
+    if _is_old_gpqa_combo(
+        benchmark=benchmark,
+        hint_type=hint_type,
+        fractioner=fractioner,
+    ):
+        combo_results = _load_old_gpqa_results_with_ci()
+        return combo_results, sorted(combo_results.keys())
+
+    combo_results = load_results_with_ci_for_combo(
+        benchmark=benchmark,
+        hint_type=hint_type,
+        fractioner=fractioner,
+    )
+    canonical_combo_results = {
+        _canonicalize_old_gpqa_model_name(str(model)): stats
+        for model, stats in combo_results.items()
+    }
+    models = sorted(
+        {
+            _canonicalize_old_gpqa_model_name(str(model))
+            for model in discover_models_for_benchmark(benchmark)
+        }
+        | set(canonical_combo_results.keys())
+    )
+    return canonical_combo_results, models
+
+
+def _resolve_models_to_use(
+    *,
+    available_models: list[str],
+    benchmark: str,
+) -> list[str]:
+    canonical_available_models = [
+        _canonicalize_old_gpqa_model_name(str(model)) for model in available_models
+    ]
+    if MODELS_TO_USE is None:
+        return canonical_available_models
+
+    canonical_models_to_use = [
+        _canonicalize_old_gpqa_model_name(str(model)) for model in MODELS_TO_USE
+    ]
+    missing_models = sorted(set(canonical_models_to_use) - set(canonical_available_models))
+    if missing_models:
+        raise ValueError(
+            f"Configured MODELS_TO_USE missing for benchmark={benchmark}: {missing_models}. "
+            f"Available models: {sorted(canonical_available_models)}"
+        )
+    return canonical_models_to_use
+
+
 def _compute_pca_from_baselines() -> dict[str, Any]:
     scores_df = load_baseline_scores()
     df = scores_df[scores_df["benchmark"].isin(PC_BENCHMARK_ORDER)].copy()
+    df["model"] = df["model"].map(lambda value: _canonicalize_old_gpqa_model_name(str(value)))
     pivot = df.pivot(index="model", columns="benchmark", values="score")
     pivot = pivot.reindex(columns=PC_BENCHMARK_ORDER)
     pivot = pivot.dropna(axis=0, how="any")
@@ -86,6 +265,11 @@ def _compute_pca_from_baselines() -> dict[str, Any]:
 
     explained_variance = (singular_values**2) / max(z.shape[0] - 1, 1)
     explained_variance_ratio = explained_variance / explained_variance.sum()
+    pc1_terms = []
+    for benchmark, weight in zip(PC_BENCHMARK_ORDER, pc1):
+        sign = "+" if float(weight) >= 0 else "-"
+        pc1_terms.append(f"{sign}{abs(float(weight)):.3f}·z({benchmark})")
+    pc1_equation = "PC1 = " + " ".join(pc1_terms)
 
     return {
         "capability_map": {
@@ -96,6 +280,7 @@ def _compute_pca_from_baselines() -> dict[str, Any]:
         "components": np.asarray(vt, dtype=float),
         "explained_variance_ratio": np.asarray(explained_variance_ratio, dtype=float),
         "benchmark_label": ", ".join(eval_name for eval_name in EVAL_TO_ECI),
+        "equation": pc1_equation,
     }
 
 
@@ -223,6 +408,25 @@ def _print_accuracy_summary_table(
         print("  " + " ".join(row))
 
 
+def _add_model_name_axis(
+    ax: plt.Axes,
+    *,
+    rows: list[dict[str, Any]],
+    label: str,
+) -> None:
+    plotted_models = sorted(
+        {
+            (str(row["model"]), float(row["capability"]))
+            for row in rows
+        },
+        key=lambda item: item[1],
+    )
+    top_ax = ax.secondary_xaxis("top")
+    top_ax.set_xticks([capability for _, capability in plotted_models])
+    top_ax.set_xticklabels([model for model, _ in plotted_models], rotation=60, ha="left", fontsize=8)
+    top_ax.set_xlabel(label, fontsize=11)
+
+
 def _plot_capability_view(
     *,
     rows: list[dict[str, Any]],
@@ -232,6 +436,7 @@ def _plot_capability_view(
     capability_method: str,
     capability_label: str,
     capability_benchmark_label: str,
+    capability_equation: str | None,
     output_dir: Path,
 ) -> Path:
     hint_fractions = sorted({float(row["hint_fraction"]) for row in rows})
@@ -257,24 +462,21 @@ def _plot_capability_view(
             x_fit, y_fit = fit
             ax.plot(x_fit, y_fit, "-", color=color, alpha=0.7, linewidth=2)
 
-    plotted_models = sorted(
-        {
-            (str(row["model"]), float(row["capability"]))
-            for row in rows
-        },
-        key=lambda item: item[1],
+    _add_model_name_axis(
+        ax,
+        rows=rows,
+        label="Model",
     )
-    ax.set_xticks([capability for _, capability in plotted_models])
-    ax.set_xticklabels([model for model, _ in plotted_models], rotation=60, ha="right", fontsize=8)
-
-    ax.set_xlabel(f"Model (positioned by {capability_label})", fontsize=12)
+    ax.set_xlabel(capability_label, fontsize=12)
     ax.set_ylabel("Accuracy", fontsize=12)
-    ax.set_title(
-        f"Accuracy vs {capability_label} by Hint Fraction\n"
-        f"benchmark={benchmark} hint_type={hint_type} fractioner={fractioner}\n"
+    title_lines = [
+        f"Accuracy vs {capability_label} by Hint Fraction",
+        f"benchmark={benchmark} hint_type={hint_type} fractioner={fractioner}",
         f"{capability_method}_benchmarks={capability_benchmark_label}",
-        fontsize=13,
-    )
+    ]
+    if capability_equation:
+        title_lines.append(capability_equation)
+    ax.set_title("\n".join(title_lines), fontsize=13)
     ax.grid(True, alpha=0.3)
     ax.set_ylim(-0.05, 1.05)
     ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
@@ -299,6 +501,7 @@ def _plot_capability_view_per_hint_with_error_bars(
     capability_method: str,
     capability_label: str,
     capability_benchmark_label: str,
+    capability_equation: str | None,
     output_dir: Path,
  ) -> Path:
     hint_fractions = sorted({float(row["hint_fraction"]) for row in rows})
@@ -355,12 +558,14 @@ def _plot_capability_view_per_hint_with_error_bars(
     for idx in range(n_panels, nrows * ncols):
         axes[idx // ncols][idx % ncols].axis("off")
 
-    fig.suptitle(
-        f"Accuracy vs {capability_label} with Error Bars by Hint Fraction\n"
-        f"benchmark={benchmark} hint_type={hint_type} fractioner={fractioner}\n"
+    title_lines = [
+        f"Accuracy vs {capability_label} with Error Bars by Hint Fraction",
+        f"benchmark={benchmark} hint_type={hint_type} fractioner={fractioner}",
         f"{capability_method}_benchmarks={capability_benchmark_label}",
-        fontsize=14,
-    )
+    ]
+    if capability_equation:
+        title_lines.append(capability_equation)
+    fig.suptitle("\n".join(title_lines), fontsize=14)
     output_path = output_dir / f"accuracy_vs_{capability_method}_by_hint_subplots_with_error_bars.png"
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(output_path, dpi=200, bbox_inches="tight")
@@ -376,27 +581,36 @@ def main() -> None:
     pca_result = _compute_pca_from_baselines()
     pc1_map = pca_result["capability_map"]
     pc_benchmark_label = pca_result["benchmark_label"]
+    pc1_equation = pca_result["equation"]
 
-    combo_results = load_results_with_ci_for_combo(
+    combo_results, models = _load_combo_results(
         benchmark=args.benchmark,
         hint_type=args.hint_type,
         fractioner=args.fractioner,
     )
+    if _is_old_gpqa_combo(
+        benchmark=args.benchmark,
+        hint_type=args.hint_type,
+        fractioner=args.fractioner,
+    ):
+        print(f"[plot_accuracy_vs_eci_by_hint] using_old_gpqa_root={OLD_GPQA_ROOT}")
 
+    models = _resolve_models_to_use(
+        available_models=models,
+        benchmark=args.benchmark,
+    )
     rows: list[dict[str, Any]] = []
-    models = sorted(set(discover_models_for_benchmark(args.benchmark)) | set(combo_results.keys()))
     print(
-        f"[plot_accuracy_vs_eci_by_hint] discovered_models={len(models)} "
+        f"[plot_accuracy_vs_eci_by_hint] selected_models={len(models)} "
         f"models={models}"
     )
     base_rows: list[dict[str, Any]] = []
     for model in models:
         if model not in combo_results:
-            print(
-                f"[plot_accuracy_vs_eci_by_hint][WARN] dropping model={model} "
-                f"reason=no_combo_results"
+            raise ValueError(
+                f"Configured model missing combo results for benchmark={args.benchmark}: "
+                f"model={model}"
             )
-            continue
         for hint_fraction, stats in sorted(combo_results[model].items()):
             base_rows.append(
                 {
@@ -424,10 +638,16 @@ def main() -> None:
         output_path=output_dir / "pca_explained_variance.png",
     )
     views = [
-        ("eci", "ECI", eci_map, eci_benchmark_label),
-        ("pc1", "PC1", pc1_map, pc_benchmark_label),
+        ("eci", "ECI", eci_map, eci_benchmark_label, None),
+        ("pc1", "PC1", pc1_map, pc_benchmark_label, pc1_equation),
     ]
-    for capability_method, capability_label, capability_map, capability_benchmark_label in views:
+    for (
+        capability_method,
+        capability_label,
+        capability_map,
+        capability_benchmark_label,
+        capability_equation,
+    ) in views:
         rows = []
         for row in base_rows:
             model = str(row["model"])
@@ -446,10 +666,9 @@ def main() -> None:
             continue
 
         missing_models = sorted({str(row["model"]) for row in base_rows} - set(capability_map.keys()))
-        for model in missing_models:
-            print(
-                f"[plot_accuracy_vs_eci_by_hint][WARN] dropping model={model} "
-                f"reason=missing_{capability_method}"
+        if missing_models:
+            raise ValueError(
+                f"Configured models missing {capability_method} capability values: {missing_models}"
             )
 
         output_path = _plot_capability_view(
@@ -460,6 +679,7 @@ def main() -> None:
             capability_method=capability_method,
             capability_label=capability_label,
             capability_benchmark_label=capability_benchmark_label,
+            capability_equation=capability_equation,
             output_dir=output_dir,
         )
         print(f"[plot_accuracy_vs_eci_by_hint] {output_path}")
@@ -471,6 +691,7 @@ def main() -> None:
             capability_method=capability_method,
             capability_label=capability_label,
             capability_benchmark_label=capability_benchmark_label,
+            capability_equation=capability_equation,
             output_dir=output_dir,
         )
         print(f"[plot_accuracy_vs_eci_by_hint] {per_hint_output_path}")
@@ -480,4 +701,5 @@ if __name__ == "__main__":
     # python -m runs.plot_joint_scaling --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner mask_word --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh--hellaswag--mmlu_5_shot_cot--piqa--winogrande.csv
     # python -m runs.plot_joint_scaling --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner truncate_word --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh--hellaswag--mmlu_5_shot_cot--piqa--winogrande.csv
 
+    # python -m runs.plot_joint_scaling --benchmark gpqa --hint-type answer_not_revealed --fractioner mask_word --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh--hellaswag--mmlu_5_shot_cot--piqa--winogrande.csv
     main()
