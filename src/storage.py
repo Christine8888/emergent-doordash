@@ -91,6 +91,17 @@ def build_expanded_hinted_prompt_path(
     )
 
 
+def build_eci_score_path(
+    benchmark_name: str,
+    model: str,
+    *,
+    data_root: str | Path,
+) -> Path:
+    benchmark = _safe_component(benchmark_name)
+    model_name = _model_storage_component(model)
+    return Path(data_root) / "eci_scores" / benchmark / f"{model_name}.jsonl"
+
+
 def append_jsonl(path: str | Path, record: BaseModel | dict[str, Any]) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-"""Estimate per-model ECI from Christine baseline data.
+"""Estimate per-model ECI from local inspect-backed benchmark exports.
 
 Workflow:
-1. collect benchmark scores for local models from `data/baseline_christine`
+1. collect benchmark scores for local models from `data/eci_scores`
 2. load Epoch benchmark difficulties/slopes from `data/epoch_ai_data`
 3. fit one ECI capability score per model by inverting Epoch's benchmark sigmoids
 
@@ -12,7 +12,6 @@ https://epoch.ai/data/
 """
 
 import argparse
-import json
 from pathlib import Path
 from typing import Any
 
@@ -20,19 +19,21 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize_scalar
 
+from src.storage import read_jsonl
+from src.types import ECIScoreRecord
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-BASELINE_FOLDER = PROJECT_ROOT / "data" / "baseline_christine"
+BASELINE_FOLDER = PROJECT_ROOT / "data" / "eci_scores"
 EPOCH_DATA_DIR = PROJECT_ROOT / "data" / "epoch_ai_data"
 
 EVAL_TO_ECI = {
-    "hellaswag": "HellaSwag",
+    "hellaswag__split_validation": "HellaSwag",
     "piqa": "PIQA",
-    "mmlu_5_shot_cot": "MMLU",
-    "bbh": "BBH",
+    "mmlu_5_shot__language_en_us__cot_false": "MMLU",
+    "bbh__prompt_type_answer_only": "BBH",
     "arc_challenge": "ARC AI2",
-    "winogrande": "Winogrande",
-    "math_level_5": "MATH level 5",
+    "winogrande__dataset_name_winogrande_xl__fewshot_5": "Winogrande",
+    "math__levels_5__fewshot_0": "MATH level 5",
 }
 
 MIN_BENCHMARKS = len(EVAL_TO_ECI)
@@ -40,7 +41,7 @@ MIN_SCORE = 0.05
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Estimate ECI for models in data/baseline_christine.")
+    parser = argparse.ArgumentParser(description="Estimate ECI for models in data/eci_scores.")
     return parser.parse_args()
 
 
@@ -51,17 +52,10 @@ def _slug(text: str) -> str:
 def _output_path() -> Path:
     eval_part = "--".join(sorted(_slug(name) for name in EVAL_TO_ECI.keys()))
     return PROJECT_ROOT / "data" / f"eci_model_capabilities__simple__{eval_part}.csv"
-
-
-def _extract_accuracy(payload: dict[str, Any]) -> float | None:
-    for value in payload.values():
-        if isinstance(value, dict):
-            accuracy = value.get("accuracy")
-            if isinstance(accuracy, (int, float)):
-                return float(accuracy)
-            overall = value.get("all")
-            if isinstance(overall, (int, float)):
-                return float(overall)
+def _extract_is_correct(record: ECIScoreRecord) -> bool | None:
+    for grader in record.graders:
+        if isinstance(grader.is_correct, bool):
+            return grader.is_correct
     return None
 
 
@@ -75,23 +69,21 @@ def load_baseline_scores() -> pd.DataFrame:
             raise FileNotFoundError(f"Missing baseline folder: {eval_dir}")
 
         n_models = 0
-        for model_dir in sorted(eval_dir.iterdir()):
-            if not model_dir.is_dir():
-                continue
-            json_path = model_dir / f"{eval_name}.json"
-            if not json_path.exists():
+        for jsonl_path in sorted(eval_dir.glob("*.jsonl")):
+            if not jsonl_path.is_file():
                 continue
 
-            with open(json_path, "r", encoding="utf-8") as f:
-                payload = json.load(f)
-
-            accuracy = _extract_accuracy(payload)
-            if accuracy is None:
+            rows = read_jsonl(jsonl_path, model_cls=ECIScoreRecord)
+            typed_rows = [row for row in rows if isinstance(row, ECIScoreRecord)]
+            judged = [flag for flag in (_extract_is_correct(row) for row in typed_rows) if flag is not None]
+            if not judged:
                 continue
+            accuracy = sum(1.0 if flag else 0.0 for flag in judged) / len(judged)
+            model_name = typed_rows[0].model if typed_rows else jsonl_path.stem
 
             rows.append(
                 {
-                    "model": model_dir.name,
+                    "model": model_name,
                     "benchmark": benchmark_name,
                     "score": accuracy,
                 }

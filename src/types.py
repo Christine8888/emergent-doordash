@@ -73,6 +73,28 @@ class HintedInferenceRecord(BaseModel):
         return value
 
 
+class ECIScoreRecord(BaseModel):
+    """One no-hint benchmark result for one problem and rollout."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    inference_id: str
+    problem_id: str
+    benchmark_name: str
+    model: str
+    rollout_id: int
+    question: str
+    answer: str
+    model_output: str
+    input_token_count: int
+    output_token_count: int
+    cost: float
+    is_error: bool
+    graders: list[GraderResult]
+    created_at: str = Field(default_factory=_utcnow_iso, frozen=True)
+    metadata: dict[str, Any]
+
+
 class ExpandedHintedPromptRecord(BaseModel):
     """One fully materialized hinted prompt (fractioned + harnessed)."""
 
