@@ -466,6 +466,7 @@ python -m runs.generate_eci \
       --backend local-vllm \
       --executor submitit \
       --cluster sphinx \
+      --model Qwen/Qwen3-1.7B \
       --num-gpus 1 \
-      --max-connections 48
+      --max-connections 50
 """
