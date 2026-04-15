@@ -86,6 +86,7 @@ class ECIScoreRecord(BaseModel):
     question: str
     answer: str
     model_output: str
+    stop_reason: str | None = None
     input_token_count: int
     output_token_count: int
     cost: float

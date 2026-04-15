@@ -715,7 +715,7 @@ def _save_eci_checkpoint(
     completed_samples: int,
     existing_records: int,
     new_records: int,
-    checkpoint_every: int,
+    checkpoint: int | None,
     elapsed_seconds: float,
     run_metadata: dict[str, Any],
     inspect_log_path: str | None = None,
@@ -731,7 +731,7 @@ def _save_eci_checkpoint(
         "remaining_samples": max(0, int(total_samples) - int(completed_samples)),
         "existing_records": int(existing_records),
         "new_records": int(new_records),
-        "checkpoint_every": int(checkpoint_every),
+        "checkpoint": None if checkpoint is None else int(checkpoint),
         "elapsed_seconds": float(elapsed_seconds),
         "run_metadata": run_metadata,
     }
@@ -776,6 +776,26 @@ def _extract_model_output(sample: dict[str, Any]) -> str:
                 if isinstance(explanation, str):
                     return explanation
     return ""
+
+
+def _extract_stop_reason(sample: dict[str, Any]) -> str | None:
+    output = sample.get("output")
+    if not isinstance(output, dict):
+        return None
+
+    choices = output.get("choices")
+    if isinstance(choices, list):
+        for choice in choices:
+            if not isinstance(choice, dict):
+                continue
+            stop_reason = choice.get("stop_reason")
+            if isinstance(stop_reason, str) and stop_reason:
+                return stop_reason
+
+    stop_reason = output.get("stop_reason")
+    if isinstance(stop_reason, str) and stop_reason:
+        return stop_reason
+    return None
 
 
 def _extract_rendered_prompt(sample: dict[str, Any]) -> str | None:
@@ -903,6 +923,7 @@ def _extract_sample_rows(
                 question=_stringify_sample_text(sample.get("input")),
                 answer=_stringify_sample_text(sample.get("target")),
                 model_output=_extract_model_output(sample),
+                stop_reason=_extract_stop_reason(sample),
                 input_token_count=_extract_token_count(sample, "input_tokens", "prompt_tokens"),
                 output_token_count=_extract_token_count(sample, "output_tokens", "completion_tokens"),
                 cost=0.0,
@@ -1008,7 +1029,7 @@ def _run_inspect_command_once(
 
     _log(
         f"[eci] running benchmark={config.benchmark_id} model={model_path} "
-        f"epochs={epochs} sample_count={total_samples}",
+        f"epochs={epochs}",
     )
     inspect_stdout_path = log_dir / "inspect.stdout.log"
     inspect_stderr_path = log_dir / "inspect.stderr.log"
@@ -1155,7 +1176,7 @@ def run_eci_benchmark(
     max_connections: int,
     sampling_params: dict[str, bool | float | int],
     run_metadata: dict[str, Any],
-    checkpoint_every: int,
+    checkpoint: int | None,
     model_base_url: str | None = None,
     extra_env: dict[str, str] | None = None,
 ) -> BenchmarkRunSummary:
@@ -1186,7 +1207,11 @@ def run_eci_benchmark(
     elapsed_seconds = 0.0
     new_count = 0
     ckpt_path = _checkpoint_path_for_output(output_path)
-    chunk_sample_count = max(1, (checkpoint_every + max(1, EPOCHS) - 1) // max(1, EPOCHS))
+    chunk_sample_count = (
+        max(1, (checkpoint + max(1, EPOCHS) - 1) // max(1, EPOCHS))
+        if checkpoint is not None
+        else None
+    )
     try:
         from tqdm.auto import tqdm
     except Exception:
@@ -1224,7 +1249,7 @@ def run_eci_benchmark(
             completed_samples=completed_samples,
             existing_records=len(scoped_existing_rows),
             new_records=new_count,
-            checkpoint_every=checkpoint_every,
+            checkpoint=checkpoint,
             elapsed_seconds=elapsed_seconds,
             run_metadata=run_metadata,
             inspect_log_path=inspect_log_path or None,
@@ -1240,17 +1265,20 @@ def run_eci_benchmark(
             completed_samples=len(scoped_existing_rows),
             existing_records=len(scoped_existing_rows),
             new_records=new_count,
-            checkpoint_every=checkpoint_every,
+            checkpoint=checkpoint,
             elapsed_seconds=elapsed_seconds,
             run_metadata=run_metadata,
             inspect_log_path=None,
         )
 
         if not existing_ids:
-            sample_id_batches = _chunk_sample_ids_with_limits(
-                target_problem_ids,
-                max_items=chunk_sample_count,
-            )
+            if checkpoint is None:
+                sample_id_batches: list[list[str] | None] = [target_problem_ids if limit is not None else None]
+            else:
+                sample_id_batches = _chunk_sample_ids_with_limits(
+                    target_problem_ids,
+                    max_items=chunk_sample_count,
+                )
             for sample_id_batch in sample_id_batches:
                 batch_added = 0
                 new_rows, inspect_log_path, run_elapsed_seconds = _run_inspect_command_once(
@@ -1258,7 +1286,7 @@ def run_eci_benchmark(
                     model_path=model_path,
                     inspect_model=inspect_model,
                     sample_ids=sample_id_batch,
-                    total_samples=len(sample_id_batch) * EPOCHS,
+                    total_samples=(len(sample_id_batch) if sample_id_batch is not None else len(target_problem_ids)) * EPOCHS,
                     epochs=EPOCHS,
                     rollout_offset=0,
                     max_connections=max_connections,
@@ -1300,10 +1328,14 @@ def run_eci_benchmark(
                     f"[eci] pending benchmark={config.benchmark_id} model={model_path} "
                     f"rollout={rollout_id} pending={len(missing_problem_ids)}",
                 )
-                for sample_id_batch in _chunk_sample_ids_with_limits(
-                    missing_problem_ids,
-                    max_items=max(1, checkpoint_every),
-                ):
+                if checkpoint is None:
+                    sample_id_batches = _chunk_sample_ids(missing_problem_ids)
+                else:
+                    sample_id_batches = _chunk_sample_ids_with_limits(
+                        missing_problem_ids,
+                        max_items=max(1, checkpoint),
+                    )
+                for sample_id_batch in sample_id_batches:
                     batch_added = 0
                     new_rows, inspect_log_path, run_elapsed_seconds = _run_inspect_command_once(
                         config=config,
@@ -1371,7 +1403,7 @@ def run_eci_benchmarks(
     run_metadata: dict[str, Any],
     limit: int | None,
     max_connections: int,
-    checkpoint_every: int,
+    checkpoint: int | None,
     gpu_memory_utilization: float,
     dtype: str,
     backend: str,
@@ -1388,7 +1420,7 @@ def run_eci_benchmarks(
                 max_connections=max_connections,
                 sampling_params=sampling_params,
                 run_metadata=run_metadata,
-                checkpoint_every=checkpoint_every,
+                checkpoint=checkpoint,
                 model_base_url=model_base_url,
                 extra_env=extra_env,
             )

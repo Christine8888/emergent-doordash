@@ -12,7 +12,6 @@ from typing import Any
 from src.eci_progress import compute_eci_benchmark_progress
 from src.eci_runner import (
     BENCHMARK_CONFIGS,
-    DEFAULT_CHECKPOINT_EVERY,
     EPOCHS,
     MAX_RETRIES,
     MAX_TOKENS,
@@ -26,7 +25,7 @@ BENCHMARKS = [
     "mmlu_5_shot__language_en_us__cot_true",
     "bbh__prompt_type_answer_only",
     "arc_challenge",
-    "math__levels_5__fewshot_0",
+    # "math__levels_5__fewshot_0",
     "hellaswag__split_validation",
     "piqa",
     "winogrande__dataset_name_winogrande_xl__fewshot_5",
@@ -177,7 +176,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--executor", choices=["local", "submitit"], default="local")
     parser.add_argument("--max-connections", type=int, default=32)
-    parser.add_argument("--checkpoint-every", type=int, default=DEFAULT_CHECKPOINT_EVERY)
+    parser.add_argument(
+        "--checkpoint",
+        dest="checkpoint",
+        type=int,
+        default=None,
+        help="Enable checkpoint batching every N samples. By default runs are not chunked.",
+    )
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.91)
     parser.add_argument("--dtype", type=str, default="auto")
     parser.add_argument(
@@ -231,7 +236,7 @@ def _build_run_metadata(
         },
         "inspect": {
             "max_connections": args.max_connections,
-            "checkpoint_every": args.checkpoint_every,
+            "checkpoint": args.checkpoint,
             "max_tokens": MAX_TOKENS,
             "max_retries": MAX_RETRIES,
         },
@@ -308,7 +313,7 @@ def _run_local(
                 run_metadata=run_metadata,
                 limit=args.limit,
                 max_connections=args.max_connections,
-                checkpoint_every=args.checkpoint_every,
+                checkpoint=args.checkpoint,
                 gpu_memory_utilization=args.gpu_memory_utilization,
                 dtype=args.dtype,
                 backend=args.backend,
@@ -401,7 +406,7 @@ def _run_submitit(
             run_metadata=run_metadata,
             limit=args.limit,
             max_connections=args.max_connections,
-            checkpoint_every=args.checkpoint_every,
+            checkpoint=args.checkpoint,
             gpu_memory_utilization=args.gpu_memory_utilization,
             dtype=args.dtype,
             backend=args.backend,
@@ -416,8 +421,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.limit is not None and args.limit < 1:
         raise ValueError("--limit must be >= 1")
-    if args.checkpoint_every < 1:
-        raise ValueError("--checkpoint-every must be >= 1")
+    if args.checkpoint is not None and args.checkpoint < 1:
+        raise ValueError("--checkpoint must be >= 1")
 
     benchmark_names = _selected_benchmarks(args.benchmark)
     models = _selected_models(args.model)
@@ -456,17 +461,17 @@ MISO
 python -m runs.generate_eci \
     --backend local-vllm \
     --executor submitit \
-    --model Qwen/Qwen3-4B \
+    --model meta-llama/Llama-3.1-70B-Instruct \
     --cluster miso \
     --num-gpus 8 \
-    --max-connections 400
+    --max-connections 450
 
 NLP
 python -m runs.generate_eci \
       --backend local-vllm \
       --executor submitit \
       --cluster sphinx \
-      --model Qwen/Qwen3-1.7B \
+      --model Qwen/Qwen2.5-1.5B-Instruct \
       --num-gpus 1 \
-      --max-connections 50
+      --max-connections 60
 """

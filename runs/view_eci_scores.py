@@ -53,44 +53,89 @@ def _grader_get(graders: Any, key: str) -> Any:
     if isinstance(graders, list) and graders:
         grader = graders[0]
         if isinstance(grader, dict):
-            if key == "extractor_grader_type":
-                return grader.get("extractor_grader_type")
+            if key in {"extractor_grader_type", "extracted_answer", "is_correct"}:
+                return grader.get(key)
             metadata = grader.get("metadata")
             if isinstance(metadata, dict):
                 return metadata.get(key)
     return None
 
 
-def _message_content_to_text(content: Any) -> str:
+def _message_part_entries(content: Any) -> list[tuple[str, str]]:
     if isinstance(content, str):
-        return content.strip()
+        text = content.strip()
+        return [("text", text)] if text else []
+    if isinstance(content, dict):
+        part_type = str(content.get("type", "")).strip() or "part"
+        if "reasoning" in content and isinstance(content["reasoning"], str) and content["reasoning"].strip():
+            return [(part_type, content["reasoning"].strip())]
+        for key in ("text", "content"):
+            value = content.get(key)
+            if isinstance(value, str) and value.strip():
+                return [(part_type, value.strip())]
+        return []
     if isinstance(content, list):
-        parts: list[str] = []
+        parts: list[tuple[str, str]] = []
         for item in content:
-            if isinstance(item, str) and item.strip():
-                parts.append(item.strip())
-            elif isinstance(item, dict):
-                text = item.get("text")
-                if isinstance(text, str) and text.strip():
-                    parts.append(text.strip())
-        return "\n".join(parts).strip()
-    return ""
+            parts.extend(_message_part_entries(item))
+        return parts
+    return []
 
 
-def _render_prompt_messages(messages: Any) -> str | None:
-    if not isinstance(messages, list) or not messages:
+def _normalize_message_content(content: Any) -> Any:
+    if isinstance(content, str):
+        stripped = content.strip()
+        if stripped.startswith("[") or stripped.startswith("{"):
+            try:
+                return json.loads(stripped)
+            except Exception:
+                return content
+        return content
+    return content
+
+
+def _coerce_message_list(value: Any) -> list[dict[str, Any]] | None:
+    normalized = _normalize_message_content(value)
+    if not isinstance(normalized, list):
         return None
-    rendered_parts: list[str] = []
-    for message in messages:
+    messages: list[dict[str, Any]] = []
+    for item in normalized:
+        if isinstance(item, dict):
+            messages.append(item)
+    return messages or None
+
+
+def _render_message_boxes(messages: list[dict[str, Any]] | None, *, label_prefix: str) -> bool:
+    if not messages:
+        return False
+    rendered_any = False
+    for idx, message in enumerate(messages, start=1):
         if not isinstance(message, dict):
             continue
-        content_text = _message_content_to_text(message.get("content"))
-        if not content_text:
+        role = str(message.get("role", "message")).strip() or "message"
+        source = str(message.get("source", "")).strip()
+        model = str(message.get("model", "")).strip()
+        part_entries = _message_part_entries(message.get("content"))
+        if not part_entries:
+            header_parts = [f"{label_prefix} {idx}", f"role={role}"]
+            if source:
+                header_parts.append(f"source={source}")
+            if model:
+                header_parts.append(f"model={model}")
+            st.markdown(f"**{' | '.join(header_parts)}**")
+            st.json(message, expanded=False)
+            rendered_any = True
             continue
-        role = str(message.get("role", "message")).strip().upper()
-        rendered_parts.append(f"{role}\n{content_text}")
-    rendered = "\n\n".join(rendered_parts).strip()
-    return rendered or None
+        for part_idx, (part_type, part_text) in enumerate(part_entries, start=1):
+            header_parts = [f"{label_prefix} {idx}.{part_idx}", f"role={role}", f"type={part_type}"]
+            if source:
+                header_parts.append(f"source={source}")
+            if model:
+                header_parts.append(f"model={model}")
+            st.markdown(f"**{' | '.join(header_parts)}**")
+            st.code(part_text, language="text")
+            rendered_any = True
+    return rendered_any
 
 
 @st.cache_data(show_spinner=False)
@@ -314,13 +359,8 @@ def main() -> None:
             expanded=True,
         )
 
-        qcol, acol = st.columns([3, 2])
-        with qcol:
-            st.markdown("**Question**")
-            st.code(str(row0.get("question", "")), language="text")
-        with acol:
-            st.markdown("**Answer**")
-            st.code(str(row0.get("answer", "")), language="text")
+        st.markdown("**Answer**")
+        st.code(str(row0.get("answer", "")), language="text")
 
         st.markdown("**Rollouts**")
         for i, score_row in problem_rows.iterrows():
@@ -339,33 +379,16 @@ def main() -> None:
                 metric_cols[4].metric("Output Tokens", str(score_row.get("output_token_count")))
                 metric_cols[5].metric("Epoch", str(score_row.get("epoch_in_run")))
 
-                prompt_tab, output_tab, scoring_tab, raw_tab = st.tabs(["Prompt", "Output", "Scoring", "Raw"])
+                output_tab, scoring_tab, raw_tab = st.tabs(["Output", "Scoring", "Raw"])
 
-                with prompt_tab:
-                    rendered_prompt = score_row.get("rendered_prompt")
-                    if isinstance(rendered_prompt, str) and rendered_prompt.strip():
-                        st.markdown("**Saved Rendered Prompt**")
-                        st.code(rendered_prompt, language="text")
-                    else:
-                        st.caption("Saved `rendered_prompt` is empty for this row.")
-
-                    prompt_messages = score_row.get("prompt_messages")
-                    formatted_messages = _render_prompt_messages(prompt_messages)
-                    if formatted_messages:
-                        st.markdown("**Prompt Messages**")
-                        st.code(formatted_messages, language="text")
-                    elif isinstance(prompt_messages, list) and prompt_messages:
-                        st.markdown("**Prompt Messages**")
-                        st.caption("Prompt messages were saved, but could not be formatted as plain text.")
-
-                    if isinstance(prompt_messages, list) and prompt_messages:
+                with output_tab:
+                    prompt_messages = _coerce_message_list(score_row.get("prompt_messages"))
+                    if _render_message_boxes(prompt_messages, label_prefix="Message"):
                         with st.expander("Prompt Messages JSON", expanded=False):
                             st.json(prompt_messages, expanded=False)
                     else:
-                        st.caption("No `prompt_messages` saved for this row.")
-
-                with output_tab:
-                    st.code(str(score_row.get("model_output", "")), language="text")
+                        st.markdown("**Model Output**")
+                        st.code(str(score_row.get("model_output", "")), language="text")
                     sample_error = score_row.get("sample_error")
                     if sample_error:
                         st.markdown("**Sample Error**")
@@ -381,9 +404,11 @@ def main() -> None:
                                 "score_metric": score_row.get("score_metric"),
                                 "score": score_row.get("score"),
                                 "is_correct": score_row.get("is_correct"),
+                                "extracted_answer": _grader_get(score_row.get("graders", []), "extracted_answer"),
                                 "is_error": score_row.get("is_error"),
                                 "input_token_count": score_row.get("input_token_count"),
                                 "output_token_count": score_row.get("output_token_count"),
+                                "stop_reason": score_row.get("stop_reason"),
                                 "epoch_in_run": score_row.get("epoch_in_run"),
                                 "inspect_log_path": score_row.get("inspect_log_path"),
                             },
