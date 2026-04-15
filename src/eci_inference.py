@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
+import socket
 import subprocess
 import time
 from dataclasses import asdict, dataclass
@@ -17,23 +17,33 @@ from src.storage import (
     build_eci_score_path,
     make_stable_id,
     read_jsonl,
+    write_jsonl,
 )
 from src.types import ECIScoreRecord, GraderResult, _utcnow_iso
 from src.vllm_server import VLLMServer, VLLMServerConfig
 
 BENCHMARK_CONFIGS: dict[str, "BenchmarkConfig"] = {}
 BENCHMARKS = [
-    "mmlu_5_shot__language_en_us__cot_false",
-    "bbh__prompt_type_answer_only",
-    "arc_challenge",
-    "math__levels_5__fewshot_0",
-    # "humaneval__pass_at_1",
-    "hellaswag__split_validation",
-    "piqa",
-    "winogrande__dataset_name_winogrande_xl__fewshot_5",
+    "mmlu_5_shot__language_en_us__cot_false", # 14,042
+    "bbh__prompt_type_answer_only", # 6,511
+    "arc_challenge", # 1,172 questions
+    "math__levels_5__fewshot_0", # 1,324 questions
+    "hellaswag__split_validation", # 10,042 questions
+    "piqa", # 1,838 questions
+    "winogrande__dataset_name_winogrande_xl__fewshot_5", # 1,267 questions
+    # without HumanEval: 36,196 scored samples per model for 1 epoch...
+
+
+    # "humaneval__pass_at_1", 
 ]
 MODELS_TO_RUN = list(ALL_MODEL_PATHS)
-EPOCHS = 10
+INSPECT_ENV_NAME = "ed_inspect"
+INSPECT_ENV_PREFIX = Path("/sphinx/u/suzeva/miniconda3/envs") / INSPECT_ENV_NAME
+INSPECT_BIN = INSPECT_ENV_PREFIX / "bin" / "inspect"
+INSPECT_PYTHON = INSPECT_ENV_PREFIX / "bin" / "python"
+XDG_DATA_HOME_ROOT = Path("/nlp/scr/suzeva/xdg_data")
+XDG_CACHE_HOME_ROOT = Path("/nlp/scr/suzeva/xdg_cache")
+EPOCHS = 1
 MAX_TOKENS = 32768
 MAX_RETRIES = 2
 MAX_NUM_BATCHED_TOKENS = 32768
@@ -48,6 +58,21 @@ SPHINX_SLURM_ACCOUNT = "nlp"
 SPHINX_SLURM_PARTITION = "sphinx"
 MISO_SLURM_ACCOUNT = "miso"
 MISO_SLURM_PARTITION = "miso"
+HF_ENV_KEYS = (
+    "HF_HOME",
+    "HF_HUB_CACHE",
+    "HF_DATASETS_CACHE",
+    "HUGGINGFACE_HUB_CACHE",
+    "TRANSFORMERS_CACHE",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+    "REQUESTS_CA_BUNDLE",
+    "SSL_CERT_FILE",
+)
 
 
 @dataclass(frozen=True)
@@ -212,6 +237,86 @@ def _build_log_dir(*, benchmark_id: str, model: str, root: str | Path = "data/in
     return Path(root) / benchmark_id / model_name / time.strftime("%Y%m%d_%H%M%S")
 
 
+def _build_inspect_env(*, log_dir: Path) -> dict[str, str]:
+    xdg_data_home = XDG_DATA_HOME_ROOT
+    xdg_cache_home = XDG_CACHE_HOME_ROOT
+    xdg_data_home.mkdir(parents=True, exist_ok=True)
+    xdg_cache_home.mkdir(parents=True, exist_ok=True)
+    trace_name = f"{log_dir.parent.name}__{log_dir.name}.trace.log"
+    return {
+        "XDG_DATA_HOME": str(xdg_data_home.resolve()),
+        "XDG_CACHE_HOME": str(xdg_cache_home.resolve()),
+        "INSPECT_TRACE_FILE": str((log_dir / trace_name).resolve()),
+    }
+
+
+def _relevant_hf_env() -> dict[str, str]:
+    return {
+        key: value
+        for key in HF_ENV_KEYS
+        if (value := os.environ.get(key))
+    }
+
+
+def _print_runtime_env_summary() -> None:
+    summary = {
+        "hostname": socket.gethostname(),
+        "inspect_bin": str(INSPECT_BIN),
+        "hf_env": _relevant_hf_env(),
+    }
+    print(f"[eci_inference] runtime_env {json.dumps(summary, sort_keys=True)}", flush=True)
+
+
+def _preflight_huggingface_access() -> None:
+    cache_paths = []
+    for key in ("HF_HOME", "HF_HUB_CACHE", "HF_DATASETS_CACHE", "TRANSFORMERS_CACHE"):
+        value = os.environ.get(key)
+        if value:
+            cache_paths.append({"env": key, "path": value, "exists": Path(value).exists()})
+
+    try:
+        socket.getaddrinfo("huggingface.co", 443, type=socket.SOCK_STREAM)
+    except OSError as ex:
+        print(
+            "[eci_inference] huggingface_dns_check "
+            f"status=failed error={ex!r} cache_paths={json.dumps(cache_paths)}",
+            flush=True,
+        )
+        raise RuntimeError(
+            "Unable to resolve huggingface.co from the worker node. "
+            "The node network/DNS setup or propagated environment is incomplete."
+        ) from ex
+
+    print(
+        "[eci_inference] huggingface_dns_check "
+        f"status=ok cache_paths={json.dumps(cache_paths)}",
+        flush=True,
+    )
+
+
+def _preflight_inspect_env() -> None:
+    if not INSPECT_PYTHON.exists():
+        raise RuntimeError(f"Inspect python not found at {INSPECT_PYTHON}")
+
+    check = subprocess.run(
+        [
+            str(INSPECT_PYTHON),
+            "-c",
+            "import inspect_ai, inspect_evals, openai; print('inspect_env_ok')",
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if check.returncode != 0:
+        details = (check.stderr or check.stdout).strip()
+        raise RuntimeError(
+            "Inspect environment preflight failed. "
+            f"Expected {INSPECT_PYTHON} to import inspect_ai, inspect_evals, and openai. "
+            f"Details: {details}"
+        )
+
+
 def _normalize_metric_name(name: str) -> str:
     return "".join(ch.lower() if ch.isalnum() else "_" for ch in name).strip("_")
 
@@ -225,6 +330,30 @@ def _coerce_metric_value(value: Any) -> float | None:
         nested_value = value.get("value")
         if isinstance(nested_value, (int, float)) and not isinstance(nested_value, bool):
             return float(nested_value)
+    return None
+
+
+def _coerce_sample_score_value(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"c", "correct", "pass", "passed", "true"}:
+            return 1.0
+        if normalized in {"i", "incorrect", "fail", "failed", "false"}:
+            return 0.0
+        if normalized in {"p", "partial", "partially_correct"}:
+            return 0.5
+        if normalized in {"n", "none", "no_answer", "unanswered"}:
+            return 0.0
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    if isinstance(value, dict):
+        return _coerce_sample_score_value(value.get("value"))
     return None
 
 
@@ -289,11 +418,17 @@ def _find_single_log_file(log_dir: Path) -> Path:
     return candidates[-1]
 
 
+def _tail_text(text: str, max_chars: int = 4000) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[-max_chars:]
+
+
 def _extract_score_metrics(node: Any) -> dict[str, float]:
     metrics: dict[str, float] = {}
     if isinstance(node, dict):
         for key, value in node.items():
-            metric_value = _coerce_metric_value(value)
+            metric_value = _coerce_sample_score_value(value)
             if metric_value is not None and key not in metrics:
                 metrics[key] = metric_value
     elif isinstance(node, list):
@@ -301,7 +436,7 @@ def _extract_score_metrics(node: Any) -> dict[str, float]:
             if not isinstance(item, dict):
                 continue
             name = item.get("name")
-            metric_value = _coerce_metric_value(item.get("value"))
+            metric_value = _coerce_sample_score_value(item.get("value"))
             if isinstance(name, str) and metric_value is not None and name not in metrics:
                 metrics[name] = metric_value
     return metrics
@@ -331,6 +466,66 @@ def _resolve_existing_rollout_count(path: Path) -> tuple[int, list[ECIScoreRecor
             f"{distinct_counts}. Refusing to guess how many new epochs to run."
         )
     return distinct_counts[0], rows
+
+
+def _row_has_numeric_score(row: ECIScoreRecord) -> bool:
+    if not row.graders:
+        return False
+    score = row.graders[0].metadata.get("score")
+    return isinstance(score, (int, float))
+
+
+def _repair_existing_rows_if_needed(
+    *,
+    output_path: Path,
+    config: BenchmarkConfig,
+    model_path: str,
+    rows: list[ECIScoreRecord],
+) -> list[ECIScoreRecord]:
+    if not rows or any(_row_has_numeric_score(row) for row in rows):
+        return rows
+
+    rows_by_log_path: dict[Path, list[ECIScoreRecord]] = {}
+    for row in rows:
+        inspect_log_path = row.metadata.get("inspect_log_path")
+        if not isinstance(inspect_log_path, str) or not inspect_log_path:
+            return rows
+        rows_by_log_path.setdefault(Path(inspect_log_path), []).append(row)
+
+    repaired_rows: list[ECIScoreRecord] = []
+    for inspect_log_path, log_rows in sorted(rows_by_log_path.items(), key=lambda item: str(item[0])):
+        if not inspect_log_path.exists():
+            return rows
+        payload = json.loads(inspect_log_path.read_text(encoding="utf-8"))
+        min_rollout_id = min(row.rollout_id for row in log_rows)
+        epoch_values = [
+            row.metadata.get("epoch_in_run")
+            for row in log_rows
+            if isinstance(row.metadata.get("epoch_in_run"), int)
+        ]
+        min_epoch = min(epoch_values) if epoch_values else 1
+        rollout_offset = min_rollout_id - min_epoch
+        run_metadata = log_rows[0].metadata.get("run_metadata")
+        repaired_rows.extend(
+            _extract_sample_rows(
+                payload=payload,
+                benchmark_id=config.benchmark_id,
+                model_path=model_path,
+                source_metric_names=config.source_metric_names,
+                rollout_offset=rollout_offset,
+                inspect_log_path=inspect_log_path,
+                run_metadata=run_metadata if isinstance(run_metadata, dict) else {},
+            )
+        )
+
+    repaired_rows.sort(key=lambda row: (row.rollout_id, row.problem_id))
+    write_jsonl(output_path, repaired_rows)
+    print(
+        f"[eci_inference] repaired existing output benchmark={config.benchmark_id} "
+        f"model={model_path} path={output_path}",
+        flush=True,
+    )
+    return repaired_rows
 
 
 def _stringify_sample_text(value: Any) -> str:
@@ -628,7 +823,9 @@ def _summarize_rollout_rows(
 ) -> tuple[str, float, int]:
     normalized_target_names = {_normalize_metric_name(name) for name in source_metric_names}
     values: list[float] = []
+    fallback_values: list[float] = []
     source_metric = source_metric_names[0]
+    fallback_metric = source_metric
     for row in rows:
         if not row.graders:
             continue
@@ -637,26 +834,26 @@ def _summarize_rollout_rows(
         score = grader.metadata.get("score")
         if not isinstance(score_metric, str) or not isinstance(score, (int, float)):
             continue
+        fallback_metric = score_metric
+        fallback_values.append(float(score))
         if _normalize_metric_name(score_metric) not in normalized_target_names:
             continue
         source_metric = score_metric
         values.append(float(score))
+    if not values and fallback_values:
+        return fallback_metric, sum(fallback_values) / len(fallback_values), len(fallback_values)
     if not values:
         raise ValueError(f"No per-sample scores found for metrics {source_metric_names!r}")
     return source_metric, sum(values) / len(values), len(values)
 
 
 def _resolve_inspect_command() -> list[str]:
-    inspect_path = shutil.which("inspect")
-    if inspect_path:
-        return [inspect_path]
-    uv_path = shutil.which("uv")
-    if uv_path:
-        return [uv_path, "run", "inspect"]
-    raise RuntimeError(
-        "Unable to find Inspect. Install an `inspect` executable on PATH or make `uv` available "
-        "so the runner can launch `uv run inspect`."
-    )
+    if not INSPECT_BIN.exists():
+        raise RuntimeError(
+            f"Inspect binary not found at {INSPECT_BIN}. "
+            f"Create/fix the `{INSPECT_ENV_NAME}` env so it provides that executable."
+        )
+    return [str(INSPECT_BIN)]
 
 
 def _build_inspect_command(
@@ -682,6 +879,9 @@ def _build_inspect_command(
             str(log_dir),
             "--display",
             "none",
+            "--log-level",
+            "info",
+            "--debug-errors",
             "--max-connections",
             str(max_connections),
         ]
@@ -736,6 +936,12 @@ def _run_inspect_eval(
         data_root="data",
     )
     existing_rollout_count, existing_rows = _resolve_existing_rollout_count(output_path)
+    existing_rows = _repair_existing_rows_if_needed(
+        output_path=output_path,
+        config=config,
+        model_path=model_path,
+        rows=existing_rows,
+    )
     if existing_rollout_count > EPOCHS:
         print(
             f"[eci_inference] skip benchmark={config.benchmark_id} model={model_path} "
@@ -786,6 +992,7 @@ def _run_inspect_eval(
     cmd.extend(["--epochs", str(additional_epochs)])
 
     env = os.environ.copy()
+    env.update(_build_inspect_env(log_dir=log_dir))
     if extra_env is not None:
         env.update(extra_env)
 
@@ -795,8 +1002,38 @@ def _run_inspect_eval(
         flush=True,
     )
     started_at = time.monotonic()
-    subprocess.run(cmd, check=True, env=env)
+    completed = subprocess.run(
+        cmd,
+        check=False,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
     elapsed_seconds = time.monotonic() - started_at
+    inspect_stdout_path = log_dir / "inspect.stdout.log"
+    inspect_stderr_path = log_dir / "inspect.stderr.log"
+    inspect_stdout_path.write_text(completed.stdout, encoding="utf-8")
+    inspect_stderr_path.write_text(completed.stderr, encoding="utf-8")
+    if completed.returncode != 0:
+        stdout_tail = _tail_text(completed.stdout.strip())
+        stderr_tail = _tail_text(completed.stderr.strip())
+        if stdout_tail:
+            print(
+                f"[eci_inference] inspect_stdout_tail benchmark={config.benchmark_id} "
+                f"model={model_path}\n{stdout_tail}",
+                flush=True,
+            )
+        if stderr_tail:
+            print(
+                f"[eci_inference] inspect_stderr_tail benchmark={config.benchmark_id} "
+                f"model={model_path}\n{stderr_tail}",
+                flush=True,
+            )
+        raise RuntimeError(
+            "Inspect eval failed "
+            f"(exit_code={completed.returncode}, "
+            f"stdout_log={inspect_stdout_path}, stderr_log={inspect_stderr_path})"
+        )
 
     inspect_log_path = _find_single_log_file(log_dir)
     with open(inspect_log_path, "r", encoding="utf-8") as f:
@@ -867,6 +1104,9 @@ def _run_single_model_job(
     backend: str,
 ) -> dict[str, Any]:
     summaries: list[BenchmarkRunSummary] = []
+    _print_runtime_env_summary()
+    _preflight_inspect_env()
+    _preflight_huggingface_access()
 
     def _run_all(model_base_url: str | None, extra_env: dict[str, str] | None) -> None:
         for benchmark_name in benchmark_names:
@@ -1196,9 +1436,24 @@ if __name__ == "__main__":
 
 
 """
+MISO
 python -m src.eci_inference \
     --backend local-vllm \
     --model Qwen/Qwen3-0.6B \
     --limit 5 \
+    --dry-run  true\
+    --executor submitit \
+    --cluster miso \
+    --num-gpus 8 \
     --max-connections 300
+
+NLP
+python -m src.eci_inference \
+    --backend local-vllm \
+    --model Qwen/Qwen3-0.6B \
+    --limit 20 \
+    --executor submitit \
+    --cluster nlp \
+    --num-gpus 1 \
+    --max-connections 48
 """
