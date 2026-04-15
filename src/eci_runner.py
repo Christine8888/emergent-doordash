@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from src.storage import _model_storage_component, append_jsonl, build_eci_score_path, make_stable_id
+from src.storage import _model_storage_component, _safe_component, append_jsonl, build_eci_score_path, make_stable_id
 from src.types import ECIScoreRecord, GraderResult
 from src.vllm_server import VLLMServer, VLLMServerConfig
 
@@ -219,6 +219,118 @@ def _dedupe_rows(rows: list[ECIScoreRecord]) -> list[ECIScoreRecord]:
     for row in rows:
         deduped.setdefault(row.inference_id, row)
     return sorted(deduped.values(), key=lambda row: (row.problem_id, row.rollout_id, row.created_at))
+
+
+def _read_eci_checkpoint(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _infer_total_samples_from_checkpoints(
+    *,
+    benchmark_name: str,
+    data_root: str | Path,
+) -> int:
+    benchmark_dir = Path(data_root) / "eci_scores" / _safe_component(benchmark_name)
+    if not benchmark_dir.exists():
+        return 0
+    totals: list[int] = []
+    for ckpt_path in benchmark_dir.glob("*.ckpt.json"):
+        payload = _read_eci_checkpoint(ckpt_path)
+        if payload is None:
+            continue
+        total_value = payload.get("total_samples")
+        if isinstance(total_value, int) and total_value > 0:
+            totals.append(total_value)
+    return max(totals) if totals else 0
+
+
+def is_eci_benchmark_complete(
+    *,
+    benchmark_name: str,
+    model_path: str,
+    limit: int | None,
+    data_root: str | Path = "data",
+) -> bool:
+    config = BENCHMARK_CONFIGS[benchmark_name]
+    output_path = build_eci_score_path(
+        benchmark_name=benchmark_name,
+        model=model_path,
+        data_root=data_root,
+    )
+    existing_rows = _dedupe_rows(_read_existing_rows(output_path))
+    ckpt_path = _checkpoint_path_for_output(output_path)
+    ckpt_payload = _read_eci_checkpoint(ckpt_path)
+    existing_ids = {
+        row.inference_id
+        for row in existing_rows
+        if 1 <= row.rollout_id <= EPOCHS
+    }
+    if limit is None:
+        total_samples = 0
+        if ckpt_payload is not None:
+            total_value = ckpt_payload.get("total_samples")
+            if isinstance(total_value, int) and total_value > 0:
+                total_samples = total_value
+        if total_samples <= 0:
+            total_samples = _infer_total_samples_from_checkpoints(
+                benchmark_name=benchmark_name,
+                data_root=data_root,
+            )
+        if total_samples > 0 and len(existing_ids) >= total_samples:
+            return True
+
+    try:
+        dataset_problem_ids = _load_task_sample_ids(config)
+    except Exception:
+        return False
+
+    target_problem_ids = dataset_problem_ids[:limit] if limit is not None else dataset_problem_ids
+    if not target_problem_ids:
+        return True
+
+    target_problem_id_set = set(target_problem_ids)
+    existing_ids = {
+        row.inference_id
+        for row in existing_rows
+        if row.problem_id in target_problem_id_set and 1 <= row.rollout_id <= EPOCHS
+    }
+    for rollout_id in range(1, EPOCHS + 1):
+        for problem_id in target_problem_ids:
+            if _eci_inference_id(
+                benchmark_name=benchmark_name,
+                model=model_path,
+                problem_id=problem_id,
+                rollout_id=rollout_id,
+            ) not in existing_ids:
+                return False
+    return True
+
+
+def is_eci_model_complete(
+    *,
+    benchmark_names: list[str],
+    model_path: str,
+    limit: int | None,
+    data_root: str | Path = "data",
+) -> bool:
+    return all(
+        is_eci_benchmark_complete(
+            benchmark_name=benchmark_name,
+            model_path=model_path,
+            limit=limit,
+            data_root=data_root,
+        )
+        for benchmark_name in benchmark_names
+    )
 
 
 def _chunk_sample_ids(sample_ids: list[str], *, max_chars: int = 24000) -> list[list[str]]:
@@ -525,6 +637,7 @@ def _metrics_poller(metrics_url: str, interval: float, stop_event: threading.Eve
     prev_gen_tokens: float | None = None
     prev_prompt_tokens: float | None = None
     prev_time: float | None = None
+    saw_activity = False
     gen_names = ["vllm:generation_tokens_total", "vllm_generation_tokens_total"]
     prompt_names = ["vllm:prompt_tokens_total", "vllm_prompt_tokens_total"]
     running_names = ["vllm:num_requests_running", "vllm_num_requests_running"]
@@ -538,7 +651,8 @@ def _metrics_poller(metrics_url: str, interval: float, stop_event: threading.Eve
             with urllib.request.urlopen(metrics_url, timeout=5) as resp:
                 text = resp.read().decode()
         except Exception as exc:
-            _log(f"[metrics-poller] fetch failed: {exc}")
+            if saw_activity:
+                _log(f"[metrics-poller] fetch failed: {exc}")
             continue
 
         now = time.time()
@@ -546,21 +660,29 @@ def _metrics_poller(metrics_url: str, interval: float, stop_event: threading.Eve
         prompt_tokens = _parse_prometheus_value(text, prompt_names, is_counter=True)
         running = _parse_prometheus_value(text, running_names, is_counter=False)
         waiting = _parse_prometheus_value(text, waiting_names, is_counter=False)
+        active_requests = (
+            (running is not None and running > 0)
+            or (waiting is not None and waiting > 0)
+        )
 
         if gen_tokens is not None and prev_gen_tokens is not None and prev_time is not None:
             dt = now - prev_time
             if dt > 0:
                 gen_rate = (gen_tokens - prev_gen_tokens) / dt
                 prompt_rate = ((prompt_tokens or 0.0) - (prev_prompt_tokens or 0.0)) / dt
-                parts = [
-                    f"gen_tok/s={gen_rate:.1f}",
-                    f"prompt_tok/s={prompt_rate:.1f}",
-                ]
-                if running is not None:
-                    parts.append(f"running={int(running)}")
-                if waiting is not None:
-                    parts.append(f"waiting={int(waiting)}")
-                _log(f"[metrics-poller] {' '.join(parts)}")
+                if active_requests or gen_rate > 0 or prompt_rate > 0 or saw_activity:
+                    saw_activity = True
+                    parts = [
+                        f"gen_tok/s={gen_rate:.1f}",
+                        f"prompt_tok/s={prompt_rate:.1f}",
+                    ]
+                    if running is not None:
+                        parts.append(f"running={int(running)}")
+                    if waiting is not None:
+                        parts.append(f"waiting={int(waiting)}")
+                    _log(f"[metrics-poller] {' '.join(parts)}")
+        elif active_requests:
+            saw_activity = True
 
         prev_gen_tokens = gen_tokens
         prev_prompt_tokens = prompt_tokens
@@ -972,9 +1094,16 @@ def _run_inspect_command_once(
             _log(
                 f"[eci] inspect_stderr_tail benchmark={config.benchmark_id} model={model_path}\n{stderr_tail}",
             )
+        extra_hint = ""
+        if model_base_url is not None and "APIConnectionError" in stderr_tail:
+            extra_hint = (
+                " local-vllm became unavailable during the run; check the submitit stderr/vLLM log "
+                "for the underlying backend crash (often CUDA OOM)."
+            )
         raise RuntimeError(
             "Inspect eval failed "
-            f"(exit_code={completed.returncode}, stdout_log={inspect_stdout_path}, stderr_log={inspect_stderr_path})"
+            f"(exit_code={completed.returncode}, stdout_log={inspect_stdout_path}, stderr_log={inspect_stderr_path})."
+            f"{extra_hint}"
         )
 
     inspect_log_path = _find_single_log_file(log_dir)

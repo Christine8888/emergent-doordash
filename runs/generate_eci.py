@@ -9,12 +9,14 @@ import time
 from pathlib import Path
 from typing import Any
 
+from src.eci_progress import compute_eci_benchmark_progress
 from src.eci_runner import (
     BENCHMARK_CONFIGS,
     DEFAULT_CHECKPOINT_EVERY,
     EPOCHS,
     MAX_RETRIES,
     MAX_TOKENS,
+    is_eci_model_complete,
     run_eci_benchmarks,
 )
 from src.model_config import ALL_MODEL_PATHS, ModelSpec, get_model_spec
@@ -330,6 +332,27 @@ def _run_submitit(
 
     jobs = []
     for spec in models:
+        is_complete = False
+        if args.limit is None:
+            progress_rows = [
+                compute_eci_benchmark_progress(
+                    benchmark_name=benchmark_name,
+                    model=spec.path,
+                    data_root="data",
+                )
+                for benchmark_name in benchmark_names
+            ]
+            is_complete = bool(progress_rows) and all(row.status == "complete" for row in progress_rows)
+        else:
+            is_complete = is_eci_model_complete(
+                benchmark_names=benchmark_names,
+                model_path=spec.path,
+                limit=args.limit,
+                data_root="data",
+            )
+        if is_complete:
+            _log(f"[generate_eci] skip complete model={spec.path}")
+            continue
         active_job_ids = active_jobs_by_model.get(spec.path, [])
         if active_job_ids:
             _log(
@@ -435,13 +458,13 @@ python -m runs.generate_eci \
     --executor submitit \
     --cluster miso \
     --num-gpus 8 \
-    --max-connections 400
+    --max-connections 360
 
 NLP
 python -m runs.generate_eci \
       --backend local-vllm \
       --executor submitit \
-      --cluster nlp \
+      --cluster sphinx \
       --num-gpus 1 \
-      --max-connections 52
+      --max-connections 48
 """
