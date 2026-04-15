@@ -807,14 +807,39 @@ def _extract_prompt_messages(sample: dict[str, Any]) -> list[dict[str, Any]] | N
     return None
 
 
+def _extract_token_count_from_container(container: dict[str, Any], *keys: str) -> int:
+    for key in keys:
+        value = container.get(key)
+        if isinstance(value, int):
+            return value
+    for nested in container.values():
+        if not isinstance(nested, dict):
+            continue
+        for key in keys:
+            value = nested.get(key)
+            if isinstance(value, int):
+                return value
+    return 0
+
+
 def _extract_token_count(sample: dict[str, Any], *keys: str) -> int:
-    for container_key in ("model_usage", "usage"):
+    containers: list[dict[str, Any]] = []
+    for container_key in ("model_usage", "usage", "role_usage"):
         container = sample.get(container_key)
         if isinstance(container, dict):
-            for key in keys:
-                value = container.get(key)
-                if isinstance(value, int):
-                    return value
+            containers.append(container)
+    output = sample.get("output")
+    if isinstance(output, dict):
+        containers.append(output)
+        output_usage = output.get("usage")
+        if isinstance(output_usage, dict):
+            containers.append(output_usage)
+
+    for container in containers:
+        value = _extract_token_count_from_container(container, *keys)
+        if value > 0:
+            return value
+
     for key in keys:
         value = sample.get(key)
         if isinstance(value, int):

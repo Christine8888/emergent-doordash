@@ -19,9 +19,7 @@ PLOTS_ROOT = Path("plots/eci_token_distributions")
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Plot per-model ECI token count distributions aggregated across selected benchmarks."
-        )
+        description=("Plot per-model ECI output token distributions aggregated across selected benchmarks.")
     )
     parser.add_argument("--benchmark", type=str, choices=["all"] + BENCHMARKS, default="all")
     parser.add_argument("--model", type=str, choices=["all"] + list(ALL_MODEL_PATHS), default="all")
@@ -83,7 +81,6 @@ def _collect_model_rows(
                 {
                     "benchmark": benchmark_name,
                     "model": model,
-                    "input_token_count": record.get("input_token_count"),
                     "output_token_count": record.get("output_token_count"),
                     "is_error": bool(record.get("is_error")),
                     "jsonl_path": str(path),
@@ -101,78 +98,78 @@ def _values_for_metric(rows: list[dict[str, Any]], metric: str) -> list[int]:
     return values
 
 
-def _rows_by_benchmark(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
-        grouped.setdefault(str(row["benchmark"]), []).append(row)
-    return grouped
-
-
-def _plot_model_distribution(
+def _plot_all_models_distribution(
     *,
-    model: str,
     rows: list[dict[str, Any]],
+    models: list[str],
     benchmark_names: list[str],
     output_dir: Path,
     bins: int,
 ) -> Path:
-    grouped = _rows_by_benchmark(rows)
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4.8), squeeze=False)
-    input_ax = axes[0][0]
-    output_ax = axes[0][1]
+    if not models:
+        raise ValueError("No models with ECI rows found.")
 
-    plotted_any = False
-    for benchmark_name in benchmark_names:
-        benchmark_rows = grouped.get(benchmark_name, [])
-        input_values = _values_for_metric(benchmark_rows, "input_token_count")
-        output_values = _values_for_metric(benchmark_rows, "output_token_count")
-        if input_values:
-            input_ax.hist(
-                input_values,
-                bins=bins,
-                alpha=0.35,
-                edgecolor="none",
-                label=f"{benchmark_name} (n={len(input_values)})",
-            )
-            plotted_any = True
+    n_cols = min(4, len(models))
+    n_rows = math.ceil(len(models) / n_cols)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4.8 * n_cols, 3.8 * n_rows), squeeze=False)
+    axes_flat = list(axes.flatten())
+
+    rows_by_model: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        rows_by_model.setdefault(str(row["model"]), []).append(row)
+
+    for idx, model in enumerate(models):
+        ax = axes_flat[idx]
+        model_rows = rows_by_model.get(model, [])
+        output_values = _values_for_metric(model_rows, "output_token_count")
         if output_values:
-            output_ax.hist(
+            ax.hist(
                 output_values,
                 bins=bins,
-                alpha=0.35,
+                color="#ff7f0e",
+                alpha=0.40,
                 edgecolor="none",
-                label=f"{benchmark_name} (n={len(output_values)})",
+                label=f"output (n={len(output_values)})",
             )
-            plotted_any = True
+            if max(output_values) == 0:
+                ax.set_xlim(-0.5, 0.5)
+                ax.text(
+                    0.5,
+                    0.88,
+                    "all output_token_count = 0",
+                    transform=ax.transAxes,
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    color="#aa3333",
+                )
+        ax.set_title(model, fontsize=9)
+        ax.set_xlabel("output_token_count")
+        ax.set_ylabel("count")
+        ax.axvline(32000, color="#cc4444", linestyle="--", linewidth=1.0, alpha=0.8)
+        ax.grid(True, alpha=0.25)
+        if output_values:
+            ax.legend(loc="upper right", fontsize=8)
 
-    if not plotted_any:
-        raise ValueError(f"No token counts found for model={model}")
-
-    input_ax.set_title("Input Token Distribution")
-    input_ax.set_xlabel("input_token_count")
-    input_ax.set_ylabel("count")
-    input_ax.grid(True, alpha=0.25)
-    input_ax.legend(loc="upper right", fontsize=8)
-
-    output_ax.set_title("Output Token Distribution")
-    output_ax.set_xlabel("output_token_count")
-    output_ax.set_ylabel("count")
-    output_ax.axvline(32000, color="#cc4444", linestyle="--", linewidth=1.0, alpha=0.8)
-    output_ax.grid(True, alpha=0.25)
-    output_ax.legend(loc="upper right", fontsize=8)
+    for idx in range(len(models), len(axes_flat)):
+        axes_flat[idx].set_visible(False)
 
     error_count = sum(1 for row in rows if row.get("is_error"))
     fig.suptitle(
         (
-            f"ECI token distributions for {model}\n"
-            f"benchmarks={len(grouped)} records={len(rows)} errors={error_count}"
+            "ECI output token distributions by model\n"
+            f"benchmarks={len(benchmark_names)} records={len(rows)} errors={error_count}"
         ),
         fontsize=13,
     )
     plt.tight_layout()
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / f"{_model_storage_component(model)}__eci_token_distributions.png"
+    if len(benchmark_names) == len(BENCHMARKS):
+        benchmark_part = "all_benchmarks"
+    else:
+        benchmark_part = "__".join(_model_storage_component(benchmark) for benchmark in benchmark_names)
+    out_path = output_dir / f"{benchmark_part}__eci_output_token_distributions_all_models.png"
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
     return out_path
@@ -186,8 +183,6 @@ def _write_summary_csv(rows: list[dict[str, Any]], output_dir: Path) -> Path:
         "benchmark",
         "record_count",
         "error_count",
-        "input_token_mean",
-        "input_token_max",
         "output_token_mean",
         "output_token_max",
         "jsonl_path",
@@ -201,7 +196,6 @@ def _write_summary_csv(rows: list[dict[str, Any]], output_dir: Path) -> Path:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for (model, benchmark), group_rows in sorted(grouped.items()):
-            input_values = _values_for_metric(group_rows, "input_token_count")
             output_values = _values_for_metric(group_rows, "output_token_count")
             writer.writerow(
                 {
@@ -209,10 +203,6 @@ def _write_summary_csv(rows: list[dict[str, Any]], output_dir: Path) -> Path:
                     "benchmark": benchmark,
                     "record_count": len(group_rows),
                     "error_count": sum(1 for row in group_rows if row.get("is_error")),
-                    "input_token_mean": (
-                        f"{sum(input_values) / len(input_values):.2f}" if input_values else ""
-                    ),
-                    "input_token_max": max(input_values) if input_values else "",
                     "output_token_mean": (
                         f"{sum(output_values) / len(output_values):.2f}" if output_values else ""
                     ),
@@ -233,7 +223,7 @@ def main() -> None:
     models = _selected_models(args.model)
 
     all_rows: list[dict[str, Any]] = []
-    plotted_paths: list[Path] = []
+    plottable_models: list[str] = []
     for model in models:
         model_rows = _collect_model_rows(
             model=model,
@@ -244,29 +234,25 @@ def main() -> None:
             print(f"skip model={model}: no ECI rows found", flush=True)
             continue
         all_rows.extend(model_rows)
-        plot_path = _plot_model_distribution(
-            model=model,
-            rows=model_rows,
-            benchmark_names=benchmark_names,
-            output_dir=args.output_dir,
-            bins=args.bins,
-        )
-        plotted_paths.append(plot_path)
-        print(
-            f"plotted model={model} records={len(model_rows)} -> {plot_path}",
-            flush=True,
-        )
+        plottable_models.append(model)
+        print(f"collected model={model} records={len(model_rows)}", flush=True)
 
     if not all_rows:
         raise ValueError("No ECI rows found for the requested benchmark/model filters.")
 
+    plot_path = _plot_all_models_distribution(
+        rows=all_rows,
+        models=plottable_models,
+        benchmark_names=benchmark_names,
+        output_dir=args.output_dir,
+        bins=args.bins,
+    )
     csv_path = _write_summary_csv(all_rows, args.output_dir)
+    print(f"wrote plot -> {plot_path}", flush=True)
     print(f"wrote summary -> {csv_path}", flush=True)
-    print(f"plots={len(plotted_paths)}", flush=True)
+    print("plots=1", flush=True)
 
 
 if __name__ == "__main__":
-    # python -m runs.plot_eci_token_distributions_all_models
-    # python -m runs.plot_eci_token_distributions_all_models --model Qwen/Qwen3-0.6B
-    # python -m runs.plot_eci_token_distributions_all_models --benchmark arc_challenge
+    # python -m runs.plot_eci_max_tokens
     main()
