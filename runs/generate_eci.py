@@ -2,10 +2,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import pickle
+import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
-from src.eci_runner import BENCHMARK_CONFIGS, EPOCHS, MAX_RETRIES, MAX_TOKENS, run_eci_benchmarks
+from src.eci_runner import (
+    BENCHMARK_CONFIGS,
+    DEFAULT_CHECKPOINT_EVERY,
+    EPOCHS,
+    MAX_RETRIES,
+    MAX_TOKENS,
+    run_eci_benchmarks,
+)
 from src.model_config import ALL_MODEL_PATHS, ModelSpec, get_model_spec
 from src.storage import build_eci_score_path
 
@@ -30,6 +41,14 @@ SPHINX_SLURM_ACCOUNT = "nlp"
 SPHINX_SLURM_PARTITION = "sphinx"
 MISO_SLURM_ACCOUNT = "miso"
 MISO_SLURM_PARTITION = "miso"
+
+
+def _timestamp() -> str:
+    return time.strftime("%H:%M:%S", time.localtime())
+
+
+def _log(message: str) -> None:
+    print(f"[{_timestamp()}] {message}", flush=True)
 
 
 def _parse_bool(value: str) -> bool:
@@ -93,6 +112,45 @@ def _load_sampling_params(models: list[ModelSpec]) -> dict[str, dict[str, Any]]:
     return {spec.path: dict(spec.sampling_params) for spec in models}
 
 
+def _get_active_eci_jobs_by_model() -> dict[str, list[str]]:
+    active_jobs_by_model: dict[str, list[str]] = {}
+    submitit_dir = Path("data/submitit_logs/eci_scores")
+    try:
+        user = os.environ.get("USER", "")
+        cmd = ["squeue", "-h", "-o", "%i"]
+        if user:
+            cmd[1:1] = ["-u", user]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5, check=False)
+        if result.returncode != 0:
+            fallback = subprocess.run(["squeue", "-h", "-o", "%i"], capture_output=True, text=True, timeout=5, check=False)
+            if fallback.returncode != 0:
+                _log("[generate_eci] warning: failed to query SLURM queue; submitting without active-job filter")
+                return active_jobs_by_model
+            result = fallback
+        active_job_ids = {job_id.strip() for job_id in result.stdout.splitlines() if job_id.strip()}
+    except Exception as exc:
+        _log(f"[generate_eci] warning: failed to query SLURM queue ({exc}); submitting without active-job filter")
+        return active_jobs_by_model
+
+    for job_id in sorted(active_job_ids):
+        submitted_file = submitit_dir / f"{job_id}_submitted.pkl"
+        if not submitted_file.exists():
+            continue
+        try:
+            with open(submitted_file, "rb") as f:
+                job_info = pickle.load(f)
+            kwargs = getattr(job_info, "kwargs", None)
+            if not isinstance(kwargs, dict):
+                continue
+            model_path = kwargs.get("model_path")
+            if isinstance(model_path, str) and model_path:
+                active_jobs_by_model.setdefault(model_path, []).append(job_id)
+        except Exception:
+            continue
+
+    return active_jobs_by_model
+
+
 def _selected_benchmarks(benchmark: str) -> list[str]:
     if benchmark == "all":
         return list(BENCHMARKS)
@@ -117,6 +175,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--executor", choices=["local", "submitit"], default="local")
     parser.add_argument("--max-connections", type=int, default=32)
+    parser.add_argument("--checkpoint-every", type=int, default=DEFAULT_CHECKPOINT_EVERY)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.91)
     parser.add_argument("--dtype", type=str, default="auto")
     parser.add_argument(
@@ -170,6 +229,7 @@ def _build_run_metadata(
         },
         "inspect": {
             "max_connections": args.max_connections,
+            "checkpoint_every": args.checkpoint_every,
             "max_tokens": MAX_TOKENS,
             "max_retries": MAX_RETRIES,
         },
@@ -190,7 +250,7 @@ def _build_run_metadata(
 
 
 def _print_plan(args: argparse.Namespace, benchmark_names: list[str], models: list[ModelSpec]) -> None:
-    print("[generate_eci] plan", flush=True)
+    _log("[generate_eci] plan")
     print(
         json.dumps(
             {
@@ -213,7 +273,7 @@ def _print_plan(args: argparse.Namespace, benchmark_names: list[str], models: li
                 model=spec.path,
                 data_root="data",
             )
-            print(f"  output -> {path}", flush=True)
+            _log(f"[generate_eci] output -> {path}")
 
 
 def _run_local(
@@ -235,7 +295,7 @@ def _run_local(
             requested_gpus=requested_gpus,
             sampling_params=sampling_params,
         )
-        print(f"[generate_eci] local model={spec.path}", flush=True)
+        _log(f"[generate_eci] local model={spec.path}")
         results.append(
             run_eci_benchmarks(
                 benchmark_names=benchmark_names,
@@ -246,6 +306,7 @@ def _run_local(
                 run_metadata=run_metadata,
                 limit=args.limit,
                 max_connections=args.max_connections,
+                checkpoint_every=args.checkpoint_every,
                 gpu_memory_utilization=args.gpu_memory_utilization,
                 dtype=args.dtype,
                 backend=args.backend,
@@ -265,9 +326,17 @@ def _run_submitit(
     submitit_dir = Path("data/submitit_logs/eci_scores")
     submitit_dir.mkdir(parents=True, exist_ok=True)
     executor = submitit.AutoExecutor(folder=str(submitit_dir))
+    active_jobs_by_model = _get_active_eci_jobs_by_model()
 
     jobs = []
     for spec in models:
+        active_job_ids = active_jobs_by_model.get(spec.path, [])
+        if active_job_ids:
+            _log(
+                f"[generate_eci] skip already queued/running model={spec.path} "
+                f"job_ids={','.join(active_job_ids)}"
+            )
+            continue
         tp, dp, requested_gpus = _resolve_parallelism(spec, args.num_gpus)
         model_name = spec.path.split("/")[-1]
         resolved_cluster, account, partition = _resolve_slurm_account(cluster=args.cluster)
@@ -309,12 +378,13 @@ def _run_submitit(
             run_metadata=run_metadata,
             limit=args.limit,
             max_connections=args.max_connections,
+            checkpoint_every=args.checkpoint_every,
             gpu_memory_utilization=args.gpu_memory_utilization,
             dtype=args.dtype,
             backend=args.backend,
         )
         jobs.append(job)
-        print(f"[generate_eci] submitted job_id={job.job_id} model={spec.path}", flush=True)
+        _log(f"[generate_eci] submitted job_id={job.job_id} model={spec.path}")
     return jobs
 
 
@@ -323,6 +393,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.limit is not None and args.limit < 1:
         raise ValueError("--limit must be >= 1")
+    if args.checkpoint_every < 1:
+        raise ValueError("--checkpoint-every must be >= 1")
 
     benchmark_names = _selected_benchmarks(args.benchmark)
     models = _selected_models(args.model)
@@ -360,21 +432,16 @@ if __name__ == "__main__":
 MISO
 python -m runs.generate_eci \
     --backend local-vllm \
-    --model Qwen/Qwen3-0.6B \
-    --limit 5 \
-    --dry-run  true\
     --executor submitit \
     --cluster miso \
     --num-gpus 8 \
-    --max-connections 300
+    --max-connections 400
 
 NLP
 python -m runs.generate_eci \
       --backend local-vllm \
-      --model Qwen/Qwen3-0.6B \
-      --limit 5 \
       --executor submitit \
       --cluster nlp \
       --num-gpus 1 \
-      --max-connections 48
+      --max-connections 52
 """

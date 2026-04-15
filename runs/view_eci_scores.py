@@ -61,6 +61,38 @@ def _grader_get(graders: Any, key: str) -> Any:
     return None
 
 
+def _message_content_to_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str) and item.strip():
+                parts.append(item.strip())
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str) and text.strip():
+                    parts.append(text.strip())
+        return "\n".join(parts).strip()
+    return ""
+
+
+def _render_prompt_messages(messages: Any) -> str | None:
+    if not isinstance(messages, list) or not messages:
+        return None
+    rendered_parts: list[str] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        content_text = _message_content_to_text(message.get("content"))
+        if not content_text:
+            continue
+        role = str(message.get("role", "message")).strip().upper()
+        rendered_parts.append(f"{role}\n{content_text}")
+    rendered = "\n\n".join(rendered_parts).strip()
+    return rendered or None
+
+
 @st.cache_data(show_spinner=False)
 def load_scores_df(path_str: str) -> pd.DataFrame:
     path = Path(path_str)
@@ -282,10 +314,13 @@ def main() -> None:
             expanded=True,
         )
 
-        st.markdown("**Question**")
-        st.text(str(row0.get("question", "")))
-        st.markdown("**Answer**")
-        st.code(str(row0.get("answer", "")), language="text")
+        qcol, acol = st.columns([3, 2])
+        with qcol:
+            st.markdown("**Question**")
+            st.code(str(row0.get("question", "")), language="text")
+        with acol:
+            st.markdown("**Answer**")
+            st.code(str(row0.get("answer", "")), language="text")
 
         st.markdown("**Rollouts**")
         for i, score_row in problem_rows.iterrows():
@@ -296,46 +331,76 @@ def main() -> None:
                 f"is_error={score_row.get('is_error')}"
             )
             with st.expander(title, expanded=(i == 0)):
-                st.markdown("**Score Metadata**")
-                st.json(
-                    {
-                        "created_at": score_row.get("created_at"),
-                        "score_metric": score_row.get("score_metric"),
-                        "score": score_row.get("score"),
-                        "is_correct": score_row.get("is_correct"),
-                        "is_error": score_row.get("is_error"),
-                        "input_token_count": score_row.get("input_token_count"),
-                        "output_token_count": score_row.get("output_token_count"),
-                        "epoch_in_run": score_row.get("epoch_in_run"),
-                        "sample_error": score_row.get("sample_error"),
-                        "sample_metadata": score_row.get("sample_metadata"),
-                        "inspect_log_path": score_row.get("inspect_log_path"),
-                    },
-                    expanded=False,
-                )
+                metric_cols = st.columns(6)
+                metric_cols[0].metric("Score", str(score_row.get("score")))
+                metric_cols[1].metric("Correct", str(score_row.get("is_correct")))
+                metric_cols[2].metric("Error", str(score_row.get("is_error")))
+                metric_cols[3].metric("Input Tokens", str(score_row.get("input_token_count")))
+                metric_cols[4].metric("Output Tokens", str(score_row.get("output_token_count")))
+                metric_cols[5].metric("Epoch", str(score_row.get("epoch_in_run")))
 
-                with st.expander("Rendered Prompt", expanded=False):
+                prompt_tab, output_tab, scoring_tab, raw_tab = st.tabs(["Prompt", "Output", "Scoring", "Raw"])
+
+                with prompt_tab:
                     rendered_prompt = score_row.get("rendered_prompt")
                     if isinstance(rendered_prompt, str) and rendered_prompt.strip():
+                        st.markdown("**Saved Rendered Prompt**")
                         st.code(rendered_prompt, language="text")
                     else:
-                        st.caption("No rendered prompt saved for this row.")
+                        st.caption("Saved `rendered_prompt` is empty for this row.")
 
-                with st.expander("Prompt Messages", expanded=False):
                     prompt_messages = score_row.get("prompt_messages")
+                    formatted_messages = _render_prompt_messages(prompt_messages)
+                    if formatted_messages:
+                        st.markdown("**Prompt Messages**")
+                        st.code(formatted_messages, language="text")
+                    elif isinstance(prompt_messages, list) and prompt_messages:
+                        st.markdown("**Prompt Messages**")
+                        st.caption("Prompt messages were saved, but could not be formatted as plain text.")
+
                     if isinstance(prompt_messages, list) and prompt_messages:
-                        st.json(prompt_messages, expanded=False)
+                        with st.expander("Prompt Messages JSON", expanded=False):
+                            st.json(prompt_messages, expanded=False)
                     else:
-                        st.caption("No prompt messages saved for this row.")
+                        st.caption("No `prompt_messages` saved for this row.")
 
-                with st.expander("Model Output", expanded=True):
+                with output_tab:
                     st.code(str(score_row.get("model_output", "")), language="text")
+                    sample_error = score_row.get("sample_error")
+                    if sample_error:
+                        st.markdown("**Sample Error**")
+                        st.code(str(sample_error), language="text")
 
-                with st.expander("Graders", expanded=False):
-                    st.json(score_row.get("graders", []), expanded=False)
+                with scoring_tab:
+                    score_summary_col, grader_col = st.columns([2, 3])
+                    with score_summary_col:
+                        st.markdown("**Score Metadata**")
+                        st.json(
+                            {
+                                "created_at": score_row.get("created_at"),
+                                "score_metric": score_row.get("score_metric"),
+                                "score": score_row.get("score"),
+                                "is_correct": score_row.get("is_correct"),
+                                "is_error": score_row.get("is_error"),
+                                "input_token_count": score_row.get("input_token_count"),
+                                "output_token_count": score_row.get("output_token_count"),
+                                "epoch_in_run": score_row.get("epoch_in_run"),
+                                "inspect_log_path": score_row.get("inspect_log_path"),
+                            },
+                            expanded=False,
+                        )
+                    with grader_col:
+                        st.markdown("**Graders**")
+                        st.json(score_row.get("graders", []), expanded=False)
 
-                with st.expander("Run Metadata", expanded=False):
-                    st.json(score_row.get("run_metadata", {}), expanded=False)
+                with raw_tab:
+                    raw_left, raw_right = st.columns(2)
+                    with raw_left:
+                        st.markdown("**Sample Metadata**")
+                        st.json(score_row.get("sample_metadata"), expanded=False)
+                    with raw_right:
+                        st.markdown("**Run Metadata**")
+                        st.json(score_row.get("run_metadata", {}), expanded=False)
 
 
 if __name__ == "__main__":

@@ -111,7 +111,7 @@ QWEN25_MODELS = [
 ]
 
 QWEN35_MODELS = [
-    ModelSpec("Qwen/Qwen3.5-397B-A17B", constraint=LARGE_MODEL_CONSTRAINT, **QWEN35_SAMPLING),
+    # ModelSpec("Qwen/Qwen3.5-397B-A17B", constraint=LARGE_MODEL_CONSTRAINT, **QWEN35_SAMPLING),
 ]
 
 LLAMA_MODELS = [
@@ -126,8 +126,8 @@ GEMMA_MODELS = [
 ]
 
 OPENAI_MODELS = [
-    ModelSpec("openai/gpt-oss-120b", tp=4, constraint=LARGE_MODEL_CONSTRAINT, **OPENAI_SAMPLING),
-    ModelSpec("openai/gpt-oss-20b", tp=4, constraint=LARGE_MODEL_CONSTRAINT, **OPENAI_SAMPLING),
+    # ModelSpec("openai/gpt-oss-120b", tp=4, constraint=LARGE_MODEL_CONSTRAINT, **OPENAI_SAMPLING),
+    # ModelSpec("openai/gpt-oss-20b", tp=4, constraint=LARGE_MODEL_CONSTRAINT, **OPENAI_SAMPLING),
 ]
 
 ALL_MODELS = QWEN3_MODELS + QWEN25_MODELS + LLAMA_MODELS + GEMMA_MODELS + OPENAI_MODELS + QWEN35_MODELS

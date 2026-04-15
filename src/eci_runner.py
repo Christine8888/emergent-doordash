@@ -5,7 +5,10 @@ import os
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
+import urllib.error
+import urllib.request
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -25,8 +28,17 @@ EPOCHS = 1
 MAX_TOKENS = 32768
 MAX_RETRIES = 2
 MAX_NUM_BATCHED_TOKENS = 32768
+DEFAULT_CHECKPOINT_EVERY = 1500
 TASK_SAMPLE_ID_CACHE: dict[str, list[str]] = {}
 SAMPLE_IDS_PREFIX = "__ECI_SAMPLE_IDS__="
+
+
+def _timestamp() -> str:
+    return time.strftime("%H:%M:%S", time.localtime())
+
+
+def _log(message: str) -> None:
+    print(f"[{_timestamp()}] {message}", flush=True)
 
 
 @dataclass(frozen=True)
@@ -218,6 +230,30 @@ def _chunk_sample_ids(sample_ids: list[str], *, max_chars: int = 24000) -> list[
     for sample_id in sample_ids:
         sample_chars = len(sample_id) + (1 if current else 0)
         if current and current_chars + sample_chars > max_chars:
+            chunks.append(current)
+            current = []
+            current_chars = 0
+        current.append(sample_id)
+        current_chars += len(sample_id) + (1 if len(current) > 1 else 0)
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _chunk_sample_ids_with_limits(
+    sample_ids: list[str],
+    *,
+    max_items: int,
+    max_chars: int = 24000,
+) -> list[list[str]]:
+    if max_items < 1:
+        raise ValueError("max_items must be >= 1")
+    chunks: list[list[str]] = []
+    current: list[str] = []
+    current_chars = 0
+    for sample_id in sample_ids:
+        sample_chars = len(sample_id) + (1 if current else 0)
+        if current and (len(current) >= max_items or current_chars + sample_chars > max_chars):
             chunks.append(current)
             current = []
             current_chars = 0
@@ -458,6 +494,128 @@ def _format_eta_seconds(seconds: float) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 
+def _parse_prometheus_value(text: str, metric_names: list[str], *, is_counter: bool) -> float | None:
+    for metric_name in metric_names:
+        total = 0.0
+        found = False
+        prefix = f"{metric_name}"
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or not line.startswith(prefix):
+                continue
+            rest = line[len(metric_name):]
+            if rest and rest[0] not in ("{", " "):
+                continue
+            value_str = line.rsplit("}", 1)[-1].strip() if "{" in line else line.split()[-1]
+            try:
+                value = float(value_str)
+            except ValueError:
+                continue
+            if is_counter:
+                total += value
+                found = True
+            else:
+                return value
+        if found:
+            return total
+    return None
+
+
+def _metrics_poller(metrics_url: str, interval: float, stop_event: threading.Event) -> None:
+    prev_gen_tokens: float | None = None
+    prev_prompt_tokens: float | None = None
+    prev_time: float | None = None
+    gen_names = ["vllm:generation_tokens_total", "vllm_generation_tokens_total"]
+    prompt_names = ["vllm:prompt_tokens_total", "vllm_prompt_tokens_total"]
+    running_names = ["vllm:num_requests_running", "vllm_num_requests_running"]
+    waiting_names = ["vllm:num_requests_waiting", "vllm_num_requests_waiting"]
+
+    while not stop_event.is_set():
+        stop_event.wait(interval)
+        if stop_event.is_set():
+            break
+        try:
+            with urllib.request.urlopen(metrics_url, timeout=5) as resp:
+                text = resp.read().decode()
+        except Exception as exc:
+            _log(f"[metrics-poller] fetch failed: {exc}")
+            continue
+
+        now = time.time()
+        gen_tokens = _parse_prometheus_value(text, gen_names, is_counter=True)
+        prompt_tokens = _parse_prometheus_value(text, prompt_names, is_counter=True)
+        running = _parse_prometheus_value(text, running_names, is_counter=False)
+        waiting = _parse_prometheus_value(text, waiting_names, is_counter=False)
+
+        if gen_tokens is not None and prev_gen_tokens is not None and prev_time is not None:
+            dt = now - prev_time
+            if dt > 0:
+                gen_rate = (gen_tokens - prev_gen_tokens) / dt
+                prompt_rate = ((prompt_tokens or 0.0) - (prev_prompt_tokens or 0.0)) / dt
+                parts = [
+                    f"gen_tok/s={gen_rate:.1f}",
+                    f"prompt_tok/s={prompt_rate:.1f}",
+                ]
+                if running is not None:
+                    parts.append(f"running={int(running)}")
+                if waiting is not None:
+                    parts.append(f"waiting={int(waiting)}")
+                _log(f"[metrics-poller] {' '.join(parts)}")
+
+        prev_gen_tokens = gen_tokens
+        prev_prompt_tokens = prompt_tokens
+        prev_time = now
+
+
+def _checkpoint_path_for_output(output_path: Path) -> Path:
+    if output_path.suffix == ".jsonl":
+        return output_path.with_suffix(".ckpt.json")
+    return output_path.with_name(output_path.name + ".ckpt.json")
+
+
+def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(path.name + ".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_path, path)
+
+
+def _save_eci_checkpoint(
+    *,
+    ckpt_path: Path,
+    benchmark_name: str,
+    model: str,
+    output_path: Path,
+    total_samples: int,
+    completed_samples: int,
+    existing_records: int,
+    new_records: int,
+    checkpoint_every: int,
+    elapsed_seconds: float,
+    run_metadata: dict[str, Any],
+    inspect_log_path: str | None = None,
+) -> None:
+    payload = {
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "benchmark_name": benchmark_name,
+        "model": model,
+        "output_path": str(output_path),
+        "inspect_log_path": inspect_log_path,
+        "total_samples": int(total_samples),
+        "completed_samples": int(completed_samples),
+        "remaining_samples": max(0, int(total_samples) - int(completed_samples)),
+        "existing_records": int(existing_records),
+        "new_records": int(new_records),
+        "checkpoint_every": int(checkpoint_every),
+        "elapsed_seconds": float(elapsed_seconds),
+        "run_metadata": run_metadata,
+    }
+    _atomic_write_json(ckpt_path, payload)
+
+
 def _stringify_sample_text(value: Any) -> str:
     if value is None:
         return ""
@@ -682,6 +840,7 @@ def _run_inspect_command_once(
     run_metadata: dict[str, Any],
     model_base_url: str | None,
     extra_env: dict[str, str] | None,
+    show_progress: bool = True,
 ) -> tuple[list[ECIScoreRecord], str, float]:
     log_dir = _build_log_dir(benchmark_id=config.benchmark_id, model=model_path)
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -700,10 +859,9 @@ def _run_inspect_command_once(
     if extra_env is not None:
         env.update(extra_env)
 
-    print(
+    _log(
         f"[eci] running benchmark={config.benchmark_id} model={model_path} "
         f"epochs={epochs} sample_count={total_samples}",
-        flush=True,
     )
     inspect_stdout_path = log_dir / "inspect.stdout.log"
     inspect_stderr_path = log_dir / "inspect.stderr.log"
@@ -726,7 +884,7 @@ def _run_inspect_command_once(
             file=sys.stdout,
             bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}{postfix}]",
         )
-        if tqdm is not None and total_samples > 0
+        if show_progress and tqdm is not None and total_samples > 0
         else None
     )
     with open(inspect_stdout_path, "w", encoding="utf-8") as stdout_file, open(
@@ -768,7 +926,7 @@ def _run_inspect_command_once(
                         if completed_delta > 0 or retry_count != last_retry_count:
                             progress.set_postfix(postfix)
                             progress.refresh()
-                    elif (
+                    elif show_progress and (
                         observed_completed != last_completed_count
                         or retry_count != last_retry_count
                         or now - last_status_print >= 5.0
@@ -783,7 +941,7 @@ def _run_inspect_command_once(
                             remaining = total_samples - observed_completed
                             eta_seconds = remaining * (elapsed / observed_completed)
                             parts.append(f"eta={_format_eta_seconds(eta_seconds)}")
-                        print(" ".join(parts), flush=True)
+                        _log(" ".join(parts))
                         last_status_print = now
                     last_completed_count = observed_completed
                     last_retry_count = retry_count
@@ -807,14 +965,12 @@ def _run_inspect_command_once(
         stdout_tail = _tail_text(inspect_stdout_path.read_text(encoding="utf-8").strip())
         stderr_tail = _tail_text(inspect_stderr_path.read_text(encoding="utf-8").strip())
         if stdout_tail:
-            print(
+            _log(
                 f"[eci] inspect_stdout_tail benchmark={config.benchmark_id} model={model_path}\n{stdout_tail}",
-                flush=True,
             )
         if stderr_tail:
-            print(
+            _log(
                 f"[eci] inspect_stderr_tail benchmark={config.benchmark_id} model={model_path}\n{stderr_tail}",
-                flush=True,
             )
         raise RuntimeError(
             "Inspect eval failed "
@@ -845,6 +1001,7 @@ def run_eci_benchmark(
     max_connections: int,
     sampling_params: dict[str, bool | float | int],
     run_metadata: dict[str, Any],
+    checkpoint_every: int,
     model_base_url: str | None = None,
     extra_env: dict[str, str] | None = None,
 ) -> BenchmarkRunSummary:
@@ -870,73 +1027,92 @@ def run_eci_benchmark(
         for row in existing_rows
         if row.problem_id in target_problem_id_set and 1 <= row.rollout_id <= EPOCHS
     ]
+    total_target_samples = len(target_problem_ids) * EPOCHS
     inspect_log_path = ""
     elapsed_seconds = 0.0
     new_count = 0
+    ckpt_path = _checkpoint_path_for_output(output_path)
+    chunk_sample_count = max(1, (checkpoint_every + max(1, EPOCHS) - 1) // max(1, EPOCHS))
+    try:
+        from tqdm.auto import tqdm
+    except Exception:
+        tqdm = None
+    benchmark_progress = (
+        tqdm(
+            total=total_target_samples,
+            initial=len(scoped_existing_rows),
+            desc=f"{config.benchmark_id} {model_path}",
+            leave=True,
+            file=sys.stdout,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}{postfix}]",
+        )
+        if tqdm is not None and total_target_samples > 0 and sys.stdout.isatty()
+        else None
+    )
 
-    if not existing_ids:
-        sample_id_batches = [None] if limit is None else _chunk_sample_ids(target_problem_ids)
-        for sample_id_batch in sample_id_batches:
-            new_rows, inspect_log_path, run_elapsed_seconds = _run_inspect_command_once(
-                config=config,
-                model_path=model_path,
-                inspect_model=inspect_model,
-                sample_ids=sample_id_batch,
-                total_samples=len(target_problem_ids) * EPOCHS if sample_id_batch is None else len(sample_id_batch) * EPOCHS,
-                epochs=EPOCHS,
-                rollout_offset=0,
-                max_connections=max_connections,
-                sampling_params=sampling_params,
-                run_metadata=run_metadata,
-                model_base_url=model_base_url,
-                extra_env=extra_env,
+    def _update_checkpoint_and_progress(batch_added: int) -> None:
+        completed_samples = len(scoped_existing_rows) + new_count
+        if benchmark_progress is not None and batch_added > 0:
+            benchmark_progress.update(batch_added)
+            benchmark_progress.set_postfix({"saved": new_count})
+            benchmark_progress.refresh()
+        elif batch_added > 0:
+            _log(
+                f"[eci] checkpoint benchmark={config.benchmark_id} model={model_path} "
+                f"completed={completed_samples}/{total_target_samples} saved={new_count}",
             )
-            for row in new_rows:
-                if row.inference_id in existing_ids:
-                    continue
-                append_jsonl(output_path, row)
-                existing_ids.add(row.inference_id)
-                new_count += 1
-            elapsed_seconds += run_elapsed_seconds
-    else:
-        for rollout_id in range(1, EPOCHS + 1):
-            missing_problem_ids = [
-                problem_id
-                for problem_id in target_problem_ids
-                if _eci_inference_id(
-                    benchmark_name=config.benchmark_id,
-                    model=model_path,
-                    problem_id=problem_id,
-                    rollout_id=rollout_id,
-                )
-                not in existing_ids
-            ]
-            if not missing_problem_ids:
-                print(
-                    f"[eci] skip benchmark={config.benchmark_id} model={model_path} rollout={rollout_id}",
-                    flush=True,
-                )
-                continue
+        _save_eci_checkpoint(
+            ckpt_path=ckpt_path,
+            benchmark_name=config.benchmark_id,
+            model=model_path,
+            output_path=output_path,
+            total_samples=total_target_samples,
+            completed_samples=completed_samples,
+            existing_records=len(scoped_existing_rows),
+            new_records=new_count,
+            checkpoint_every=checkpoint_every,
+            elapsed_seconds=elapsed_seconds,
+            run_metadata=run_metadata,
+            inspect_log_path=inspect_log_path or None,
+        )
 
-            print(
-                f"[eci] pending benchmark={config.benchmark_id} model={model_path} "
-                f"rollout={rollout_id} pending={len(missing_problem_ids)}",
-                flush=True,
+    try:
+        _save_eci_checkpoint(
+            ckpt_path=ckpt_path,
+            benchmark_name=config.benchmark_id,
+            model=model_path,
+            output_path=output_path,
+            total_samples=total_target_samples,
+            completed_samples=len(scoped_existing_rows),
+            existing_records=len(scoped_existing_rows),
+            new_records=new_count,
+            checkpoint_every=checkpoint_every,
+            elapsed_seconds=elapsed_seconds,
+            run_metadata=run_metadata,
+            inspect_log_path=None,
+        )
+
+        if not existing_ids:
+            sample_id_batches = _chunk_sample_ids_with_limits(
+                target_problem_ids,
+                max_items=chunk_sample_count,
             )
-            for sample_id_batch in _chunk_sample_ids(missing_problem_ids):
+            for sample_id_batch in sample_id_batches:
+                batch_added = 0
                 new_rows, inspect_log_path, run_elapsed_seconds = _run_inspect_command_once(
                     config=config,
                     model_path=model_path,
                     inspect_model=inspect_model,
                     sample_ids=sample_id_batch,
-                    total_samples=len(sample_id_batch),
-                    epochs=1,
-                    rollout_offset=rollout_id - 1,
+                    total_samples=len(sample_id_batch) * EPOCHS,
+                    epochs=EPOCHS,
+                    rollout_offset=0,
                     max_connections=max_connections,
                     sampling_params=sampling_params,
                     run_metadata=run_metadata,
                     model_base_url=model_base_url,
                     extra_env=extra_env,
+                    show_progress=False,
                 )
                 for row in new_rows:
                     if row.inference_id in existing_ids:
@@ -944,7 +1120,64 @@ def run_eci_benchmark(
                     append_jsonl(output_path, row)
                     existing_ids.add(row.inference_id)
                     new_count += 1
+                    batch_added += 1
                 elapsed_seconds += run_elapsed_seconds
+                _update_checkpoint_and_progress(batch_added)
+        else:
+            for rollout_id in range(1, EPOCHS + 1):
+                missing_problem_ids = [
+                    problem_id
+                    for problem_id in target_problem_ids
+                    if _eci_inference_id(
+                        benchmark_name=config.benchmark_id,
+                        model=model_path,
+                        problem_id=problem_id,
+                        rollout_id=rollout_id,
+                    )
+                    not in existing_ids
+                ]
+                if not missing_problem_ids:
+                    _log(
+                        f"[eci] skip benchmark={config.benchmark_id} model={model_path} rollout={rollout_id}",
+                    )
+                    continue
+
+                _log(
+                    f"[eci] pending benchmark={config.benchmark_id} model={model_path} "
+                    f"rollout={rollout_id} pending={len(missing_problem_ids)}",
+                )
+                for sample_id_batch in _chunk_sample_ids_with_limits(
+                    missing_problem_ids,
+                    max_items=max(1, checkpoint_every),
+                ):
+                    batch_added = 0
+                    new_rows, inspect_log_path, run_elapsed_seconds = _run_inspect_command_once(
+                        config=config,
+                        model_path=model_path,
+                        inspect_model=inspect_model,
+                        sample_ids=sample_id_batch,
+                        total_samples=len(sample_id_batch),
+                        epochs=1,
+                        rollout_offset=rollout_id - 1,
+                        max_connections=max_connections,
+                        sampling_params=sampling_params,
+                        run_metadata=run_metadata,
+                        model_base_url=model_base_url,
+                        extra_env=extra_env,
+                        show_progress=False,
+                    )
+                    for row in new_rows:
+                        if row.inference_id in existing_ids:
+                            continue
+                        append_jsonl(output_path, row)
+                        existing_ids.add(row.inference_id)
+                        new_count += 1
+                        batch_added += 1
+                    elapsed_seconds += run_elapsed_seconds
+                    _update_checkpoint_and_progress(batch_added)
+    finally:
+        if benchmark_progress is not None:
+            benchmark_progress.close()
 
     final_rows = _dedupe_rows(_read_existing_rows(output_path))
     scoped_rows = [
@@ -984,6 +1217,7 @@ def run_eci_benchmarks(
     run_metadata: dict[str, Any],
     limit: int | None,
     max_connections: int,
+    checkpoint_every: int,
     gpu_memory_utilization: float,
     dtype: str,
     backend: str,
@@ -1000,6 +1234,7 @@ def run_eci_benchmarks(
                 max_connections=max_connections,
                 sampling_params=sampling_params,
                 run_metadata=run_metadata,
+                checkpoint_every=checkpoint_every,
                 model_base_url=model_base_url,
                 extra_env=extra_env,
             )
@@ -1017,13 +1252,25 @@ def run_eci_benchmarks(
         )
         with VLLMServer(server_config) as server:
             base_url = f"http://localhost:{server.port}/v1"
-            _run_all(
-                model_base_url=base_url,
-                extra_env={
-                    "VLLM_BASE_URL": base_url,
-                    "VLLM_API_KEY": "local",
-                },
+            metrics_url = f"http://localhost:{server.port}/metrics"
+            metrics_stop = threading.Event()
+            metrics_thread = threading.Thread(
+                target=_metrics_poller,
+                args=(metrics_url, 5.0, metrics_stop),
+                daemon=True,
             )
+            metrics_thread.start()
+            try:
+                _run_all(
+                    model_base_url=base_url,
+                    extra_env={
+                        "VLLM_BASE_URL": base_url,
+                        "VLLM_API_KEY": "local",
+                    },
+                )
+            finally:
+                metrics_stop.set()
+                metrics_thread.join(timeout=1)
     elif backend == "together-serverless":
         _run_all(model_base_url=None, extra_env=None)
     else:

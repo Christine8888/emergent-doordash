@@ -14,6 +14,14 @@ HF_HUB_ETAG_TIMEOUT_SECONDS = 60
 HF_HUB_DOWNLOAD_TIMEOUT_SECONDS = 600
 
 
+def _timestamp() -> str:
+    return time.strftime("%H:%M:%S", time.localtime())
+
+
+def _log(message: str) -> None:
+    print(f"[{_timestamp()}] {message}", flush=True, file=sys.stderr)
+
+
 def _find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("", 0))
@@ -67,7 +75,7 @@ class VLLMServer:
             return
 
         cmd = self._cmd()
-        print(f"[vllm] starting: {' '.join(cmd)}", flush=True, file=sys.stderr)
+        _log(f"[vllm] starting: {' '.join(cmd)}")
         env = os.environ.copy()
         # vLLM resolves model shards through huggingface_hub, whose default 10s HEAD
         # timeout is too short for large model manifests on a slow or loaded connection.
@@ -94,7 +102,7 @@ class VLLMServer:
             try:
                 with urllib.request.urlopen(url, timeout=2) as resp:
                     if int(resp.status) == 200:
-                        print(f"[vllm] healthy on port={self.port}", flush=True, file=sys.stderr)
+                        _log(f"[vllm] healthy on port={self.port}")
                         return
             except (urllib.error.URLError, TimeoutError):
                 pass
@@ -111,7 +119,7 @@ class VLLMServer:
             self.process.kill()
             self.process.wait()
         self.process = None
-        print(f"[vllm] stopped port={self.port}", flush=True, file=sys.stderr)
+        _log(f"[vllm] stopped port={self.port}")
 
     def __enter__(self) -> "VLLMServer":
         self.start()
