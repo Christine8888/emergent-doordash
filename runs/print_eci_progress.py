@@ -45,6 +45,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     # python -m runs.print_eci_progress
-    # python -m runs.print_eci_progress --benchmark arc_challenge
-    # python -m runs.print_eci_progress --model Qwen/Qwen2.5-1.5B-Instruct
     main()

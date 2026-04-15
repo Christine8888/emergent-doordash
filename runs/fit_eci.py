@@ -29,7 +29,7 @@ EPOCH_DATA_DIR = PROJECT_ROOT / "data" / "epoch_ai_data"
 EVAL_TO_ECI = {
     "hellaswag__split_validation": "HellaSwag",
     "piqa": "PIQA",
-    "mmlu_5_shot__language_en_us__cot_false": "MMLU",
+    "mmlu_5_shot__language_en_us__cot_true": "MMLU",
     "bbh__prompt_type_answer_only": "BBH",
     "arc_challenge": "ARC AI2",
     "winogrande__dataset_name_winogrande_xl__fewshot_5": "Winogrande",

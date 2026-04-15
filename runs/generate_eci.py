@@ -23,7 +23,7 @@ from src.model_config import ALL_MODEL_PATHS, ModelSpec, get_model_spec
 from src.storage import build_eci_score_path
 
 BENCHMARKS = [
-    "mmlu_5_shot__language_en_us__cot_false",
+    "mmlu_5_shot__language_en_us__cot_true",
     "bbh__prompt_type_answer_only",
     "arc_challenge",
     "math__levels_5__fewshot_0",
@@ -456,9 +456,10 @@ MISO
 python -m runs.generate_eci \
     --backend local-vllm \
     --executor submitit \
+    --model Qwen/Qwen3-4B \
     --cluster miso \
     --num-gpus 8 \
-    --max-connections 360
+    --max-connections 400
 
 NLP
 python -m runs.generate_eci \

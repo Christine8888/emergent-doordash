@@ -10,7 +10,7 @@ from src.storage import build_eci_score_path
 from src.types import ECIScoreRecord
 
 BENCHMARK_ALIASES = {
-    "mmlu_5_shot__language_en_us__cot_false": "MMLU",
+    "mmlu_5_shot__language_en_us__cot_true": "MMLU",
     "bbh__prompt_type_answer_only": "BBH",
     "arc_challenge": "ARC",
     "math__levels_5__fewshot_0": "MATH5",

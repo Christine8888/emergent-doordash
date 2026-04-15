@@ -28,7 +28,7 @@ EPOCHS = 1
 MAX_TOKENS = 32768
 MAX_RETRIES = 2
 MAX_NUM_BATCHED_TOKENS = 32768
-DEFAULT_CHECKPOINT_EVERY = 1500
+DEFAULT_CHECKPOINT_EVERY = 2000
 TASK_SAMPLE_ID_CACHE: dict[str, list[str]] = {}
 SAMPLE_IDS_PREFIX = "__ECI_SAMPLE_IDS__="
 
@@ -70,9 +70,9 @@ def _register(config: BenchmarkConfig) -> BenchmarkConfig:
 
 _register(
     BenchmarkConfig(
-        benchmark_id="mmlu_5_shot__language_en_us__cot_false",
+        benchmark_id="mmlu_5_shot__language_en_us__cot_true",
         inspect_task="inspect_evals/mmlu_5_shot",
-        task_args={"language": "EN_US", "cot": False},
+        task_args={"language": "EN_US", "cot": True},
         source_metric_names=("accuracy",),
     )
 )
