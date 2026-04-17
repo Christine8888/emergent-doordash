@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
+import textwrap
 import threading
 import time
 import urllib.error
@@ -27,10 +29,18 @@ XDG_CACHE_HOME_ROOT = Path("/nlp/scr/suzeva/xdg_cache")
 EPOCHS = 1
 MAX_TOKENS = 32768
 MAX_RETRIES = 2
+INSPECT_TIMEOUT_SECONDS = 3600
 MAX_NUM_BATCHED_TOKENS = 32768
-DEFAULT_CHECKPOINT_EVERY = 2000
+DEFAULT_CHECKPOINT_EVERY = 1500
 TASK_SAMPLE_ID_CACHE: dict[str, list[str]] = {}
 SAMPLE_IDS_PREFIX = "__ECI_SAMPLE_IDS__="
+PROMPT_TOKEN_STATS_PREFIX = "__ECI_PROMPT_TOKEN_STATS__="
+PROMPT_PAYLOAD_PREFIX = "__ECI_PROMPT_PAYLOAD__="
+# The local tokenizer count misses part of the chat/request framing that vLLM
+# enforces at serving time. Keep a larger buffer so we stay under the true
+# context budget while still allowing near-32k completions when prompts are tiny.
+MAX_TOKEN_CLAMP_SAFETY_MARGIN = 256
+TASK_PROMPT_TOKEN_STATS_CACHE: dict[tuple[str, str], "PromptTokenStats"] = {}
 
 
 def _timestamp() -> str:
@@ -39,6 +49,29 @@ def _timestamp() -> str:
 
 def _log(message: str) -> None:
     print(f"[{_timestamp()}] {message}", flush=True)
+
+
+def _extract_allowed_max_tokens_from_error(error_text: str) -> int | None:
+    patterns = [
+        r"\((\d+)\s*>\s*(\d+)\s*-\s*(\d+)\)",
+        r"maximum context length is\s*(\d+)\s*and your request has\s*(\d+)\s*input tokens",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, error_text)
+        if match is None:
+            continue
+        numbers = [int(group) for group in match.groups()]
+        if len(numbers) == 3:
+            _, context_limit, input_tokens = numbers
+            return max(1, context_limit - input_tokens)
+        if len(numbers) == 2:
+            context_limit, input_tokens = numbers
+            return max(1, context_limit - input_tokens)
+    return None
+
+
+def _should_preflight_clip_max_tokens(model_path: str) -> bool:
+    return model_path.startswith("Qwen/Qwen2.5-")
 
 
 @dataclass(frozen=True)
@@ -61,6 +94,20 @@ class BenchmarkRunSummary:
     existing_count: int
     new_count: int
     elapsed_seconds: float
+
+
+@dataclass(frozen=True)
+class ClippedSampleRequest:
+    problem_id: str
+    epoch: int
+    allowed_max_tokens: int
+    error_text: str
+
+
+@dataclass(frozen=True)
+class PromptTokenStats:
+    context_limit: int
+    prompt_token_counts: dict[str, int]
 
 
 def _register(config: BenchmarkConfig) -> BenchmarkConfig:
@@ -390,7 +437,9 @@ def _shared_xdg_env() -> dict[str, str]:
 
 def _build_log_dir(*, benchmark_id: str, model: str, root: str | Path = "data/inspect_logs") -> Path:
     model_name = _model_storage_component(model)
-    return Path(root) / benchmark_id / model_name / time.strftime("%Y%m%d_%H%M%S")
+    timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+    unique_suffix = f"{time.time_ns() % 1_000_000_000:09d}"
+    return Path(root) / benchmark_id / model_name / f"{timestamp}_{unique_suffix}"
 
 
 def _build_inspect_env(*, log_dir: Path) -> dict[str, str]:
@@ -470,6 +519,297 @@ def _load_task_sample_ids(config: BenchmarkConfig) -> list[str]:
     return sample_ids
 
 
+def _normalize_context_limit(raw_limit: Any, *, default: int) -> int:
+    if isinstance(raw_limit, int) and 0 < raw_limit < 10_000_000:
+        return raw_limit
+    return default
+
+
+def _count_prompt_tokens_with_tokenizer(
+    tokenizer: Any,
+    *,
+    messages: list[dict[str, str]] | None,
+    prompt_text: str | None,
+) -> int:
+    apply_chat_template = getattr(tokenizer, "apply_chat_template", None)
+    if messages and callable(apply_chat_template):
+        token_ids = apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+        )
+        return len(token_ids)
+    text = prompt_text or ""
+    if not text and messages:
+        text = "\n\n".join(
+            f"{message['role']}: {message['content']}" for message in messages
+        )
+    return len(tokenizer.encode(text, add_special_tokens=True))
+
+
+def _load_task_prompt_token_stats(
+    *,
+    config: BenchmarkConfig,
+    model_path: str,
+    default_context_limit: int,
+) -> PromptTokenStats | None:
+    cache_key = (config.benchmark_id, model_path)
+    cached = TASK_PROMPT_TOKEN_STATS_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        from transformers import AutoTokenizer
+    except Exception as exc:
+        _log(
+            f"[eci] prompt_token_stats_unavailable benchmark={config.benchmark_id} "
+            f"model={model_path} details={type(exc).__name__}: {exc}"
+        )
+        return None
+
+    helper = textwrap.dedent(
+        f"""
+        import json
+        import sys
+        from inspect_ai._eval.loader import load_tasks
+
+        PREFIX = {PROMPT_PAYLOAD_PREFIX!r}
+
+        def stringify(value):
+            if value is None:
+                return ""
+            if isinstance(value, str):
+                return value
+            if isinstance(value, (int, float, bool)):
+                return str(value)
+            try:
+                return json.dumps(value, ensure_ascii=False, sort_keys=True)
+            except Exception:
+                return str(value)
+
+        def normalize_message(message):
+            if isinstance(message, dict):
+                role = message.get("role")
+                content = message.get("content")
+            else:
+                role = getattr(message, "role", None)
+                content = getattr(message, "content", None)
+            if role is None or content is None:
+                return None
+            if isinstance(content, list):
+                parts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        text = item.get("text") or item.get("content")
+                    else:
+                        text = getattr(item, "text", None)
+                        if text is None:
+                            text = getattr(item, "content", None)
+                    if isinstance(text, str):
+                        parts.append(text)
+                content = "".join(parts) if parts else stringify(content)
+            elif not isinstance(content, str):
+                content = stringify(content)
+            return {{"role": str(role), "content": content}}
+
+        def extract_messages(sample):
+            for candidate in (getattr(sample, "messages", None), getattr(sample, "input", None)):
+                if not isinstance(candidate, list):
+                    continue
+                messages = []
+                for item in candidate:
+                    normalized = normalize_message(item)
+                    if normalized is not None:
+                        messages.append(normalized)
+                if messages:
+                    return messages
+            return None
+
+        task_spec = sys.argv[1]
+        task_args = json.loads(sys.argv[2])
+        tasks = load_tasks([task_spec], task_args)
+        if len(tasks) != 1:
+            raise RuntimeError(f"Expected exactly one task for {{task_spec}}, found {{len(tasks)}}")
+        task = tasks[0]
+
+        for idx in range(len(task.dataset)):
+            sample = task.dataset[idx]
+            sample_id = getattr(sample, "id", None)
+            if sample_id is None:
+                raise RuntimeError(f"Sample at index {{idx}} in {{task_spec}} did not have an id")
+            messages = extract_messages(sample)
+            prompt_text = ""
+            if not messages:
+                prompt_text = stringify(getattr(sample, "prompt", None))
+                if not prompt_text:
+                    prompt_text = stringify(getattr(sample, "input", None))
+            payload = {{
+                "sample_id": str(sample_id),
+                "messages": messages,
+                "prompt_text": prompt_text,
+            }}
+            # Emit ASCII-only JSON so splitlines() in the parent process can't
+            # break payloads on Unicode line separators embedded in prompts.
+            print(PREFIX + json.dumps(payload, ensure_ascii=True, sort_keys=True))
+        """
+    )
+    env = os.environ.copy()
+    env.update(_shared_xdg_env())
+    completed = subprocess.run(
+        [
+            str(INSPECT_PYTHON),
+            "-c",
+            helper,
+            config.inspect_task,
+            json.dumps(config.task_args, sort_keys=True),
+        ],
+        env=env,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if completed.returncode != 0:
+        details = _tail_text((completed.stderr or completed.stdout).strip(), max_chars=4000)
+        _log(
+            f"[eci] prompt_token_stats_unavailable benchmark={config.benchmark_id} "
+            f"model={model_path} details={details}"
+        )
+        return None
+
+    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+    prompt_token_counts: dict[str, int] = {}
+    for raw_line in completed.stdout.splitlines():
+        line = raw_line.strip()
+        if not line.startswith(PROMPT_PAYLOAD_PREFIX):
+            continue
+        payload = json.loads(line.removeprefix(PROMPT_PAYLOAD_PREFIX))
+        if not isinstance(payload, dict):
+            continue
+        sample_id = payload.get("sample_id")
+        messages = payload.get("messages")
+        prompt_text = payload.get("prompt_text")
+        normalized_messages = None
+        if isinstance(messages, list):
+            normalized_messages = [
+                {"role": str(message.get("role")), "content": str(message.get("content"))}
+                for message in messages
+                if isinstance(message, dict)
+                and isinstance(message.get("role"), str)
+                and isinstance(message.get("content"), str)
+            ]
+        if not isinstance(sample_id, str):
+            continue
+        prompt_token_counts[sample_id] = _count_prompt_tokens_with_tokenizer(
+            tokenizer,
+            messages=normalized_messages,
+            prompt_text=prompt_text if isinstance(prompt_text, str) else None,
+        )
+    if not prompt_token_counts:
+        details = _tail_text((completed.stdout + "\n" + completed.stderr).strip(), max_chars=4000)
+        _log(
+            f"[eci] prompt_token_stats_missing benchmark={config.benchmark_id} "
+            f"model={model_path} details={details}"
+        )
+        return None
+
+    unexpected_payloads: list[str] = []
+    for raw_line in completed.stderr.splitlines():
+        line = raw_line.strip()
+        if line.startswith(PROMPT_PAYLOAD_PREFIX):
+            unexpected_payloads.append(line.removeprefix(PROMPT_PAYLOAD_PREFIX))
+    if unexpected_payloads:
+        for payload_text in unexpected_payloads:
+            payload = json.loads(payload_text)
+            if not isinstance(payload, dict):
+                continue
+            sample_id = payload.get("sample_id")
+            messages = payload.get("messages")
+            prompt_text = payload.get("prompt_text")
+            normalized_messages = None
+            if isinstance(messages, list):
+                normalized_messages = [
+                    {"role": str(message.get("role")), "content": str(message.get("content"))}
+                    for message in messages
+                    if isinstance(message, dict)
+                    and isinstance(message.get("role"), str)
+                    and isinstance(message.get("content"), str)
+                ]
+            if not isinstance(sample_id, str):
+                continue
+            prompt_token_counts[sample_id] = _count_prompt_tokens_with_tokenizer(
+                tokenizer,
+                messages=normalized_messages,
+                prompt_text=prompt_text if isinstance(prompt_text, str) else None,
+            )
+
+    context_limit = _normalize_context_limit(
+        getattr(tokenizer, "model_max_length", None),
+        default=default_context_limit,
+    )
+    stats = PromptTokenStats(
+        context_limit=context_limit,
+        prompt_token_counts=prompt_token_counts,
+    )
+    TASK_PROMPT_TOKEN_STATS_CACHE[cache_key] = stats
+    return stats
+
+
+def _compute_effective_batch_max_tokens(
+    *,
+    config: BenchmarkConfig,
+    model_path: str,
+    requested_max_tokens: int,
+    prompt_sample_ids: list[str] | None,
+) -> int:
+    if not _should_preflight_clip_max_tokens(model_path):
+        return requested_max_tokens
+
+    stats = _load_task_prompt_token_stats(
+        config=config,
+        model_path=model_path,
+        default_context_limit=requested_max_tokens,
+    )
+    if stats is None:
+        return requested_max_tokens
+
+    context_limit = max(1, min(requested_max_tokens, stats.context_limit))
+    sample_ids_to_check = prompt_sample_ids or list(stats.prompt_token_counts.keys())
+    if not sample_ids_to_check:
+        return context_limit
+
+    allowed_max_tokens: list[int] = []
+    prompt_token_values: list[int] = []
+    missing_sample_ids: list[str] = []
+    for sample_id in sample_ids_to_check:
+        prompt_tokens = stats.prompt_token_counts.get(str(sample_id))
+        if prompt_tokens is None:
+            missing_sample_ids.append(str(sample_id))
+            continue
+        prompt_token_values.append(prompt_tokens)
+        allowed_max_tokens.append(
+            max(1, context_limit - prompt_tokens - MAX_TOKEN_CLAMP_SAFETY_MARGIN)
+        )
+
+    if missing_sample_ids:
+        preview = ", ".join(missing_sample_ids[:5])
+        _log(
+            f"[eci] prompt_token_stats_incomplete benchmark={config.benchmark_id} "
+            f"model={model_path} missing={len(missing_sample_ids)} preview={preview}"
+        )
+    if not allowed_max_tokens:
+        return context_limit
+
+    effective_max_tokens = min(context_limit, min(allowed_max_tokens))
+    if effective_max_tokens < requested_max_tokens:
+        _log(
+            f"[eci] preflight_clip_max_tokens benchmark={config.benchmark_id} model={model_path} "
+            f"old_max_tokens={requested_max_tokens} new_max_tokens={effective_max_tokens} "
+            f"context_limit={context_limit} max_prompt_tokens={max(prompt_token_values)} "
+            f"sample_count={len(allowed_max_tokens)}"
+        )
+    return effective_max_tokens
+
+
 def _resolve_inspect_command() -> list[str]:
     if not INSPECT_BIN.exists():
         raise RuntimeError(
@@ -488,6 +828,7 @@ def _build_inspect_command(
     sample_ids: list[str] | None,
     epochs: int,
     max_connections: int,
+    max_tokens: int,
     sampling_params: dict[str, bool | float | int],
 ) -> list[str]:
     cmd = list(_resolve_inspect_command())
@@ -505,15 +846,21 @@ def _build_inspect_command(
             "none",
             "--log-level",
             "info",
-            "--debug-errors",
+            "--no-fail-on-error",
             "--max-connections",
             str(max_connections),
             "--epochs",
             str(epochs),
             "--max-tokens",
-            str(MAX_TOKENS),
+            str(max_tokens),
             "--max-retries",
             str(MAX_RETRIES),
+            "--timeout",
+            str(INSPECT_TIMEOUT_SECONDS),
+            "--attempt-timeout",
+            str(INSPECT_TIMEOUT_SECONDS),
+            "-M",
+            f"client_timeout={INSPECT_TIMEOUT_SECONDS}",
         ]
     )
     if config.sandbox is not None:
@@ -560,14 +907,26 @@ def _find_recent_samplebuffer_db(*, started_wall_time: float) -> Path | None:
     root = _samplebuffer_root()
     if not root.exists():
         return None
-    candidates = [
-        path
-        for path in root.rglob("*.db")
-        if path.is_file() and path.stat().st_mtime >= (started_wall_time - 5.0)
-    ]
-    if not candidates:
-        return None
-    return max(candidates, key=lambda path: path.stat().st_mtime)
+    newest_path: Path | None = None
+    newest_mtime = started_wall_time - 5.0
+
+    # Inspect can create and remove samplebuffer directories while the run is
+    # still in flight. The progress probe must tolerate that churn.
+    for dirpath, _, filenames in os.walk(root, onerror=lambda _exc: None):
+        for filename in filenames:
+            if not filename.endswith(".db"):
+                continue
+            path = Path(dirpath) / filename
+            try:
+                stat_result = path.stat()
+            except OSError:
+                continue
+            if stat_result.st_mtime < newest_mtime:
+                continue
+            newest_path = path
+            newest_mtime = stat_result.st_mtime
+
+    return newest_path
 
 
 def _read_samplebuffer_progress(db_path: Path) -> tuple[int, int] | None:
@@ -798,6 +1157,21 @@ def _extract_stop_reason(sample: dict[str, Any]) -> str | None:
     return None
 
 
+def _extract_output_max_token_overflow(sample: dict[str, Any]) -> str | None:
+    model_output = _extract_model_output(sample)
+    if not model_output:
+        return None
+    allowed_max_tokens = _extract_allowed_max_tokens_from_error(model_output)
+    if allowed_max_tokens is None:
+        return None
+    stop_reason = _extract_stop_reason(sample)
+    if stop_reason == "model_length":
+        return model_output
+    if "maximum context length" in model_output or "max_completion_tokens" in model_output:
+        return model_output
+    return None
+
+
 def _extract_rendered_prompt(sample: dict[str, Any]) -> str | None:
     prompt_candidates = [
         sample.get("prompt"),
@@ -867,6 +1241,105 @@ def _extract_token_count(sample: dict[str, Any], *keys: str) -> int:
     return 0
 
 
+def _stringify_sample_error(error: Any) -> str:
+    if isinstance(error, str):
+        return error
+    try:
+        return json.dumps(error, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        return str(error)
+
+
+def _is_recoverable_incomplete_sample_error(error_text: str) -> bool:
+    normalized_error = error_text.lower()
+    return (
+        "attempttimeouterror" in normalized_error
+        or "attempt_timeout" in normalized_error
+        or "retryerror" in normalized_error and "timeout" in normalized_error
+    )
+
+
+def _extract_clipped_sample_requests(
+    payload: dict[str, Any],
+) -> tuple[list[ClippedSampleRequest], list[str], list[str]]:
+    raw_samples = payload.get("samples")
+    if not isinstance(raw_samples, list):
+        raise ValueError("Inspect payload did not contain a top-level `samples` list.")
+
+    clip_requests_by_key: dict[tuple[str, int], ClippedSampleRequest] = {}
+    unresolved_errors: list[str] = []
+    incomplete_errors: list[str] = []
+    for sample in raw_samples:
+        if not isinstance(sample, dict):
+            continue
+        problem_id = sample.get("id")
+        epoch = sample.get("epoch")
+        if not isinstance(problem_id, (str, int)) or not isinstance(epoch, int):
+            if sample.get("error") is not None or _extract_output_max_token_overflow(sample) is not None:
+                raise ValueError("Inspect error sample was missing a valid `id` or integer `epoch`.")
+            continue
+
+        sample_error = sample.get("error")
+        if sample_error is not None:
+            error_text = _stringify_sample_error(sample_error)
+            allowed_max_tokens = _extract_allowed_max_tokens_from_error(error_text)
+            if allowed_max_tokens is None:
+                formatted_error = f"id={problem_id} epoch={epoch} error={error_text}"
+                if _is_recoverable_incomplete_sample_error(error_text):
+                    incomplete_errors.append(formatted_error)
+                else:
+                    unresolved_errors.append(formatted_error)
+                continue
+            clip_requests_by_key[(str(problem_id), epoch)] = ClippedSampleRequest(
+                problem_id=str(problem_id),
+                epoch=epoch,
+                allowed_max_tokens=allowed_max_tokens,
+                error_text=error_text,
+            )
+            continue
+
+        output_overflow_text = _extract_output_max_token_overflow(sample)
+        if output_overflow_text is None:
+            continue
+        allowed_max_tokens = _extract_allowed_max_tokens_from_error(output_overflow_text)
+        if allowed_max_tokens is None:
+            formatted_error = f"id={problem_id} epoch={epoch} error={output_overflow_text}"
+            if _is_recoverable_incomplete_sample_error(output_overflow_text):
+                incomplete_errors.append(formatted_error)
+            else:
+                unresolved_errors.append(formatted_error)
+            continue
+        clip_requests_by_key[(str(problem_id), epoch)] = ClippedSampleRequest(
+            problem_id=str(problem_id),
+            epoch=epoch,
+            allowed_max_tokens=allowed_max_tokens,
+            error_text=output_overflow_text,
+        )
+    return list(clip_requests_by_key.values()), unresolved_errors, incomplete_errors
+
+
+def _group_clipped_sample_requests(
+    clip_requests: list[ClippedSampleRequest],
+) -> list[tuple[int, list[str], int]]:
+    grouped_problem_ids: dict[int, list[str]] = {}
+    grouped_allowed_max_tokens: dict[int, int] = {}
+
+    for clip_request in clip_requests:
+        epoch = clip_request.epoch
+        grouped_problem_ids.setdefault(epoch, []).append(clip_request.problem_id)
+        current_allowed = grouped_allowed_max_tokens.get(epoch)
+        if current_allowed is None:
+            grouped_allowed_max_tokens[epoch] = clip_request.allowed_max_tokens
+        else:
+            grouped_allowed_max_tokens[epoch] = min(current_allowed, clip_request.allowed_max_tokens)
+
+    grouped_batches: list[tuple[int, list[str], int]] = []
+    for epoch in sorted(grouped_problem_ids):
+        sample_ids = list(dict.fromkeys(grouped_problem_ids[epoch]))
+        grouped_batches.append((epoch, sample_ids, grouped_allowed_max_tokens[epoch]))
+    return grouped_batches
+
+
 def _extract_sample_rows(
     *,
     payload: dict[str, Any],
@@ -876,6 +1349,7 @@ def _extract_sample_rows(
     rollout_offset: int,
     inspect_log_path: Path,
     run_metadata: dict[str, Any],
+    include_error_rows: bool = False,
 ) -> list[ECIScoreRecord]:
     raw_samples = payload.get("samples")
     if not isinstance(raw_samples, list):
@@ -884,6 +1358,13 @@ def _extract_sample_rows(
     rows: list[ECIScoreRecord] = []
     for sample in raw_samples:
         if not isinstance(sample, dict):
+            continue
+        output_overflow_text = _extract_output_max_token_overflow(sample)
+        sample_error = sample.get("error")
+        effective_sample_error = sample_error if sample_error is not None else output_overflow_text
+        if not include_error_rows and (
+            sample_error is not None or output_overflow_text is not None
+        ):
             continue
         problem_id = sample.get("id")
         epoch = sample.get("epoch")
@@ -927,7 +1408,7 @@ def _extract_sample_rows(
                 input_token_count=_extract_token_count(sample, "input_tokens", "prompt_tokens"),
                 output_token_count=_extract_token_count(sample, "output_tokens", "completion_tokens"),
                 cost=0.0,
-                is_error=sample.get("error") is not None,
+                is_error=effective_sample_error is not None,
                 graders=[
                     GraderResult(
                         extractor_grader_type="inspect_score",
@@ -938,7 +1419,7 @@ def _extract_sample_rows(
                             "score": score_value,
                             "scores": metrics,
                             "sample_metadata": sample.get("metadata"),
-                            "sample_error": sample.get("error"),
+                            "sample_error": effective_sample_error,
                             "sample_retries": sample.get("retries"),
                             "epoch_in_run": epoch,
                             "inspect_log_path": str(inspect_log_path),
@@ -952,7 +1433,7 @@ def _extract_sample_rows(
                     "rendered_prompt": _extract_rendered_prompt(sample),
                     "prompt_messages": _extract_prompt_messages(sample),
                     "sample_metadata": sample.get("metadata"),
-                    "sample_error": sample.get("error"),
+                    "sample_error": effective_sample_error,
                     "sample_retries": sample.get("retries"),
                     "epoch_in_run": epoch,
                     "inspect_log_path": str(inspect_log_path),
@@ -1004,6 +1485,8 @@ def _run_inspect_command_once(
     epochs: int,
     rollout_offset: int,
     max_connections: int,
+    max_tokens: int,
+    prompt_sample_ids: list[str] | None,
     sampling_params: dict[str, bool | float | int],
     run_metadata: dict[str, Any],
     model_base_url: str | None,
@@ -1012,6 +1495,12 @@ def _run_inspect_command_once(
 ) -> tuple[list[ECIScoreRecord], str, float]:
     log_dir = _build_log_dir(benchmark_id=config.benchmark_id, model=model_path)
     log_dir.mkdir(parents=True, exist_ok=True)
+    effective_max_tokens = _compute_effective_batch_max_tokens(
+        config=config,
+        model_path=model_path,
+        requested_max_tokens=max_tokens,
+        prompt_sample_ids=prompt_sample_ids,
+    )
     cmd = _build_inspect_command(
         config=config,
         inspect_model=inspect_model,
@@ -1020,6 +1509,7 @@ def _run_inspect_command_once(
         sample_ids=sample_ids,
         epochs=epochs,
         max_connections=max_connections,
+        max_tokens=effective_max_tokens,
         sampling_params=sampling_params,
     )
     env = os.environ.copy()
@@ -1029,7 +1519,7 @@ def _run_inspect_command_once(
 
     _log(
         f"[eci] running benchmark={config.benchmark_id} model={model_path} "
-        f"epochs={epochs}",
+        f"epochs={epochs} max_tokens={effective_max_tokens}",
     )
     inspect_stdout_path = log_dir / "inspect.stdout.log"
     inspect_stderr_path = log_dir / "inspect.stderr.log"
@@ -1155,6 +1645,21 @@ def _run_inspect_command_once(
     inspect_log_path = _find_single_log_file(log_dir)
     with open(inspect_log_path, "r", encoding="utf-8") as f:
         inspect_payload = json.load(f)
+
+    clip_requests, unresolved_errors, incomplete_errors = _extract_clipped_sample_requests(inspect_payload)
+    if unresolved_errors:
+        preview = "\n".join(unresolved_errors[:5])
+        raise RuntimeError(
+            "Inspect eval logged non-recoverable sample errors:\n"
+            f"{preview}"
+        )
+    if incomplete_errors:
+        preview = "\n".join(incomplete_errors[:5])
+        _log(
+            f"[eci] incomplete_samples benchmark={config.benchmark_id} model={model_path} "
+            f"count={len(incomplete_errors)}\n{preview}"
+        )
+
     rows = _extract_sample_rows(
         payload=inspect_payload,
         benchmark_id=config.benchmark_id,
@@ -1164,6 +1669,40 @@ def _run_inspect_command_once(
         inspect_log_path=inspect_log_path,
         run_metadata=run_metadata,
     )
+    grouped_clip_requests = _group_clipped_sample_requests(clip_requests)
+    for epoch, sample_ids, allowed_max_tokens in grouped_clip_requests:
+        if allowed_max_tokens >= effective_max_tokens:
+            preview = ", ".join(sample_ids[:5])
+            raise RuntimeError(
+                "Inspect eval reported a max-token overflow without reducing the token budget "
+                f"for epoch={epoch} preview={preview} "
+                f"(current_max_tokens={effective_max_tokens}, allowed_max_tokens={allowed_max_tokens})."
+            )
+        preview = ", ".join(sample_ids[:5])
+        _log(
+            f"[eci] clip_max_tokens benchmark={config.benchmark_id} model={model_path} "
+            f"epoch={epoch} samples={len(sample_ids)} preview={preview} "
+            f"old_max_tokens={effective_max_tokens} new_max_tokens={allowed_max_tokens}"
+        )
+        clipped_rows, _, clipped_elapsed_seconds = _run_inspect_command_once(
+            config=config,
+            model_path=model_path,
+            inspect_model=inspect_model,
+            sample_ids=sample_ids,
+            total_samples=len(sample_ids),
+            epochs=1,
+            rollout_offset=rollout_offset + epoch - 1,
+            max_connections=max_connections,
+            max_tokens=allowed_max_tokens,
+            prompt_sample_ids=sample_ids,
+            sampling_params=sampling_params,
+            run_metadata=run_metadata,
+            model_base_url=model_base_url,
+            extra_env=extra_env,
+            show_progress=False,
+        )
+        rows.extend(clipped_rows)
+        elapsed_seconds += clipped_elapsed_seconds
     return rows, str(inspect_log_path), elapsed_seconds
 
 
@@ -1290,6 +1829,8 @@ def run_eci_benchmark(
                     epochs=EPOCHS,
                     rollout_offset=0,
                     max_connections=max_connections,
+                    max_tokens=MAX_TOKENS,
+                    prompt_sample_ids=sample_id_batch if sample_id_batch is not None else target_problem_ids,
                     sampling_params=sampling_params,
                     run_metadata=run_metadata,
                     model_base_url=model_base_url,
@@ -1346,6 +1887,8 @@ def run_eci_benchmark(
                         epochs=1,
                         rollout_offset=rollout_id - 1,
                         max_connections=max_connections,
+                        max_tokens=MAX_TOKENS,
+                        prompt_sample_ids=sample_id_batch,
                         sampling_params=sampling_params,
                         run_metadata=run_metadata,
                         model_base_url=model_base_url,

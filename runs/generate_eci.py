@@ -12,6 +12,7 @@ from typing import Any
 from src.eci_progress import compute_eci_benchmark_progress
 from src.eci_runner import (
     BENCHMARK_CONFIGS,
+    DEFAULT_CHECKPOINT_EVERY,
     EPOCHS,
     MAX_RETRIES,
     MAX_TOKENS,
@@ -116,22 +117,12 @@ def _load_sampling_params(models: list[ModelSpec]) -> dict[str, dict[str, Any]]:
 def _get_active_eci_jobs_by_model() -> dict[str, list[str]]:
     active_jobs_by_model: dict[str, list[str]] = {}
     submitit_dir = Path("data/submitit_logs/eci_scores")
-    try:
-        user = os.environ.get("USER", "")
-        cmd = ["squeue", "-h", "-o", "%i"]
-        if user:
-            cmd[1:1] = ["-u", user]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5, check=False)
-        if result.returncode != 0:
-            fallback = subprocess.run(["squeue", "-h", "-o", "%i"], capture_output=True, text=True, timeout=5, check=False)
-            if fallback.returncode != 0:
-                _log("[generate_eci] warning: failed to query SLURM queue; submitting without active-job filter")
-                return active_jobs_by_model
-            result = fallback
-        active_job_ids = {job_id.strip() for job_id in result.stdout.splitlines() if job_id.strip()}
-    except Exception as exc:
-        _log(f"[generate_eci] warning: failed to query SLURM queue ({exc}); submitting without active-job filter")
-        return active_jobs_by_model
+    user = os.environ.get("USER", "")
+    cmd = ["squeue", "-h", "-o", "%i"]
+    if user:
+        cmd[1:1] = ["-u", user]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    active_job_ids = {job_id.strip() for job_id in result.stdout.splitlines() if job_id.strip()}
 
     for job_id in sorted(active_job_ids):
         submitted_file = submitit_dir / f"{job_id}_submitted.pkl"
@@ -180,8 +171,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--checkpoint",
         dest="checkpoint",
         type=int,
-        default=None,
-        help="Enable checkpoint batching every N samples. By default runs are not chunked.",
+        default=DEFAULT_CHECKPOINT_EVERY,
+        help=(
+            "Checkpoint every N samples so long runs save partial progress. "
+            "Use 0 or omit only by changing the launcher code."
+        ),
     )
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.91)
     parser.add_argument("--dtype", type=str, default="auto")
@@ -461,17 +455,16 @@ MISO
 python -m runs.generate_eci \
     --backend local-vllm \
     --executor submitit \
-    --model meta-llama/Llama-3.1-70B-Instruct \
     --cluster miso \
     --num-gpus 8 \
-    --max-connections 450
+    --max-connections 500
 
 NLP
 python -m runs.generate_eci \
       --backend local-vllm \
       --executor submitit \
       --cluster sphinx \
-      --model Qwen/Qwen2.5-1.5B-Instruct \
       --num-gpus 1 \
-      --max-connections 60
+      --model Qwen/Qwen2.5-1.5B-Instruct \
+      --max-connections 48
 """

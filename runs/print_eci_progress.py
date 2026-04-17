@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 
-from runs.generate_eci import BENCHMARKS
-from src.eci_progress import compute_eci_benchmark_progress, print_eci_progress_report
+from runs.generate_eci import BENCHMARKS, _get_active_eci_jobs_by_model
+from src.eci_progress import ECIBenchmarkProgress, compute_eci_benchmark_progress, print_eci_progress_report
 from src.model_config import ALL_MODEL_PATHS
 
 
@@ -27,6 +27,33 @@ def _selected_models(model: str) -> list[str]:
     return [model]
 
 
+def _print_models_to_run_summary(rows: list[ECIBenchmarkProgress]) -> None:
+    print("  Models neither running nor queued", flush=True)
+    if not rows:
+        print("    none", flush=True)
+        return
+
+    active_jobs_by_model = _get_active_eci_jobs_by_model()
+    rows_by_model: dict[str, list[ECIBenchmarkProgress]] = {}
+    for row in rows:
+        rows_by_model.setdefault(row.model, []).append(row)
+
+    ready_models: list[str] = []
+    for model, model_rows in sorted(rows_by_model.items()):
+        if all(row.status == "complete" for row in model_rows):
+            continue
+        if model in active_jobs_by_model:
+            continue
+        ready_models.append(model)
+
+    if not ready_models:
+        print("    none", flush=True)
+        return
+
+    for model in ready_models:
+        print(f"    {model}", flush=True)
+
+
 def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
@@ -41,6 +68,7 @@ def main() -> None:
         for model in _selected_models(args.model)
     ]
     print_eci_progress_report(rows)
+    _print_models_to_run_summary(rows)
 
 
 if __name__ == "__main__":
