@@ -15,7 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from runs.fit_eci import EVAL_TO_ECI, load_baseline_scores
-from src.hinted_accuracy import discover_models_for_benchmark, load_results_with_ci_for_combo
+from src.hinted_accuracy import load_results_with_ci_for_combo
 
 
 PLOTS_ROOT = Path("plots/joint_scaling_plots")
@@ -203,14 +203,7 @@ def _load_combo_results(
         _canonicalize_old_gpqa_model_name(str(model)): stats
         for model, stats in combo_results.items()
     }
-    models = sorted(
-        {
-            _canonicalize_old_gpqa_model_name(str(model))
-            for model in discover_models_for_benchmark(benchmark)
-        }
-        | set(canonical_combo_results.keys())
-    )
-    return canonical_combo_results, models
+    return canonical_combo_results, sorted(canonical_combo_results.keys())
 
 
 def _resolve_models_to_use(
@@ -236,8 +229,7 @@ def _resolve_models_to_use(
     return canonical_models_to_use
 
 
-def _compute_pca_from_baselines() -> dict[str, Any]:
-    scores_df = load_baseline_scores()
+def _compute_pca_from_baselines(scores_df: Any) -> dict[str, Any]:
     df = scores_df[scores_df["benchmark"].isin(PC_BENCHMARK_ORDER)].copy()
     df["model"] = df["model"].map(lambda value: _canonicalize_old_gpqa_model_name(str(value)))
     pivot = df.pivot(index="model", columns="benchmark", values="score")
@@ -575,10 +567,11 @@ def _plot_capability_view_per_hint_with_error_bars(
 
 def main() -> None:
     args = _parse_args()
+    scores_df = load_baseline_scores()
     eci_path = Path(args.eci_file)
     eci_map = _load_eci_map(eci_path)
     eci_benchmark_label = _eci_benchmark_label(eci_path)
-    pca_result = _compute_pca_from_baselines()
+    pca_result = _compute_pca_from_baselines(scores_df)
     pc1_map = pca_result["capability_map"]
     pc_benchmark_label = pca_result["benchmark_label"]
     pc1_equation = pca_result["equation"]
@@ -699,7 +692,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     # python -m runs.plot_joint_scaling --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner mask_word --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh__prompt_type_answer_only--hellaswag__split_validation--math__levels_5__fewshot_0--mmlu_5_shot__language_en_us__cot_true--piqa--winogrande__dataset_name_winogrande_xl__fewshot_5.csv
-    # python -m runs.plot_joint_scaling --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner truncate_word --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh__prompt_type_answer_only--hellaswag__split_validation--mmlu_5_shot__language_en_us__cot_true--piqa--winogrande__dataset_name_winogrande_xl__fewshot_5.csv
+    # python -m runs.plot_joint_scaling --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner truncate_word --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh__prompt_type_answer_only--hellaswag__split_validation--math__levels_5__fewshot_0--mmlu_5_shot__language_en_us__cot_true--piqa--winogrande__dataset_name_winogrande_xl__fewshot_5.csv
 
-    # python -m runs.plot_joint_scaling --benchmark gpqa --hint-type answer_not_revealed --fractioner mask_word --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh--hellaswag--mmlu_5_shot_cot--piqa--winogrande.csv
+
+    # python -m runs.plot_joint_scaling --benchmark gpqa --hint-type answer_not_revealed --fractioner mask_word
     main()

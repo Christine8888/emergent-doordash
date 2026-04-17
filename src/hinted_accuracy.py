@@ -9,8 +9,6 @@ import numpy as np
 
 
 DATA_ROOT = Path("data")
-RESULTS_WITH_CI_BY_COMBO_ROOT = DATA_ROOT / "results_with_ci_by_combo"
-EXTERNAL_RESULTS_WITH_CI_PATHS: dict[str, Path] = {}
 LUKE_AIME_RESULTS_ROOT = DATA_ROOT / "luke_aime2025_2026_results"
 LUKE_AIME_BENCHMARK = "aime2025_2026"
 LUKE_SUPPORTED_HINT_TYPE = "answer_not_revealed"
@@ -257,53 +255,6 @@ def collect_stats_for_fraction(
     }
 
 
-def load_external_results_with_ci(
-    path: Path,
-) -> dict[str, dict[float, dict[str, float]]] | None:
-    if not path.exists():
-        return None
-
-    with open(path, "r", encoding="utf-8") as f:
-        payload = json.load(f)
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected top-level object in {path}, got {type(payload).__name__}")
-
-    out: dict[str, dict[float, dict[str, float]]] = {}
-    for model, model_payload in payload.items():
-        if not isinstance(model, str) or not isinstance(model_payload, dict):
-            continue
-        fraction_map: dict[float, dict[str, float]] = {}
-        for hint_fraction_raw, stats in model_payload.items():
-            if not isinstance(stats, dict):
-                continue
-            try:
-                hint_fraction = float(hint_fraction_raw)
-            except (TypeError, ValueError):
-                continue
-            mean = stats.get("mean")
-            ci_lower = stats.get("ci_lower")
-            ci_upper = stats.get("ci_upper")
-            if not all(isinstance(value, (float, int)) for value in (mean, ci_lower, ci_upper)):
-                continue
-            fraction_map[float(hint_fraction)] = {
-                "accuracy": float(mean),
-                "ci_low": float(ci_lower),
-                "ci_high": float(ci_upper),
-            }
-        if fraction_map:
-            out[model] = fraction_map
-    return out
-
-
-def load_external_results_with_ci_for_fractioner(
-    fractioner: str,
-) -> dict[str, dict[float, dict[str, float]]]:
-    path = EXTERNAL_RESULTS_WITH_CI_PATHS.get(fractioner)
-    if path is None:
-        return {}
-    return load_external_results_with_ci(path) or {}
-
-
 def load_luke_results_with_ci_for_combo(
     *,
     benchmark: str,
@@ -368,17 +319,6 @@ def discover_models_for_benchmark(benchmark: str, *, data_root: Path = DATA_ROOT
     if benchmark_dir.exists():
         models.update(path.name for path in benchmark_dir.iterdir() if path.is_dir())
     return sorted(models)
-
-
-def results_with_ci_by_combo_path(
-    *,
-    benchmark: str,
-    hint_type: str,
-    fractioner: str,
-    data_root: Path = DATA_ROOT,
-) -> Path:
-    combo_name = f"{safe_component(hint_type)}__{safe_component(fractioner)}.json"
-    return (data_root / "results_with_ci_by_combo" / safe_component(benchmark) / combo_name)
 
 
 def discover_fractioners(
@@ -587,37 +527,7 @@ def rows_to_results_with_ci_payload(rows: list[dict[str, Any]]) -> dict[str, dic
     return payload
 
 
-def external_results_to_payload(
-    external_results: dict[str, dict[float, dict[str, float]]] | None,
-) -> dict[str, dict[str, dict[str, float]]]:
-    payload: dict[str, dict[str, dict[str, float]]] = {}
-    if not external_results:
-        return payload
-
-    for model, fraction_map in sorted(external_results.items()):
-        for hint_fraction, stats in sorted(fraction_map.items()):
-            fraction_key = f"{float(hint_fraction):.1f}"
-            payload.setdefault(model, {})[fraction_key] = {
-                "mean": float(stats["accuracy"]),
-                "ci_lower": float(stats["ci_low"]),
-                "ci_upper": float(stats["ci_high"]),
-            }
-    return payload
-
-
-def merge_results_with_ci_payloads(
-    base: dict[str, dict[str, dict[str, float]]],
-    override: dict[str, dict[str, dict[str, float]]],
-) -> dict[str, dict[str, dict[str, float]]]:
-    out: dict[str, dict[str, dict[str, float]]] = {
-        model: dict(frac_map) for model, frac_map in base.items()
-    }
-    for model, frac_map in override.items():
-        out.setdefault(model, {}).update(frac_map)
-    return out
-
-
-def build_results_with_ci_for_combo(
+def load_local_results_with_ci_for_combo(
     *,
     benchmark: str,
     hint_type: str,
@@ -639,6 +549,19 @@ def build_results_with_ci_for_combo(
     return parse_results_with_ci_payload(local_payload)
 
 
+def _merge_results_with_ci_maps(
+    *,
+    base: dict[str, dict[float, dict[str, float]]],
+    override: dict[str, dict[float, dict[str, float]]],
+) -> dict[str, dict[float, dict[str, float]]]:
+    out: dict[str, dict[float, dict[str, float]]] = {
+        model: dict(fraction_map) for model, fraction_map in base.items()
+    }
+    for model, fraction_map in override.items():
+        out.setdefault(model, {}).update(fraction_map)
+    return out
+
+
 def load_results_with_ci_for_combo(
     *,
     benchmark: str,
@@ -646,22 +569,18 @@ def load_results_with_ci_for_combo(
     fractioner: str,
     data_root: Path = DATA_ROOT,
 ) -> dict[str, dict[float, dict[str, float]]]:
-    combo_path = results_with_ci_by_combo_path(
+    local_results = load_local_results_with_ci_for_combo(
         benchmark=benchmark,
         hint_type=hint_type,
         fractioner=fractioner,
         data_root=data_root,
     )
-    if combo_path.exists():
-        with open(combo_path, "r", encoding="utf-8") as f:
-            payload = json.load(f)
-        return parse_results_with_ci_payload(payload)
-    return build_results_with_ci_for_combo(
+    luke_results = load_luke_results_with_ci_for_combo(
         benchmark=benchmark,
         hint_type=hint_type,
         fractioner=fractioner,
-        data_root=data_root,
     )
+    return _merge_results_with_ci_maps(base=luke_results, override=local_results)
 
 
 def discover_models_for_combo(
