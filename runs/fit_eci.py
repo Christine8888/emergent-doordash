@@ -73,8 +73,8 @@ def load_baseline_scores() -> pd.DataFrame:
             if not jsonl_path.is_file():
                 continue
 
-            rows = read_jsonl(jsonl_path, model_cls=ECIScoreRecord)
-            typed_rows = [row for row in rows if isinstance(row, ECIScoreRecord)]
+            file_rows = read_jsonl(jsonl_path, model_cls=ECIScoreRecord)
+            typed_rows = [row for row in file_rows if isinstance(row, ECIScoreRecord)]
             judged = [flag for flag in (_extract_is_correct(row) for row in typed_rows) if flag is not None]
             if not judged:
                 continue
