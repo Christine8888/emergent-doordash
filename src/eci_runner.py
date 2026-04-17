@@ -142,9 +142,9 @@ _register(
 _register(
     BenchmarkConfig(
         benchmark_id="math__levels_5__fewshot_0",
-        inspect_task="inspect_evals/math",
+        inspect_task="src/inspect_tasks/math_relaxed.py@math_relaxed",
         task_args={"levels": "5", "fewshot": 0},
-        source_metric_names=("accuracy",),
+        source_metric_names=("deterministic_math_match",),
     )
 )
 _register(
@@ -232,6 +232,21 @@ def _extract_score_metrics(node: Any) -> dict[str, float]:
             if isinstance(name, str) and metric_value is not None and name not in metrics:
                 metrics[name] = metric_value
     return metrics
+
+
+def _extract_score_payload(node: Any, score_name: str | None) -> dict[str, Any] | None:
+    if score_name is None:
+        return None
+    if isinstance(node, dict):
+        payload = node.get(score_name)
+        return payload if isinstance(payload, dict) else None
+    if isinstance(node, list):
+        for item in node:
+            if not isinstance(item, dict):
+                continue
+            if item.get("name") == score_name:
+                return item
+    return None
 
 
 def _eci_inference_id(*, benchmark_name: str, model: str, problem_id: str, rollout_id: int) -> str:
@@ -1387,6 +1402,17 @@ def _extract_sample_rows(
             score_metric_name = next(iter(metrics))
             score_value = metrics[score_metric_name]
 
+        primary_score_payload = _extract_score_payload(sample.get("scores"), score_metric_name)
+        primary_score_metadata = (
+            primary_score_payload.get("metadata")
+            if isinstance(primary_score_payload, dict)
+            and isinstance(primary_score_payload.get("metadata"), dict)
+            else {}
+        )
+        extracted_answer = primary_score_metadata.get("extracted_answer")
+        extraction_method = primary_score_metadata.get("extraction_method")
+        match_method = primary_score_metadata.get("match_method")
+
         is_correct = None if score_value is None else bool(float(score_value) >= 0.5)
         rollout_id = rollout_offset + epoch
         rows.append(
@@ -1412,12 +1438,17 @@ def _extract_sample_rows(
                 graders=[
                     GraderResult(
                         extractor_grader_type="inspect_score",
-                        extracted_answer=None,
+                        extracted_answer=extracted_answer if isinstance(extracted_answer, str) else None,
                         is_correct=is_correct,
                         metadata={
                             "score_metric": score_metric_name,
                             "score": score_value,
                             "scores": metrics,
+                            "extraction_method": (
+                                extraction_method if isinstance(extraction_method, str) else None
+                            ),
+                            "match_method": match_method if isinstance(match_method, str) else None,
+                            "score_metadata": primary_score_metadata,
                             "sample_metadata": sample.get("metadata"),
                             "sample_error": effective_sample_error,
                             "sample_retries": sample.get("retries"),
@@ -1430,6 +1461,11 @@ def _extract_sample_rows(
                     "inspect_scores": metrics,
                     "score_metric": score_metric_name,
                     "score": score_value,
+                    "extracted_answer": extracted_answer if isinstance(extracted_answer, str) else None,
+                    "extraction_method": (
+                        extraction_method if isinstance(extraction_method, str) else None
+                    ),
+                    "match_method": match_method if isinstance(match_method, str) else None,
                     "rendered_prompt": _extract_rendered_prompt(sample),
                     "prompt_messages": _extract_prompt_messages(sample),
                     "sample_metadata": sample.get("metadata"),

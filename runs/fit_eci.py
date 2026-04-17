@@ -33,7 +33,7 @@ EVAL_TO_ECI = {
     "bbh__prompt_type_answer_only": "BBH",
     "arc_challenge": "ARC AI2",
     "winogrande__dataset_name_winogrande_xl__fewshot_5": "Winogrande",
-    # "math__levels_5__fewshot_0": "MATH level 5",
+    "math__levels_5__fewshot_0": "MATH level 5",
 }
 
 MIN_BENCHMARKS = len(EVAL_TO_ECI)

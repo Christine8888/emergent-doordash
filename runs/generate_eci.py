@@ -26,7 +26,7 @@ BENCHMARKS = [
     "mmlu_5_shot__language_en_us__cot_true",
     "bbh__prompt_type_answer_only",
     "arc_challenge",
-    # "math__levels_5__fewshot_0",
+    "math__levels_5__fewshot_0",
     "hellaswag__split_validation",
     "piqa",
     "winogrande__dataset_name_winogrande_xl__fewshot_5",
@@ -465,6 +465,6 @@ python -m runs.generate_eci \
       --executor submitit \
       --cluster sphinx \
       --num-gpus 1 \
-      --model Qwen/Qwen2.5-1.5B-Instruct \
+      --model Qwen/Qwen3-1.7B \
       --max-connections 48
 """
