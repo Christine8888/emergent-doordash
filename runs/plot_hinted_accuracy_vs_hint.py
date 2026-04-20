@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import re
 from pathlib import Path
@@ -155,6 +156,87 @@ def _fit_sigmoid_for_series(series_rows: list[dict[str, Any]]) -> dict[str, floa
         "sigmoid_midpoint": midpoint,
         "sigmoid_rmse": rmse,
     }
+
+
+def _fraction_column_name(hint_fraction: float) -> str:
+    return f"{hint_fraction:.1f}"
+
+
+def _merge_rows_for_accuracy_table(
+    local_rows: list[dict[str, Any]],
+    external_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    merged_by_key: dict[tuple[str, float], dict[str, Any]] = {}
+
+    for row in external_rows:
+        key = (str(row["model"]), float(row["hint_fraction"]))
+        merged_by_key[key] = row
+
+    for row in local_rows:
+        key = (str(row["model"]), float(row["hint_fraction"]))
+        merged_by_key[key] = row
+
+    return sorted(
+        merged_by_key.values(),
+        key=lambda row: (str(row["model"]), float(row["hint_fraction"])),
+    )
+
+
+def _build_accuracy_table_rows(rows: list[dict[str, Any]]) -> tuple[list[str], list[dict[str, str]]]:
+    fractions = sorted({float(row["hint_fraction"]) for row in rows})
+    fieldnames = ["model", *[_fraction_column_name(fraction) for fraction in fractions]]
+
+    series_map: dict[str, dict[float, float]] = {}
+    for row in rows:
+        model = str(row["model"])
+        hint_fraction = float(row["hint_fraction"])
+        fraction_map = series_map.setdefault(model, {})
+        if hint_fraction in fraction_map:
+            raise ValueError(
+                "Accuracy table export found duplicate hint fractions for the same model "
+                "after merging local and luke_results rows."
+            )
+        fraction_map[hint_fraction] = float(row["accuracy"])
+
+    table_rows: list[dict[str, str]] = []
+    for model, fraction_map in sorted(series_map.items()):
+        table_row: dict[str, str] = {
+            "model": model,
+        }
+        for fraction in fractions:
+            value = fraction_map.get(fraction)
+            table_row[_fraction_column_name(fraction)] = "" if value is None else f"{value:.4f}"
+        table_rows.append(table_row)
+    return fieldnames, table_rows
+
+
+def _print_accuracy_table(fieldnames: list[str], table_rows: list[dict[str, str]]) -> None:
+    widths = {
+        fieldname: max(
+            len(fieldname),
+            max((len(row.get(fieldname, "")) for row in table_rows), default=0),
+        )
+        for fieldname in fieldnames
+    }
+
+    print("[plot_hinted_accuracy_vs_hint] accuracy table")
+    print("  ".join(fieldname.ljust(widths[fieldname]) for fieldname in fieldnames))
+    print("  ".join("-" * widths[fieldname] for fieldname in fieldnames))
+    for row in table_rows:
+        print("  ".join(row.get(fieldname, "").ljust(widths[fieldname]) for fieldname in fieldnames))
+
+
+def _write_accuracy_table_csv(
+    *,
+    fieldnames: list[str],
+    table_rows: list[dict[str, str]],
+    output_path: Path,
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(table_rows)
 
 
 def _plot(
@@ -467,6 +549,7 @@ def main() -> None:
     PLOTS_ROOT.mkdir(parents=True, exist_ok=True)
     means_json_path = PLOTS_ROOT / f"{stem}__means_percent.json"
     summary_json_path = PLOTS_ROOT / f"{stem}__summary_percent.json"
+    accuracy_table_csv_path = PLOTS_ROOT / f"{stem}__accuracy_table.csv"
     png_path = PLOTS_ROOT / f"{stem}__bootstrap.png"
 
     means_payload: dict[str, dict[str, dict[str, float]]] = {}
@@ -495,6 +578,17 @@ def main() -> None:
         json.dump(summary_payload, f, indent=2, sort_keys=True)
         f.write("\n")
 
+    accuracy_table_source_rows = _merge_rows_for_accuracy_table(rows_sorted, external_rows)
+    accuracy_table_fieldnames, accuracy_table_rows = _build_accuracy_table_rows(
+        accuracy_table_source_rows
+    )
+    _print_accuracy_table(accuracy_table_fieldnames, accuracy_table_rows)
+    _write_accuracy_table_csv(
+        fieldnames=accuracy_table_fieldnames,
+        table_rows=accuracy_table_rows,
+        output_path=accuracy_table_csv_path,
+    )
+
     _plot(
         rows_sorted,
         fit_map=fit_map,
@@ -509,9 +603,10 @@ def main() -> None:
         ),
     )
 
-    print(f"[plot_hinted_accuracy_vs_hint] wrote_means_json={means_json_path}")
-    print(f"[plot_hinted_accuracy_vs_hint] wrote_summary_json={summary_json_path}")
-    print(f"[plot_hinted_accuracy_vs_hint] wrote_plot={png_path}")
+    print(f"[plot_hinted_accuracy_vs_hint] wrote_means_json= {means_json_path}")
+    print(f"[plot_hinted_accuracy_vs_hint] wrote_summary_json= {summary_json_path}")
+    print(f"[plot_hinted_accuracy_vs_hint] wrote_accuracy_table_csv= {accuracy_table_csv_path}")
+    print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {png_path}")
 
 
 if __name__ == "__main__":
