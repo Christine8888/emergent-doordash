@@ -334,7 +334,6 @@ def discover_fractioners(
     model_dir = data_root / "hinted_inference" / benchmark_name / model_name
     if not model_dir.exists():
         return []
-
     fractioners: list[str] = []
     for path in model_dir.iterdir():
         if not path.is_dir():
@@ -360,10 +359,8 @@ def discover_fraction_files(
     model_name = safe_component(model)
     hint_fractioner = f"{safe_component(hint_type)}__{safe_component(fractioner)}"
     combo_dir = data_root / "hinted_inference" / benchmark_name / model_name / hint_fractioner
-
     if not combo_dir.exists():
         return []
-
     out: list[tuple[float, Path]] = []
     for path in combo_dir.glob("fraction_*.jsonl"):
         try:

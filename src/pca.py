@@ -142,6 +142,138 @@ def format_component_equation(
     return f"PC{component_idx + 1} = " + " ".join(terms)
 
 
+def _print_component_loadings(
+    *,
+    component_idx: int,
+    result: PCAResult,
+) -> None:
+    if component_idx >= result.components.shape[0]:
+        return
+
+    print(f"PC{component_idx + 1} loadings")
+    for feature_name, weight in sorted(
+        zip(result.feature_names, result.components[component_idx], strict=True),
+        key=lambda item: abs(float(item[1])),
+        reverse=True,
+    ):
+        print(f"{feature_name}: {float(weight):+.4f}")
+    print("")
+
+
+def _print_feature_summary(
+    *,
+    result: PCAResult,
+    max_components: int,
+) -> None:
+    means = result.feature_means
+    stds = result.feature_stds
+    component_vectors = [
+        result.components[idx]
+        if result.components.shape[0] > idx
+        else np.zeros(len(result.feature_names), dtype=float)
+        for idx in range(max_components)
+    ]
+
+    loading_headers = "  ".join(
+        f"pc{component_idx + 1}_loading" for component_idx in range(max_components)
+    )
+    delta_headers = "  ".join(
+        f"pc{component_idx + 1}_delta_acc" for component_idx in range(max_components)
+    )
+    print("Feature summary")
+    print(f"feature  mean_acc  std_acc  {loading_headers}  {delta_headers}")
+    print(
+        "-------  --------  -------  "
+        + "  ".join("-----------" for _ in range(max_components))
+        + "  "
+        + "  ".join("-------------" for _ in range(max_components))
+    )
+
+    for idx, feature_name in enumerate(result.feature_names):
+        deltas = [float(vector[idx]) * float(stds[idx]) for vector in component_vectors]
+        loading_text = "  ".join(f"{float(vector[idx]):+.4f}" for vector in component_vectors)
+        delta_text = "  ".join(f"{float(delta):+.4f}" for delta in deltas)
+        print(
+            f"{feature_name}  "
+            f"{float(means[idx]):.4f}  "
+            f"{float(stds[idx]):.4f}  "
+            f"{loading_text}  "
+            f"{delta_text}"
+        )
+    print("")
+
+
+def _print_ranked_component_scores(
+    *,
+    result: PCAResult,
+    component_idx: int,
+) -> None:
+    if component_idx >= result.scores.shape[1]:
+        return
+
+    print(f"PC{component_idx + 1} ranking")
+    for rank, (model_idx, model) in enumerate(
+        sorted(
+            enumerate(result.model_names),
+            key=lambda item: float(result.scores[item[0], component_idx]),
+            reverse=True,
+        ),
+        start=1,
+    ):
+        print(f"{rank:>2}. {model}: {float(result.scores[model_idx, component_idx]):+.4f}")
+    print("")
+
+
+def print_pca_report(
+    *,
+    result: PCAResult,
+    summary_lines: list[str] | None = None,
+    max_components: int = 4,
+) -> None:
+    if summary_lines:
+        print("PCA summary")
+        for line in summary_lines:
+            print(line)
+        print("")
+
+    print("Explained variance ratio")
+    cumulative_explained_variance = np.cumsum(result.explained_variance_ratio)
+    for idx, value in enumerate(result.explained_variance_ratio[: max_components + 1], start=1):
+        print(
+            f"PC{idx}: {float(value):.4f} "
+            f"(cumulative={float(cumulative_explained_variance[idx - 1]):.4f})"
+        )
+    print("")
+
+    for component_idx in range(max_components):
+        _print_component_loadings(
+            component_idx=component_idx,
+            result=result,
+        )
+
+    _print_feature_summary(
+        result=result,
+        max_components=max_components,
+    )
+
+    for component_idx in range(max_components):
+        _print_ranked_component_scores(
+            result=result,
+            component_idx=component_idx,
+        )
+
+    print("Model scores")
+    for idx, model in sorted(
+        enumerate(result.model_names),
+        key=lambda item: float(result.scores[item[0], 0]),
+    ):
+        component_values = " ".join(
+            f"pc{component_idx + 1}={float(result.scores[idx, component_idx]):+.4f}"
+            for component_idx in range(min(max_components, result.scores.shape[1]))
+        )
+        print(f"{model}: {component_values}")
+
+
 def _discover_fractioners_for_hinted_pca(
     *,
     benchmark: str,
