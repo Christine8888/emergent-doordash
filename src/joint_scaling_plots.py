@@ -199,6 +199,111 @@ def plot_accuracy_vs_x_by_hint(
     return output_path
 
 
+def plot_accuracy_vs_x_by_hint_by_family(
+    *,
+    rows: list[dict[str, Any]],
+    benchmark: str,
+    hint_type: str,
+    fractioner: str,
+    x_method: str,
+    x_label: str,
+    x_benchmark_label: str,
+    x_equation: str | None,
+    output_dir: Path,
+    fit_series_fn: Callable[[list[float], list[float]], tuple[np.ndarray, np.ndarray] | None],
+    x_key: str = "x_value",
+) -> Path:
+    hint_fractions = sorted({float(row["hint_fraction"]) for row in rows})
+    family_names = sorted({str(row["model_family"]) for row in rows})
+    if not family_names:
+        raise ValueError("No model families found for family-faceted plot.")
+
+    n_panels = len(family_names)
+    ncols = min(2, max(1, n_panels))
+    nrows = int(np.ceil(n_panels / ncols))
+    fig, axes = plt.subplots(
+        nrows=nrows,
+        ncols=ncols,
+        figsize=(8 * ncols, 5.5 * nrows),
+        squeeze=False,
+        sharex=True,
+        sharey=True,
+    )
+    axes_flat = np.atleast_1d(axes).flatten()
+
+    cmap = plt.cm.viridis
+    colors = {h: cmap(i / max(len(hint_fractions) - 1, 1)) for i, h in enumerate(hint_fractions)}
+
+    for panel_idx, family_name in enumerate(family_names):
+        ax = axes_flat[panel_idx]
+        family_rows = [row for row in rows if str(row["model_family"]) == family_name]
+        for hint_fraction in hint_fractions:
+            series_rows = sorted(
+                [row for row in family_rows if float(row["hint_fraction"]) == hint_fraction],
+                key=lambda row: float(row[x_key]),
+            )
+            if not series_rows:
+                continue
+
+            xs = [float(row[x_key]) for row in series_rows]
+            ys = [float(row["accuracy"]) for row in series_rows]
+            color = colors[hint_fraction]
+
+            ax.scatter(xs, ys, color=color, alpha=0.85, s=45)
+
+            fit = fit_series_fn(xs, ys)
+            if fit is not None:
+                x_fit, y_fit = fit
+                ax.plot(x_fit, y_fit, "-", color=color, alpha=0.7, linewidth=2)
+
+        _add_model_name_axis(
+            ax,
+            rows=family_rows,
+            x_key=x_key,
+            label="Model",
+        )
+        ax.set_title(family_name, fontsize=12)
+        ax.set_xlabel(x_label, fontsize=11)
+        ax.set_ylabel("Accuracy", fontsize=11)
+        ax.grid(True, alpha=0.3)
+        ax.set_ylim(-0.05, 1.05)
+
+    for panel_idx in range(n_panels, len(axes_flat)):
+        axes_flat[panel_idx].set_visible(False)
+
+    legend_handles = [
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="-",
+            color=colors[hint_fraction],
+            label=f"h={hint_fraction:.2f}",
+            markersize=6,
+        )
+        for hint_fraction in hint_fractions
+    ]
+    title_lines = [
+        f"Accuracy vs {x_label} by Hint Fraction and Model Family",
+        f"benchmark={benchmark} hint_type={hint_type} fractioner={fractioner}",
+        f"{x_method}_benchmarks={x_benchmark_label}",
+    ]
+    if x_equation:
+        title_lines.append(x_equation)
+    fig.suptitle(format_title_text(title_lines), fontsize=14)
+    fig.legend(
+        handles=legend_handles,
+        bbox_to_anchor=(1.02, 1),
+        loc="upper left",
+        fontsize=9,
+    )
+    fig.tight_layout(rect=(0, 0, 0.9, 0.95))
+
+    output_path = output_dir / f"accuracy_vs_{x_method}_by_hint_by_family.png"
+    save_figure(fig, output_path)
+    return output_path
+
+
 def plot_accuracy_vs_x_by_hint_subplots_with_error_bars(
     *,
     rows: list[dict[str, Any]],

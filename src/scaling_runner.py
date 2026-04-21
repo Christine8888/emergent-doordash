@@ -5,6 +5,7 @@ from typing import Any
 
 from src.joint_scaling_plots import (
     plot_accuracy_vs_x_by_hint,
+    plot_accuracy_vs_x_by_hint_by_family,
     plot_accuracy_vs_x_by_hint_subplots_with_error_bars,
     plot_pca_component_weights,
     plot_pca_explained_variance,
@@ -22,6 +23,7 @@ def plot_accuracy_views_for_x_axes(
     hint_type: str,
     fractioner: str,
     output_dir: Path,
+    facet_by: str = "none",
 ) -> dict[str, dict[str, str]]:
     plot_paths: dict[str, dict[str, str]] = {}
     model_names = {str(row["model"]) for row in base_rows}
@@ -74,6 +76,21 @@ def plot_accuracy_views_for_x_axes(
                 )
             ),
         }
+        if facet_by == "family":
+            x_axis_plot_paths["accuracy_vs_x_by_hint_by_family"] = str(
+                plot_accuracy_vs_x_by_hint_by_family(
+                    rows=rows,
+                    benchmark=benchmark,
+                    hint_type=hint_type,
+                    fractioner=fractioner,
+                    x_method=x_axis.name,
+                    x_label=x_axis.label,
+                    x_benchmark_label=x_axis.benchmark_label or "unknown",
+                    x_equation=x_axis.equation,
+                    output_dir=x_axis_output_dir,
+                    fit_series_fn=fit_plot_sigmoid,
+                )
+            )
 
         pca_result = get_pca_result(x_axis)
         if pca_result is not None:

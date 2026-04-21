@@ -19,6 +19,24 @@ def canonicalize_model_name(model: str) -> str:
     return model
 
 
+def infer_model_family(model: str) -> str:
+    canonical_model = canonicalize_model_name(str(model))
+    if canonical_model.startswith("Qwen/Qwen3-"):
+        return "Qwen3"
+    if canonical_model.startswith("Qwen/Qwen2.5-"):
+        return "Qwen2.5"
+    if canonical_model.startswith("google/gemma-3-"):
+        return "gemma-3"
+    if canonical_model.startswith("meta-llama/Llama-3.1-"):
+        return "Llama-3.1"
+    provider, _, remainder = canonical_model.partition("/")
+    if provider and remainder:
+        family = remainder.split("-", 1)[0].strip()
+        if family:
+            return family
+    return canonical_model
+
+
 def load_eci_map(path: Path) -> dict[str, float]:
     with open(path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -130,6 +148,7 @@ def build_x_rows(
         {
             **row,
             "x_value": float(x_map[str(row["model"])]),
+            "model_family": infer_model_family(str(row["model"])),
         }
         for row in base_rows
         if str(row["model"]) in x_map

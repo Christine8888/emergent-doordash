@@ -54,6 +54,7 @@ class ScalingRunConfig:
     hint_type: str
     fractioner: str | None
     x_axis_methods: list[str]
+    facet_by: str = "none"
     joint_x_axis: str | None = None
     run_joint_for_all_x_axes: bool = False
     eci_file: Path | None = None
@@ -98,6 +99,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--eci-file", type=str, default=None)
     parser.add_argument("--num-holdout-models", type=int, default=0)
+    parser.add_argument("--facet-by", type=str, default="none", choices=["none", "family"])
     return parser.parse_args()
 
 
@@ -237,6 +239,7 @@ def run_scaling(config: ScalingRunConfig) -> ScalingRunResult:
         hint_type=config.hint_type,
         fractioner=config.fractioner,
         output_dir=output_dir,
+        facet_by=config.facet_by,
     )
     for x_axis_name, x_axis_plot_paths in sorted(plot_paths.items()):
         for plot_name, path in sorted(x_axis_plot_paths.items()):
@@ -296,6 +299,7 @@ def main() -> None:
             hint_type=args.hint_type,
             fractioner=args.fractioner,
             x_axis_methods=list(args.x_axis_methods),
+            facet_by=str(args.facet_by),
             eci_file=None if args.eci_file is None else Path(args.eci_file),
             hint_fractions=list(DEFAULT_HINTED_PC_HINT_FRACTIONS),
             num_holdout_models=int(args.num_holdout_models),
@@ -322,5 +326,17 @@ python -m runs.plot_scaling \
     --x-axis-methods eci eci_pc1 hinted_pc1 hinted_pc12_theta \
     --num-holdout-models 0 \
     --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh__prompt_type_answer_only--hellaswag__split_validation--math__levels_5__fewshot_0--mmlu_5_shot__language_en_us__cot_true--piqa--winogrande__dataset_name_winogrande_xl__fewshot_5.csv
+
+python -m runs.plot_scaling \
+    --benchmark aime2025_2026 \
+    --hint-type answer_not_revealed \
+    --fractioner mask_word \
+    --x-axis-methods eci eci_pc1 hinted_pc1 hinted_pc12_theta \
+    --num-holdout-models 0 \
+    --facet-by family \
+    --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh__prompt_type_answer_only--hellaswag__split_validation--math__levels_5__fewshot_0--mmlu_5_shot__language_en_us__cot_true--piqa--winogrande__dataset_name_winogrande_xl__fewshot_5.csv
+
+
+
 
 """
