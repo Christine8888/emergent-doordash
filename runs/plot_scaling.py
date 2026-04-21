@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
@@ -64,7 +64,11 @@ class ScalingRunConfig:
     output_root: Path = PLOTS_ROOT
     output_subdir: Path | None = None
     log_prefix: str = "[plot_scaling]"
-    preferred_models: list[str] | None = DEFAULT_MODELS_TO_USE
+    preferred_models: list[str] | None = field(
+        default_factory=lambda: (
+            None if DEFAULT_MODELS_TO_USE is None else list(DEFAULT_MODELS_TO_USE)
+        )
+    )
     restrict_models_to_x_axes: bool = False
     joint_lower_asymptote: float = DEFAULT_JOINT_LOWER_ASYMPTOTE
     pca_summary_lines_fn: Callable[[XAxisSpec], list[str] | None] | None = None
@@ -89,7 +93,7 @@ def _parse_args() -> argparse.Namespace:
         "--x-axis-methods",
         type=str,
         nargs="+",
-        default=["eci", "baseline_pc1"],
+        default=["eci", "eci_pc1"],
         choices=SUPPORTED_X_AXIS_METHODS,
     )
     parser.add_argument("--eci-file", type=str, default=None)
@@ -113,7 +117,7 @@ def _default_pca_summary_lines(
 
 
 def _normalize_joint_x_axis_name(joint_x_axis: str) -> str:
-    if joint_x_axis in {"eci", "baseline_pc1", "hinted_pc1"}:
+    if joint_x_axis in {"eci", "eci_pc1", "hinted_pc1"}:
         return joint_x_axis
     raise ValueError(f"Unsupported joint x-axis: {joint_x_axis}")
 
@@ -129,7 +133,7 @@ def run_scaling(config: ScalingRunConfig) -> ScalingRunResult:
     if config.joint_x_axis is not None and config.joint_x_axis not in x_axis_methods:
         x_axis_methods.append(str(config.joint_x_axis))
 
-    needs_scores_df = any(method == "baseline_pc1" for method in x_axis_methods)
+    needs_scores_df = any(method == "eci_pc1" for method in x_axis_methods)
     scores_df = load_baseline_scores() if needs_scores_df else None
 
     x_axes = build_x_axes_from_methods(
@@ -296,7 +300,7 @@ python -m runs.plot_scaling \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --x-axis-methods eci baseline_pc1 hinted_pc1 \
+    --x-axis-methods eci eci_pc1 hinted_pc1 \
     --num-holdout-models 0 \
     --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh__prompt_type_answer_only--hellaswag__split_validation--math__levels_5__fewshot_0--mmlu_5_shot__language_en_us__cot_true--piqa--winogrande__dataset_name_winogrande_xl__fewshot_5.csv
 

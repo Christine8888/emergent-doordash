@@ -37,7 +37,7 @@ def main() -> None:
             benchmark=args.benchmark,
             hint_type=args.hint_type,
             fractioner=args.fractioner,
-            x_axis_methods=["eci", "baseline_pc1"],
+            x_axis_methods=["eci", "eci_pc1"],
             joint_x_axis="eci",
             eci_file=Path(args.eci_file),
             num_holdout_models=int(args.num_holdout_models),

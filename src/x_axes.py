@@ -18,7 +18,7 @@ from src.scaling_data import eci_benchmark_label, load_eci_map
 
 SUPPORTED_X_AXIS_METHODS = (
     "eci",
-    "baseline_pc1",
+    "eci_pc1",
     "hinted_pc1",
 )
 
@@ -169,7 +169,7 @@ def build_x_axes_from_methods(
             )
             continue
 
-        if method == "baseline_pc1":
+        if method == "eci_pc1":
             if scores_df is None or benchmark_order is None:
                 raise ValueError(
                     "Baseline PC1 requires scores_df and benchmark_order."
