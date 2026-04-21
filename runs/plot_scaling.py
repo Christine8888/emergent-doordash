@@ -119,7 +119,13 @@ def _default_pca_summary_lines(
 
 
 def _normalize_joint_x_axis_name(joint_x_axis: str) -> str:
-    if joint_x_axis in {"eci", "eci_pc1", "hinted_pc1", "hinted_pc12_theta"}:
+    if joint_x_axis in {
+        "eci",
+        "eci_pc1",
+        "hinted_pc1",
+        "hinted_pc12_theta",
+        "hinted_acc_h03_logit",
+    }:
         return joint_x_axis
     raise ValueError(f"Unsupported joint x-axis: {joint_x_axis}")
 
@@ -323,7 +329,7 @@ python -m runs.plot_scaling \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --x-axis-methods eci eci_pc1 hinted_pc1 hinted_pc12_theta \
+    --x-axis-methods eci eci_pc1 hinted_pc1 hinted_pc12_theta hinted_acc_h03_logit \
     --num-holdout-models 0 \
     --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh__prompt_type_answer_only--hellaswag__split_validation--math__levels_5__fewshot_0--mmlu_5_shot__language_en_us__cot_true--piqa--winogrande__dataset_name_winogrande_xl__fewshot_5.csv
 
@@ -331,7 +337,7 @@ python -m runs.plot_scaling \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --x-axis-methods eci eci_pc1 hinted_pc1 hinted_pc12_theta \
+    --x-axis-methods eci eci_pc1 hinted_pc1 hinted_pc12_theta hinted_acc_h03_logit \
     --num-holdout-models 0 \
     --facet-by family \
     --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh__prompt_type_answer_only--hellaswag__split_validation--math__levels_5__fewshot_0--mmlu_5_shot__language_en_us__cot_true--piqa--winogrande__dataset_name_winogrande_xl__fewshot_5.csv
@@ -340,3 +346,4 @@ python -m runs.plot_scaling \
 
 
 """
+ 

@@ -16,6 +16,7 @@ from src.pca import (
 )
 from src.joint_scaling_fit import build_joint_scaling_df, fit_joint_sigmoid_model
 from src.scaling_data import eci_benchmark_label, load_eci_map
+from src.sigmoid_fits import clip_accuracy_for_logit
 
 
 SUPPORTED_X_AXIS_METHODS = (
@@ -23,6 +24,7 @@ SUPPORTED_X_AXIS_METHODS = (
     "eci_pc1",
     "hinted_pc1",
     "hinted_pc12_theta",
+    "hinted_acc_h03_logit",
 )
 
 
@@ -378,6 +380,82 @@ def build_hinted_pc12_theta_x_axis(
     )
 
 
+def build_hinted_accuracy_logit_x_axis(
+    *,
+    benchmark: str,
+    hint_type: str,
+    fractioner: str | None,
+    selected_models: list[str],
+    fit_models: list[str],
+    base_rows: list[dict[str, Any]],
+) -> XAxisSpec:
+    selected_models_ordered = [str(model) for model in selected_models]
+    fit_models_ordered = [str(model) for model in fit_models]
+    rows_at_fraction = [row for row in base_rows if abs(float(row["hint_fraction"]) - 0.3) <= 1e-8]
+    raw_accuracy_map = {
+        str(row["model"]): float(row["accuracy"])
+        for row in rows_at_fraction
+    }
+    missing_selected = sorted(set(selected_models_ordered) - set(raw_accuracy_map.keys()))
+    if missing_selected:
+        raise ValueError(
+            "Missing hinted accuracy rows at hint_fraction=0.3 "
+            f"for selected models: {missing_selected}"
+        )
+    missing_fit = sorted(set(fit_models_ordered) - set(raw_accuracy_map.keys()))
+    if missing_fit:
+        raise ValueError(
+            "Missing hinted accuracy rows at hint_fraction=0.3 "
+            f"for fit models: {missing_fit}"
+        )
+
+    fit_raw = np.asarray([raw_accuracy_map[model_name] for model_name in fit_models_ordered], dtype=float)
+    fit_clipped = clip_accuracy_for_logit(fit_raw, lower=None)
+    fit_logit = np.log(fit_clipped / (1.0 - fit_clipped))
+    fit_mean = float(np.mean(fit_logit))
+    fit_std = float(np.std(fit_logit))
+    safe_fit_std = 1.0 if fit_std <= 0.0 else fit_std
+
+    selected_raw = np.asarray(
+        [raw_accuracy_map[model_name] for model_name in selected_models_ordered],
+        dtype=float,
+    )
+    selected_clipped = clip_accuracy_for_logit(selected_raw, lower=None)
+    selected_logit = np.log(selected_clipped / (1.0 - selected_clipped))
+    selected_z = (selected_logit - fit_mean) / safe_fit_std
+
+    return XAxisSpec(
+        name="hinted_acc_h03_logit",
+        label="z(logit(Accuracy @ h=0.3))",
+        benchmark_label=benchmark,
+        equation="x = z_train(logit(clip(acc @ h=0.3)))",
+        model_to_x={
+            model_name: float(selected_z[idx])
+            for idx, model_name in enumerate(selected_models_ordered)
+        },
+        metadata={
+            "benchmark": benchmark,
+            "hint_type": hint_type,
+            "fractioner": fractioner,
+            "hint_fraction": 0.3,
+            "fit_model_names": list(fit_models_ordered),
+            "project_model_names": list(selected_models_ordered),
+            "fit_logit_mean": fit_mean,
+            "fit_logit_std": fit_std,
+            "fit_logit_std_safe": float(safe_fit_std),
+            "raw_accuracy_map": dict(raw_accuracy_map),
+            "fit_logit_values": {
+                model_name: float(fit_logit[idx])
+                for idx, model_name in enumerate(fit_models_ordered)
+            },
+            "project_logit_values": {
+                model_name: float(selected_logit[idx])
+                for idx, model_name in enumerate(selected_models_ordered)
+            },
+        },
+    )
+
+
 def get_pca_result(x_axis: XAxisSpec) -> PCAResult | None:
     pca_result = x_axis.metadata.get("pca_result")
     if isinstance(pca_result, PCAResult):
@@ -461,6 +539,21 @@ def build_x_axes_from_methods(
                     include_cross=include_cross,
                     lower_asymptote=lower_asymptote,
                     canonicalize_model_name=canonicalize_model_name,
+                )
+            )
+            continue
+
+        if method == "hinted_acc_h03_logit":
+            if base_rows is None:
+                raise ValueError("hinted_acc_h03_logit requires base_rows.")
+            x_axes.append(
+                build_hinted_accuracy_logit_x_axis(
+                    benchmark=benchmark,
+                    hint_type=hint_type,
+                    fractioner=fractioner,
+                    selected_models=selected_models,
+                    fit_models=fit_models,
+                    base_rows=base_rows,
                 )
             )
             continue
