@@ -119,6 +119,31 @@ def build_component_score_map(
     }
 
 
+def project_scores_with_pca(
+    result: PCAResult,
+    *,
+    feature_names: list[str],
+    matrix: np.ndarray,
+) -> np.ndarray:
+    if list(feature_names) != list(result.feature_names):
+        raise ValueError(
+            "Feature names for projection do not match fitted PCA features: "
+            f"{feature_names} vs {result.feature_names}"
+        )
+    matrix_array = np.asarray(matrix, dtype=float)
+    if matrix_array.ndim != 2:
+        raise ValueError(f"Expected 2D matrix for projection, got shape={matrix_array.shape}")
+    if matrix_array.shape[1] != len(feature_names):
+        raise ValueError(
+            "Projection matrix width does not match feature names: "
+            f"{matrix_array.shape[1]} vs {len(feature_names)}"
+        )
+
+    safe_stds = np.where(result.feature_stds <= 0, 1.0, result.feature_stds)
+    z = (matrix_array - result.feature_means[None, :]) / safe_stds[None, :]
+    return np.asarray(z @ result.components.T, dtype=float)
+
+
 def format_component_equation(
     result: PCAResult,
     *,
@@ -299,13 +324,13 @@ def _discover_fractioners_for_hinted_pca(
     return sorted(fractioners)
 
 
-def build_hinted_pca_result(
+def build_hinted_feature_rows(
     *,
     benchmark: str,
     hint_type: str,
     fractioner: str | None,
     hint_fractions: list[float] | None = None,
-) -> PCAResult:
+) -> tuple[dict[str, dict[str, float]], list[float], list[str]]:
     selected_hint_fractions = (
         list(EXPECTED_FRACTIONS)
         if hint_fractions is None
@@ -340,6 +365,30 @@ def build_hinted_pca_result(
                     fraction_map[float(hint_fraction)]["accuracy"]
                 )
 
+    shared_fractioners = sorted(
+        {
+            feature_name.split("@", 1)[0]
+            for row in rows_by_model.values()
+            for feature_name in row
+        }
+    )
+    return rows_by_model, list(selected_hint_fractions), shared_fractioners
+
+
+def build_hinted_pca_result(
+    *,
+    benchmark: str,
+    hint_type: str,
+    fractioner: str | None,
+    hint_fractions: list[float] | None = None,
+) -> PCAResult:
+    rows_by_model, selected_hint_fractions, shared_fractioners = build_hinted_feature_rows(
+        benchmark=benchmark,
+        hint_type=hint_type,
+        fractioner=fractioner,
+        hint_fractions=hint_fractions,
+    )
+
     if not rows_by_model:
         raise ValueError("No usable hinted-accuracy rows found.")
 
@@ -357,9 +406,6 @@ def build_hinted_pca_result(
             for model_name in model_names
         ],
         dtype=float,
-    )
-    shared_fractioners = sorted(
-        {feature_name.split("@", 1)[0] for feature_name in shared_features}
     )
     return run_pca(
         model_names=model_names,

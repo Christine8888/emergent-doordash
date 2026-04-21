@@ -38,6 +38,8 @@ def run_joint_scaling_for_x_axis(
     base_rows: list[dict[str, Any]],
     x_axis: XAxisSpec,
     models: list[str],
+    train_models: list[str] | None,
+    holdout_models: list[str] | None,
     output_dir: Path,
     label: str,
     include_cross: bool,
@@ -59,27 +61,36 @@ def run_joint_scaling_for_x_axis(
 
     x_field = "x_value"
     output_dir.mkdir(parents=True, exist_ok=True)
+    if train_models is None:
+        models_sorted_by_x = sorted(models, key=lambda model: float(x_axis.model_to_x[model]))
+        holdout_model_set = set(models_sorted_by_x[-num_holdout_models:]) if num_holdout_models > 0 else set()
+        train_model_order = (
+            list(models_sorted_by_x[:-num_holdout_models])
+            if num_holdout_models > 0
+            else list(models_sorted_by_x)
+        )
+        holdout_model_order = list(models_sorted_by_x[len(train_model_order):])
+    else:
+        train_model_order = [str(model) for model in train_models]
+        holdout_model_order = [] if holdout_models is None else [str(model) for model in holdout_models]
+        holdout_model_set = set(holdout_model_order)
+        models_sorted_by_x = sorted(models, key=lambda model: float(x_axis.model_to_x[model]))
+
+    train_model_set = set(train_model_order)
     df = build_joint_scaling_df(
         base_rows=base_rows,
         x_map=x_axis.model_to_x,
         x_field=x_field,
-        train_models=set(),
+        train_models=train_model_set,
     )
-    models_sorted_by_x = sorted(models, key=lambda model: float(x_axis.model_to_x[model]))
-    holdout_models = set(models_sorted_by_x[-num_holdout_models:]) if num_holdout_models > 0 else set()
-    train_models = (
-        set(models_sorted_by_x[:-num_holdout_models])
-        if num_holdout_models > 0
-        else set(models_sorted_by_x)
-    )
-    filename_suffix = f"__n_test_{len(holdout_models)}"
+    filename_suffix = f"__n_test_{len(holdout_model_set)}"
 
     df = df.copy()
-    df["split"] = df["model"].map(lambda model: "train" if model in train_models else "test")
+    df["split"] = df["model"].map(lambda model: "train" if model in train_model_set else "test")
 
     joint_result = fit_joint_sigmoid_model(
         df=df,
-        fit_models=train_models,
+        fit_models=train_model_set,
         x_field=x_field,
         include_cross=include_cross,
         lower=lower_asymptote,
@@ -95,7 +106,7 @@ def run_joint_scaling_for_x_axis(
     individual_by_hint_train = fit_individual_sigmoids_by_hint(
         df=df,
         x_field=x_field,
-        fit_models=train_models,
+        fit_models=train_model_set,
         lower=lower_asymptote,
     )
     individual_by_model = fit_individual_sigmoids_by_model(
@@ -192,20 +203,20 @@ def run_joint_scaling_for_x_axis(
         "optimizer_success": bool(joint_result["optimizer_success"]),
         "optimizer_status": int(joint_result["optimizer_status"]),
         "optimizer_message": str(joint_result["optimizer_message"]),
-        "n_train_models": int(len(train_models)),
-        "n_test_models": int(len(holdout_models)),
+        "n_train_models": int(len(train_model_set)),
+        "n_test_models": int(len(holdout_model_set)),
         "rms_train": compute_rms_joint(
             joint_result=joint_result,
             df=df,
             x_field=x_field,
-            models=train_models,
+            models=train_model_set,
         ),
         "rms_test": compute_rms_joint(
             joint_result=joint_result,
             df=df,
             x_field=x_field,
-            models=holdout_models,
-        ) if holdout_models else float("nan"),
+            models=holdout_model_set,
+        ) if holdout_model_set else float("nan"),
         "rms_all": compute_rms_joint(
             joint_result=joint_result,
             df=df,
@@ -216,22 +227,22 @@ def run_joint_scaling_for_x_axis(
             individual_by_hint=individual_by_hint_train,
             df=df,
             x_field=x_field,
-            models=train_models,
+            models=train_model_set,
         ),
         "rms_indiv_test": compute_rms_individual_by_hint(
             individual_by_hint=individual_by_hint_train,
             df=df,
             x_field=x_field,
-            models=holdout_models,
-        ) if holdout_models else float("nan"),
+            models=holdout_model_set,
+        ) if holdout_model_set else float("nan"),
         "rms_indiv_all": compute_rms_individual_by_hint(
             individual_by_hint=individual_by_hint_train,
             df=df,
             x_field=x_field,
             models=None,
         ),
-        "train_models": models_sorted_by_x[: len(train_models)],
-        "holdout_models": models_sorted_by_x[len(train_models) :],
+        "train_models": list(train_model_order),
+        "holdout_models": list(holdout_model_order),
         "plot_paths": plot_paths,
     }
     metrics["delta_rms_train"] = float(metrics["rms_train"]) - float(metrics["rms_indiv_train"])
