@@ -8,13 +8,11 @@ from src.model_config import ALL_MODEL_PATHS, get_model_spec
 
 DEFAULT_HINT_FRACTIONS = [i / 10 for i in range(11)]
 MODEL_PATHS = [
-    "google/gemma-3-27b-it",
-    "meta-llama/Llama-3.1-70B-Instruct",
-    "Qwen/Qwen3-32B",
-    "Qwen/Qwen3-14B",
-    "Qwen/Qwen2.5-32B-Instruct",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "google/gemma-3-12b-it",
+    "google/gemma-3-1b-it",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "Qwen/Qwen2.5-0.5B-Instruct",
+    "Qwen/Qwen2.5-72B-Instruct",
+    "google/gemma-3-270m-it",
 ]
 
 

@@ -10,8 +10,9 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-HF_HUB_ETAG_TIMEOUT_SECONDS = 60
-HF_HUB_DOWNLOAD_TIMEOUT_SECONDS = 600
+DEFAULT_HEALTH_TIMEOUT_SECONDS = 3600
+HF_HUB_ETAG_TIMEOUT_SECONDS = 300
+HF_HUB_DOWNLOAD_TIMEOUT_SECONDS = 1800
 
 
 def _timestamp() -> str:
@@ -70,7 +71,7 @@ class VLLMServer:
             cmd.extend(["--max-num-batched-tokens", str(self.config.max_num_batched_tokens)])
         return cmd
 
-    def start(self, *, health_timeout: int = 1200) -> None:
+    def start(self, *, health_timeout: int = DEFAULT_HEALTH_TIMEOUT_SECONDS) -> None:
         if self.process is not None:
             return
 

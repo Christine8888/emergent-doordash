@@ -12,7 +12,7 @@ from src.hinted_inference import build_expanded_hinted_prompt_dataset, run_hinte
 from src.model_config import ALL_MODEL_PATHS, ModelSpec, get_model_spec
 from src.storage import build_hint_generation_path, build_hinted_inference_path, read_jsonl
 from src.types import ExpandedHintedPromptRecord, HintGenerationRecord, HintedInferenceRecord
-from src.vllm_server import VLLMServer, VLLMServerConfig
+from src.vllm_server import DEFAULT_HEALTH_TIMEOUT_SECONDS, VLLMServer, VLLMServerConfig
 
 MODELS_TO_RUN = list(ALL_MODEL_PATHS)
 HINT_FRACTIONS = [i / 10 for i in range(11)]
@@ -492,6 +492,7 @@ def _build_run_metadata(
             "gpu_memory_utilization": args.gpu_memory_utilization,
             "max_num_batched_tokens": MAX_NUM_BATCHED_TOKENS,
             "dtype": args.dtype,
+            "health_timeout": DEFAULT_HEALTH_TIMEOUT_SECONDS,
             "enable_prefix_caching": True,
             "enable_chunked_prefill": True,
         },
@@ -695,8 +696,8 @@ MISO
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
-    --fractioner truncate_sentence \
-    --model google/gemma-3-12b-it \
+    --fractioner mask_word \
+    --model meta-llama/Llama-3.3-70B-Instruct \
     --executor submitit \
     --cluster miso \
     --max-connections 360 \
@@ -707,29 +708,19 @@ python -m runs.generate_hinted \
 ^ 260 is too much for Qwen3-32B but good for 14B
 ^260 is not enough for gemma 12B
 
-Qwen2.5-32B-Instruct
-Qwen2.5-14B-Instruct
 
 NLP
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
-    --fractioner truncate_word \
-    --model Qwen/Qwen3-4B \
+    --fractioner mask_word \
+    --model Qwen/Qwen2.5-0.5B-Instruct \
     --executor submitit \
     --cluster sphinx \
     --max-connections 48 \
     --num-gpus 1 \
     --checkpoint-every 500
 
-CREATING HINTS
-python -m runs.generate_hinted \
-    --benchmark aime2025_2026 \
-    --hint-type answer_not_revealed \
-    --fractioner truncate_word \
-    --model Qwen/Qwen3-4B \
-    --executor local \
-    --build-only true
 
 
 TOGETHER
