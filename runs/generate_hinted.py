@@ -714,7 +714,7 @@ python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --model Qwen/Qwen2.5-0.5B-Instruct \
+    --model meta-llama/Llama-2-7b-chat-hf \
     --executor submitit \
     --cluster sphinx \
     --max-connections 48 \

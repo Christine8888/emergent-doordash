@@ -36,6 +36,19 @@ MODEL_PATHS = [
     "Qwen/Qwen2.5-14B-Instruct",
     "Qwen/Qwen2.5-32B-Instruct",
     "Qwen/Qwen2.5-72B-Instruct",
+    
+    "meta-llama/Llama-2-7b-chat-hf",
+    "meta-llama/Llama-2-13b-chat-hf",
+    "meta-llama/Llama-2-70b-chat-hf",
+
+    "Qwen/Qwen3.5-0.8B",
+    "Qwen/Qwen3.5-2B",
+    "Qwen/Qwen3.5-4B",
+    "Qwen/Qwen3.5-9B",
+    "Qwen/Qwen3.5-27B",
+    "Qwen/Qwen3.5-35B-A3B",
+    "Qwen/Qwen3.5-122B-A10B",
+    "Qwen/Qwen3.5-397B-A17B",
 ]
 
 

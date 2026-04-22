@@ -117,6 +117,9 @@ QWEN35_MODELS = [
 ]
 
 LLAMA_MODELS = [
+    ModelSpec("meta-llama/Llama-2-7b-chat-hf", constraint=MEDIUM_MODEL_CONSTRAINT, **LLAMA_SAMPLING),
+    ModelSpec("meta-llama/Llama-2-13b-chat-hf", constraint=LARGE_MODEL_CONSTRAINT, **LLAMA_SAMPLING),
+    ModelSpec("meta-llama/Llama-2-70b-chat-hf", tp=2, constraint=H200_CONSTRAINT, **LLAMA_SAMPLING),
     ModelSpec("meta-llama/Llama-3.1-8B-Instruct", constraint=MEDIUM_MODEL_CONSTRAINT, **LLAMA_SAMPLING),
     ModelSpec("meta-llama/Llama-3.1-70B-Instruct", tp=2, constraint=H200_CONSTRAINT, **LLAMA_SAMPLING),
     ModelSpec("meta-llama/Llama-3.3-70B-Instruct", tp=2, constraint=H200_CONSTRAINT, **LLAMA_SAMPLING),
