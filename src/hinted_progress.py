@@ -64,6 +64,8 @@ def _count_unique_inference_ids(path: Path) -> int:
                 row = json.loads(line)
             except Exception:
                 continue
+            if row.get("is_error") is True:
+                continue
             inference_id = row.get("inference_id")
             if isinstance(inference_id, str) and inference_id:
                 ids.add(inference_id)

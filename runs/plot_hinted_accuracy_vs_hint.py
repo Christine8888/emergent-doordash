@@ -256,7 +256,7 @@ def _plot(
         fig, ax = plt.subplots(figsize=(7, 4.5))
         axes = [ax]
     else:
-        n_cols = 4
+        n_cols = 5
         n_rows = (n_models + n_cols - 1) // n_cols
         fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.3 * n_rows))
         axes = axes_obj.flatten() if hasattr(axes_obj, "flatten") else [axes_obj]

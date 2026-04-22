@@ -103,6 +103,8 @@ def is_complete_fraction(path: Path) -> tuple[bool, str | None]:
     total_candidates = ckpt.get("total_candidates")
     processed_this_run = ckpt.get("processed_this_run")
     skipped_existing = ckpt.get("skipped_existing")
+    written_success = ckpt.get("written_success")
+    written_error = ckpt.get("written_error")
     remaining = ckpt.get("remaining")
 
     if not isinstance(total_candidates, int) or total_candidates < 0:
@@ -111,15 +113,26 @@ def is_complete_fraction(path: Path) -> tuple[bool, str | None]:
         return False, f"invalid processed_this_run in {ckpt_path}"
     if not isinstance(skipped_existing, int) or skipped_existing < 0:
         return False, f"invalid skipped_existing in {ckpt_path}"
+    if not isinstance(written_success, int) or written_success < 0:
+        return False, f"invalid written_success in {ckpt_path}"
+    if not isinstance(written_error, int) or written_error < 0:
+        return False, f"invalid written_error in {ckpt_path}"
     if not isinstance(remaining, int) or remaining < 0:
         return False, f"invalid remaining in {ckpt_path}"
 
     completed_total = processed_this_run + skipped_existing
+    successful_total = written_success + skipped_existing
     if remaining != 0:
         return False, f"remaining={remaining}"
+    if written_error != 0:
+        return False, f"written_error={written_error}"
     if completed_total < total_candidates:
         return False, (
             f"incomplete completed_total={completed_total} total_candidates={total_candidates}"
+        )
+    if successful_total < total_candidates:
+        return False, (
+            f"incomplete successful_total={successful_total} total_candidates={total_candidates}"
         )
     return True, None
 
