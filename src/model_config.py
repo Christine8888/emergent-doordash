@@ -44,7 +44,7 @@ QWEN3_SAMPLING = {
     "repetition_penalty": 1.0,
 }
 
-QWEN25_15B_SAMPLING = {
+QWEN25_SMALL_SAMPLING = {
     "do_sample": True,
     "temperature": 0.7,
     "top_p": 0.8,
@@ -103,11 +103,13 @@ QWEN3_MODELS = [
 ]
 
 QWEN25_MODELS = [
-    ModelSpec("Qwen/Qwen2.5-1.5B-Instruct", constraint=SMALL_MODEL_CONSTRAINT, **QWEN25_15B_SAMPLING),
+    ModelSpec("Qwen/Qwen2.5-0.5B-Instruct", constraint=SMALL_MODEL_CONSTRAINT, **QWEN25_SMALL_SAMPLING),
+    ModelSpec("Qwen/Qwen2.5-1.5B-Instruct", constraint=SMALL_MODEL_CONSTRAINT, **QWEN25_SMALL_SAMPLING),
     ModelSpec("Qwen/Qwen2.5-3B-Instruct", constraint=SMALL_MODEL_CONSTRAINT, **QWEN25_SAMPLING),
     ModelSpec("Qwen/Qwen2.5-7B-Instruct", constraint=MEDIUM_MODEL_CONSTRAINT, **QWEN25_SAMPLING),
     ModelSpec("Qwen/Qwen2.5-14B-Instruct", constraint=LARGE_MODEL_CONSTRAINT, **QWEN25_SAMPLING),
     ModelSpec("Qwen/Qwen2.5-32B-Instruct", constraint=H200_CONSTRAINT, **QWEN25_SAMPLING),
+    ModelSpec("Qwen/Qwen2.5-72B-Instruct", tp=2, constraint=H200_CONSTRAINT, **QWEN25_SAMPLING),
 ]
 
 QWEN35_MODELS = [
@@ -117,9 +119,12 @@ QWEN35_MODELS = [
 LLAMA_MODELS = [
     ModelSpec("meta-llama/Llama-3.1-8B-Instruct", constraint=MEDIUM_MODEL_CONSTRAINT, **LLAMA_SAMPLING),
     ModelSpec("meta-llama/Llama-3.1-70B-Instruct", tp=2, constraint=H200_CONSTRAINT, **LLAMA_SAMPLING),
+    ModelSpec("meta-llama/Llama-3.3-70B-Instruct", tp=2, constraint=H200_CONSTRAINT, **LLAMA_SAMPLING),
 ]
 
 GEMMA_MODELS = [
+    ModelSpec("google/gemma-3-270m-it", constraint=SMALL_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
+    ModelSpec("google/gemma-3-1b-it", constraint=SMALL_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
     ModelSpec("google/gemma-3-4b-it", constraint=SMALL_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
     ModelSpec("google/gemma-3-12b-it", constraint=LARGE_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
     ModelSpec("google/gemma-3-27b-it", tp=2, constraint=MEDIUM_MODEL_CONSTRAINT, **GEMMA_SAMPLING),

@@ -806,3 +806,203 @@ def plot_joint_model_sweep(
     output_path = output_dir / f"{filename_stem}.png"
     save_figure(fig, output_path)
     return output_path
+
+
+def plot_joint_x_axis_delta_rms_comparison(
+    *,
+    comparison_df: pd.DataFrame,
+    label: str,
+    output_dir: Path,
+    filename_stem: str,
+) -> Path:
+    if comparison_df.empty:
+        raise ValueError("comparison_df must not be empty for delta RMS comparison plotting.")
+
+    x_positions = np.arange(len(comparison_df), dtype=float)
+    x_labels = comparison_df["comparison_label"].astype(str).tolist()
+    metric_specs = [
+        ("delta_rms_train", "train", "#1f77b4"),
+        ("delta_rms_test", "test", "#d62728"),
+        ("delta_rms_all", "all", "#2ca02c"),
+    ]
+
+    fig, axes = plt.subplots(3, 1, figsize=(max(12, 0.8 * len(comparison_df)), 12), sharex=True)
+    for ax, (metric_name, split_label, color) in zip(axes, metric_specs, strict=True):
+        ax.bar(x_positions, comparison_df[metric_name].to_numpy(dtype=float), color=color, alpha=0.85)
+        ax.axhline(0.0, color="black", linestyle="--", alpha=0.5)
+        ax.set_ylabel("delta RMS")
+        ax.set_title(f"{split_label} split (joint - individual train fit)")
+        ax.grid(True, axis="y", alpha=0.3)
+
+    axes[-1].set_xticks(x_positions)
+    axes[-1].set_xticklabels(x_labels, rotation=45, ha="right")
+    axes[-1].set_xlabel("x-axis method")
+
+    fig.suptitle(
+        format_title_text([f"{label} - delta RMS across x-axis methods"], width=90),
+        fontsize=12,
+    )
+    fig.tight_layout()
+
+    output_path = output_dir / f"{filename_stem}.png"
+    save_figure(fig, output_path)
+    return output_path
+
+
+def plot_joint_x_axis_absolute_rms_comparison(
+    *,
+    comparison_df: pd.DataFrame,
+    label: str,
+    output_dir: Path,
+    filename_stem: str,
+) -> Path:
+    if comparison_df.empty:
+        raise ValueError("comparison_df must not be empty for absolute RMS comparison plotting.")
+
+    x_positions = np.arange(len(comparison_df), dtype=float)
+    x_labels = comparison_df["comparison_label"].astype(str).tolist()
+    metric_specs = [
+        ("rms_train", "rms_indiv_train", "train"),
+        ("rms_test", "rms_indiv_test", "test"),
+        ("rms_all", "rms_indiv_all", "all"),
+    ]
+
+    fig, axes = plt.subplots(3, 1, figsize=(max(12, 0.8 * len(comparison_df)), 12), sharex=True)
+    bar_width = 0.38
+    for ax, (joint_metric, indiv_metric, split_label) in zip(axes, metric_specs, strict=True):
+        ax.bar(
+            x_positions - bar_width / 2.0,
+            comparison_df[joint_metric].to_numpy(dtype=float),
+            width=bar_width,
+            color="#d62728",
+            alpha=0.85,
+            label="joint",
+        )
+        ax.bar(
+            x_positions + bar_width / 2.0,
+            comparison_df[indiv_metric].to_numpy(dtype=float),
+            width=bar_width,
+            color="#1f77b4",
+            alpha=0.85,
+            label="individual (train fit)",
+        )
+        ax.set_ylabel("RMS")
+        ax.set_title(f"{split_label} split")
+        ax.grid(True, axis="y", alpha=0.3)
+        ax.legend()
+
+    axes[-1].set_xticks(x_positions)
+    axes[-1].set_xticklabels(x_labels, rotation=45, ha="right")
+    axes[-1].set_xlabel("x-axis method")
+
+    fig.suptitle(
+        format_title_text([f"{label} - absolute RMS across x-axis methods"], width=90),
+        fontsize=12,
+    )
+    fig.tight_layout()
+
+    output_path = output_dir / f"{filename_stem}.png"
+    save_figure(fig, output_path)
+    return output_path
+
+
+def plot_joint_x_axis_delta_rms_family(
+    *,
+    comparison_df: pd.DataFrame,
+    label: str,
+    output_dir: Path,
+    filename_stem: str,
+) -> Path:
+    if comparison_df.empty:
+        raise ValueError("comparison_df must not be empty for family delta RMS plotting.")
+
+    plot_df = comparison_df.sort_values("hint_fraction").reset_index(drop=True)
+    hint_fractions = plot_df["hint_fraction"].to_numpy(dtype=float)
+    metric_specs = [
+        ("delta_rms_train", "train", "#1f77b4"),
+        ("delta_rms_test", "test", "#d62728"),
+        ("delta_rms_all", "all", "#2ca02c"),
+    ]
+
+    fig, axes = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
+    for ax, (metric_name, split_label, color) in zip(axes, metric_specs, strict=True):
+        ax.plot(
+            hint_fractions,
+            plot_df[metric_name].to_numpy(dtype=float),
+            "o-",
+            color=color,
+            linewidth=2,
+        )
+        ax.axhline(0.0, color="black", linestyle="--", alpha=0.5)
+        ax.set_ylabel("delta RMS")
+        ax.set_title(f"{split_label} split (joint - individual train fit)")
+        ax.grid(True, alpha=0.3)
+
+    axes[-1].set_xlabel("hint fraction")
+    axes[-1].set_xticks(hint_fractions)
+
+    fig.suptitle(
+        format_title_text([f"{label} - delta RMS for hinted accuracy logit family"], width=90),
+        fontsize=12,
+    )
+    fig.tight_layout()
+
+    output_path = output_dir / f"{filename_stem}.png"
+    save_figure(fig, output_path)
+    return output_path
+
+
+def plot_joint_x_axis_absolute_rms_family(
+    *,
+    comparison_df: pd.DataFrame,
+    label: str,
+    output_dir: Path,
+    filename_stem: str,
+) -> Path:
+    if comparison_df.empty:
+        raise ValueError("comparison_df must not be empty for family absolute RMS plotting.")
+
+    plot_df = comparison_df.sort_values("hint_fraction").reset_index(drop=True)
+    hint_fractions = plot_df["hint_fraction"].to_numpy(dtype=float)
+    metric_specs = [
+        ("rms_train", "rms_indiv_train", "train"),
+        ("rms_test", "rms_indiv_test", "test"),
+        ("rms_all", "rms_indiv_all", "all"),
+    ]
+
+    fig, axes = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
+    for ax, (joint_metric, indiv_metric, split_label) in zip(axes, metric_specs, strict=True):
+        ax.plot(
+            hint_fractions,
+            plot_df[joint_metric].to_numpy(dtype=float),
+            "o-",
+            color="#d62728",
+            linewidth=2,
+            label="joint",
+        )
+        ax.plot(
+            hint_fractions,
+            plot_df[indiv_metric].to_numpy(dtype=float),
+            "x--",
+            color="#1f77b4",
+            linewidth=2,
+            alpha=0.9,
+            label="individual (train fit)",
+        )
+        ax.set_ylabel("RMS")
+        ax.set_title(f"{split_label} split")
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+
+    axes[-1].set_xlabel("hint fraction")
+    axes[-1].set_xticks(hint_fractions)
+
+    fig.suptitle(
+        format_title_text([f"{label} - absolute RMS for hinted accuracy logit family"], width=90),
+        fontsize=12,
+    )
+    fig.tight_layout()
+
+    output_path = output_dir / f"{filename_stem}.png"
+    save_figure(fig, output_path)
+    return output_path

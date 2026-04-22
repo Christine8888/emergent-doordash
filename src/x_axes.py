@@ -19,12 +19,31 @@ from src.scaling_data import eci_benchmark_label, load_eci_map
 from src.sigmoid_fits import clip_accuracy_for_logit
 
 
+HINTED_ACC_LOGIT_FRACTIONS = tuple(round(step / 10.0, 1) for step in range(1, 11))
+
+
+def hinted_accuracy_logit_method_name(hint_fraction: float) -> str:
+    hint_fraction_int = int(round(float(hint_fraction) * 10.0))
+    if not 1 <= hint_fraction_int <= 10:
+        raise ValueError(
+            "hinted accuracy logit x-axis only supports hint fractions 0.1 through 1.0, "
+            f"got {hint_fraction}"
+        )
+    return f"hinted_acc_h{hint_fraction_int:02d}_logit"
+
+
+HINTED_ACC_LOGIT_METHODS = tuple(
+    hinted_accuracy_logit_method_name(hint_fraction)
+    for hint_fraction in HINTED_ACC_LOGIT_FRACTIONS
+)
+
+
 SUPPORTED_X_AXIS_METHODS = (
     "eci",
     "eci_pc1",
     "hinted_pc1",
     "hinted_pc12_theta",
-    "hinted_acc_h03_logit",
+    *HINTED_ACC_LOGIT_METHODS,
 )
 
 
@@ -40,6 +59,18 @@ class XAxisSpec:
 
 def _format_hint_fraction_label(hint_fractions: list[float]) -> str:
     return ", ".join(f"{float(hint_fraction):.1f}" for hint_fraction in hint_fractions)
+
+
+def parse_hinted_accuracy_logit_method(method: str) -> float | None:
+    if not method.startswith("hinted_acc_h") or not method.endswith("_logit"):
+        return None
+    encoded_fraction = method[len("hinted_acc_h") : -len("_logit")]
+    if len(encoded_fraction) != 2 or not encoded_fraction.isdigit():
+        return None
+    hint_fraction_int = int(encoded_fraction)
+    if hint_fraction_int < 1 or hint_fraction_int > 10:
+        return None
+    return float(hint_fraction_int) / 10.0
 
 
 def build_eci_x_axis(
@@ -385,13 +416,26 @@ def build_hinted_accuracy_logit_x_axis(
     benchmark: str,
     hint_type: str,
     fractioner: str | None,
+    hint_fraction: float,
     selected_models: list[str],
     fit_models: list[str],
     base_rows: list[dict[str, Any]],
+    method_name: str | None = None,
 ) -> XAxisSpec:
+    resolved_method_name = (
+        hinted_accuracy_logit_method_name(hint_fraction)
+        if method_name is None
+        else str(method_name)
+    )
+    hint_fraction_value = float(hint_fraction)
+    hint_fraction_label = f"{hint_fraction_value:.1f}"
     selected_models_ordered = [str(model) for model in selected_models]
     fit_models_ordered = [str(model) for model in fit_models]
-    rows_at_fraction = [row for row in base_rows if abs(float(row["hint_fraction"]) - 0.3) <= 1e-8]
+    rows_at_fraction = [
+        row
+        for row in base_rows
+        if abs(float(row["hint_fraction"]) - hint_fraction_value) <= 1e-8
+    ]
     raw_accuracy_map = {
         str(row["model"]): float(row["accuracy"])
         for row in rows_at_fraction
@@ -399,13 +443,13 @@ def build_hinted_accuracy_logit_x_axis(
     missing_selected = sorted(set(selected_models_ordered) - set(raw_accuracy_map.keys()))
     if missing_selected:
         raise ValueError(
-            "Missing hinted accuracy rows at hint_fraction=0.3 "
+            f"Missing hinted accuracy rows at hint_fraction={hint_fraction_label} "
             f"for selected models: {missing_selected}"
         )
     missing_fit = sorted(set(fit_models_ordered) - set(raw_accuracy_map.keys()))
     if missing_fit:
         raise ValueError(
-            "Missing hinted accuracy rows at hint_fraction=0.3 "
+            f"Missing hinted accuracy rows at hint_fraction={hint_fraction_label} "
             f"for fit models: {missing_fit}"
         )
 
@@ -425,10 +469,10 @@ def build_hinted_accuracy_logit_x_axis(
     selected_z = (selected_logit - fit_mean) / safe_fit_std
 
     return XAxisSpec(
-        name="hinted_acc_h03_logit",
-        label="z(logit(Accuracy @ h=0.3))",
+        name=resolved_method_name,
+        label=f"z(logit(Accuracy @ h={hint_fraction_label}))",
         benchmark_label=benchmark,
-        equation="x = z_train(logit(clip(acc @ h=0.3)))",
+        equation=f"x = z_train(logit(clip(acc @ h={hint_fraction_label})))",
         model_to_x={
             model_name: float(selected_z[idx])
             for idx, model_name in enumerate(selected_models_ordered)
@@ -437,7 +481,8 @@ def build_hinted_accuracy_logit_x_axis(
             "benchmark": benchmark,
             "hint_type": hint_type,
             "fractioner": fractioner,
-            "hint_fraction": 0.3,
+            "hint_fraction": hint_fraction_value,
+            "method_family": "hinted_acc_logit_fixed_fraction",
             "fit_model_names": list(fit_models_ordered),
             "project_model_names": list(selected_models_ordered),
             "fit_logit_mean": fit_mean,
@@ -543,17 +588,20 @@ def build_x_axes_from_methods(
             )
             continue
 
-        if method == "hinted_acc_h03_logit":
+        hinted_acc_logit_fraction = parse_hinted_accuracy_logit_method(method)
+        if hinted_acc_logit_fraction is not None:
             if base_rows is None:
-                raise ValueError("hinted_acc_h03_logit requires base_rows.")
+                raise ValueError(f"{method} requires base_rows.")
             x_axes.append(
                 build_hinted_accuracy_logit_x_axis(
                     benchmark=benchmark,
                     hint_type=hint_type,
                     fractioner=fractioner,
+                    hint_fraction=hinted_acc_logit_fraction,
                     selected_models=selected_models,
                     fit_models=fit_models,
                     base_rows=base_rows,
+                    method_name=method,
                 )
             )
             continue

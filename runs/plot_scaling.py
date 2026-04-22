@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
+
+import numpy as np
+import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -12,6 +16,12 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from runs.fit_eci import EVAL_TO_ECI, load_baseline_scores
 from src.hinted_accuracy import EXPECTED_FRACTIONS
+from src.joint_scaling_plots import (
+    plot_joint_x_axis_absolute_rms_comparison,
+    plot_joint_x_axis_absolute_rms_family,
+    plot_joint_x_axis_delta_rms_comparison,
+    plot_joint_x_axis_delta_rms_family,
+)
 from src.pca import print_pca_report
 from src.scaling_data import (
     build_base_rows,
@@ -21,13 +31,19 @@ from src.scaling_data import (
 )
 from src.scaling_runner import plot_accuracy_views_for_x_axes
 from src.joint_scaling_runner import run_joint_scaling_for_x_axis
-from src.x_axes import SUPPORTED_X_AXIS_METHODS, XAxisSpec, build_x_axes_from_methods, get_pca_result
+from src.x_axes import (
+    SUPPORTED_X_AXIS_METHODS,
+    XAxisSpec,
+    build_x_axes_from_methods,
+    get_pca_result,
+)
 
 
 PLOTS_ROOT = Path("plots/scaling_plots")
 PC_BENCHMARK_ORDER = [EVAL_TO_ECI[eval_name] for eval_name in EVAL_TO_ECI]
 DEFAULT_JOINT_LOWER_ASYMPTOTE = 0.0
 DEFAULT_HINTED_PC_HINT_FRACTIONS = [fraction for fraction in EXPECTED_FRACTIONS if fraction > 0.0]
+DEFAULT_X_AXIS_METHODS = list(SUPPORTED_X_AXIS_METHODS)
 DEFAULT_MODELS_TO_USE: list[str] | None = [
     "google/gemma-3-27b-it",
     "meta-llama/Llama-3.1-70B-Instruct",
@@ -94,7 +110,7 @@ def _parse_args() -> argparse.Namespace:
         "--x-axis-methods",
         type=str,
         nargs="+",
-        default=["eci", "eci_pc1"],
+        default=list(DEFAULT_X_AXIS_METHODS),
         choices=SUPPORTED_X_AXIS_METHODS,
     )
     parser.add_argument("--eci-file", type=str, default=None)
@@ -119,15 +135,204 @@ def _default_pca_summary_lines(
 
 
 def _normalize_joint_x_axis_name(joint_x_axis: str) -> str:
-    if joint_x_axis in {
-        "eci",
-        "eci_pc1",
-        "hinted_pc1",
-        "hinted_pc12_theta",
-        "hinted_acc_h03_logit",
-    }:
+    if joint_x_axis in SUPPORTED_X_AXIS_METHODS:
         return joint_x_axis
     raise ValueError(f"Unsupported joint x-axis: {joint_x_axis}")
+
+
+def _build_joint_x_axis_comparison_df(
+    *,
+    joint_metrics: dict[str, object],
+    x_axes: list[XAxisSpec],
+) -> pd.DataFrame:
+    metric_names = [
+        "rms_train",
+        "rms_test",
+        "rms_all",
+        "rms_indiv_train",
+        "rms_indiv_test",
+        "rms_indiv_all",
+        "delta_rms_train",
+        "delta_rms_test",
+        "delta_rms_all",
+        "n_train_models",
+        "n_test_models",
+    ]
+    x_axis_order = {x_axis.name: idx for idx, x_axis in enumerate(x_axes)}
+    rows: list[dict[str, Any]] = []
+    for x_axis in x_axes:
+        metrics = joint_metrics.get(x_axis.name)
+        if not isinstance(metrics, dict):
+            continue
+        hint_fraction_raw = x_axis.metadata.get("hint_fraction")
+        hint_fraction = (
+            float(hint_fraction_raw)
+            if isinstance(hint_fraction_raw, (int, float, np.floating))
+            else float("nan")
+        )
+        is_hinted_acc_logit_fixed_fraction = (
+            str(x_axis.metadata.get("method_family", "")) == "hinted_acc_logit_fixed_fraction"
+        )
+        comparison_label = (
+            f"h={hint_fraction:.1f}" if is_hinted_acc_logit_fixed_fraction and np.isfinite(hint_fraction)
+            else x_axis.name
+        )
+        row: dict[str, Any] = {
+            "x_axis_name": x_axis.name,
+            "x_axis_label": x_axis.label,
+            "x_axis_benchmark_label": x_axis.benchmark_label,
+            "hint_fraction": hint_fraction,
+            "comparison_label": comparison_label,
+            "comparison_group": (
+                "hinted_acc_logit_fixed_fraction" if is_hinted_acc_logit_fixed_fraction else "other"
+            ),
+            "optimizer_success": bool(metrics.get("optimizer_success", False)),
+            "sort_index": int(x_axis_order.get(x_axis.name, len(x_axis_order))),
+        }
+        for metric_name in metric_names:
+            row[metric_name] = float(metrics.get(metric_name, float("nan")))
+        rows.append(row)
+
+    comparison_df = pd.DataFrame(rows)
+    if comparison_df.empty:
+        return comparison_df
+    return comparison_df.sort_values("sort_index").reset_index(drop=True)
+
+
+def _json_safe_scalar(value: object) -> object:
+    if value is None:
+        return None
+    if isinstance(value, (np.bool_, bool)):
+        return bool(value)
+    if isinstance(value, (np.integer, int)):
+        return int(value)
+    if isinstance(value, (np.floating, float)):
+        value_float = float(value)
+        return None if np.isnan(value_float) else value_float
+    return value
+
+
+def _print_joint_x_axis_comparison_summary(
+    *,
+    comparison_df: pd.DataFrame,
+    log_prefix: str,
+) -> None:
+    if comparison_df.empty:
+        return
+
+    delta_metric = "delta_rms_test" if comparison_df["delta_rms_test"].notna().any() else "delta_rms_all"
+    abs_metric = "rms_test" if comparison_df["rms_test"].notna().any() else "rms_all"
+
+    ranked_delta = comparison_df.dropna(subset=[delta_metric]).sort_values(delta_metric)
+    if not ranked_delta.empty:
+        best_delta = ranked_delta.iloc[0]
+        print(
+            f"{log_prefix} best_delta[{delta_metric}] "
+            f"x_axis={best_delta['x_axis_name']} value={float(best_delta[delta_metric]):.6f}"
+        )
+
+    ranked_abs = comparison_df.dropna(subset=[abs_metric]).sort_values(abs_metric)
+    if not ranked_abs.empty:
+        best_abs = ranked_abs.iloc[0]
+        print(
+            f"{log_prefix} best_absolute[{abs_metric}] "
+            f"x_axis={best_abs['x_axis_name']} value={float(best_abs[abs_metric]):.6f}"
+        )
+
+    family_df = comparison_df[
+        comparison_df["comparison_group"] == "hinted_acc_logit_fixed_fraction"
+    ].copy()
+    if not family_df.empty:
+        family_ranked_delta = family_df.dropna(subset=[delta_metric]).sort_values(delta_metric)
+        if not family_ranked_delta.empty:
+            best_family_delta = family_ranked_delta.iloc[0]
+            print(
+                f"{log_prefix} best_hinted_acc_logit_delta[{delta_metric}] "
+                f"x_axis={best_family_delta['x_axis_name']} "
+                f"hint_fraction={float(best_family_delta['hint_fraction']):.1f} "
+                f"value={float(best_family_delta[delta_metric]):.6f}"
+            )
+
+
+def _write_joint_x_axis_comparison_artifacts(
+    *,
+    joint_metrics: dict[str, object],
+    x_axes: list[XAxisSpec],
+    output_dir: Path,
+    label: str,
+    log_prefix: str,
+) -> dict[str, str]:
+    comparison_df = _build_joint_x_axis_comparison_df(
+        joint_metrics=joint_metrics,
+        x_axes=x_axes,
+    )
+    if comparison_df.empty:
+        return {}
+
+    comparison_output_dir = output_dir / "joint_x_axis_comparison"
+    comparison_output_dir.mkdir(parents=True, exist_ok=True)
+
+    csv_path = comparison_output_dir / "metrics.csv"
+    json_path = comparison_output_dir / "metrics.json"
+    comparison_df.to_csv(csv_path, index=False)
+    json_payload = {
+        "rows": [
+            {
+                key: _json_safe_scalar(value)
+                for key, value in row.items()
+            }
+            for row in comparison_df.to_dict(orient="records")
+        ]
+    }
+    json_path.write_text(json.dumps(json_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    plot_paths = {
+        "metrics_csv": str(csv_path),
+        "metrics_json": str(json_path),
+        "delta_rms_all_x_axes": str(
+            plot_joint_x_axis_delta_rms_comparison(
+                comparison_df=comparison_df,
+                label=label,
+                output_dir=comparison_output_dir,
+                filename_stem="delta_rms_all_x_axes",
+            )
+        ),
+        "absolute_rms_all_x_axes": str(
+            plot_joint_x_axis_absolute_rms_comparison(
+                comparison_df=comparison_df,
+                label=label,
+                output_dir=comparison_output_dir,
+                filename_stem="absolute_rms_all_x_axes",
+            )
+        ),
+    }
+
+    family_df = comparison_df[
+        comparison_df["comparison_group"] == "hinted_acc_logit_fixed_fraction"
+    ].copy()
+    if not family_df.empty:
+        plot_paths["delta_rms_hinted_acc_logit_family"] = str(
+            plot_joint_x_axis_delta_rms_family(
+                comparison_df=family_df,
+                label=label,
+                output_dir=comparison_output_dir,
+                filename_stem="delta_rms_hinted_acc_logit_family",
+            )
+        )
+        plot_paths["absolute_rms_hinted_acc_logit_family"] = str(
+            plot_joint_x_axis_absolute_rms_family(
+                comparison_df=family_df,
+                label=label,
+                output_dir=comparison_output_dir,
+                filename_stem="absolute_rms_hinted_acc_logit_family",
+            )
+        )
+
+    _print_joint_x_axis_comparison_summary(
+        comparison_df=comparison_df,
+        log_prefix=log_prefix,
+    )
+    return plot_paths
 
 
 def run_scaling(config: ScalingRunConfig) -> ScalingRunResult:
@@ -288,6 +493,15 @@ def run_scaling(config: ScalingRunConfig) -> ScalingRunResult:
             print(f"{config.log_prefix} joint_scaling_output_dir[{selected_x_axis.name}]={joint_output_dir}")
             for name, path in sorted(joint_result["plot_paths"].items()):
                 print(f"{config.log_prefix} joint_plot[{selected_x_axis.name}][{name}]={path}")
+        comparison_plot_paths = _write_joint_x_axis_comparison_artifacts(
+            joint_metrics=joint_metrics,
+            x_axes=joint_x_axes,
+            output_dir=output_dir,
+            label=f"{config.benchmark} {config.fractioner} (joint scaling comparison)",
+            log_prefix=config.log_prefix,
+        )
+        for name, path in sorted(comparison_plot_paths.items()):
+            print(f"{config.log_prefix} joint_x_axis_comparison[{name}]={path}")
 
     return ScalingRunResult(
         x_axes=x_axes,
@@ -329,7 +543,6 @@ python -m runs.plot_scaling \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --x-axis-methods eci eci_pc1 hinted_pc1 hinted_pc12_theta hinted_acc_h03_logit \
     --num-holdout-models 0 \
     --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh__prompt_type_answer_only--hellaswag__split_validation--math__levels_5__fewshot_0--mmlu_5_shot__language_en_us__cot_true--piqa--winogrande__dataset_name_winogrande_xl__fewshot_5.csv
 
@@ -337,7 +550,6 @@ python -m runs.plot_scaling \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --x-axis-methods eci eci_pc1 hinted_pc1 hinted_pc12_theta hinted_acc_h03_logit \
     --num-holdout-models 0 \
     --facet-by family \
     --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh__prompt_type_answer_only--hellaswag__split_validation--math__levels_5__fewshot_0--mmlu_5_shot__language_en_us__cot_true--piqa--winogrande__dataset_name_winogrande_xl__fewshot_5.csv

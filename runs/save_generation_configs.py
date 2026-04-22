@@ -5,8 +5,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from src.model_config import ALL_MODEL_PATHS
-
 PARAM_KEYS = (
     "do_sample",
     "temperature",
@@ -15,6 +13,30 @@ PARAM_KEYS = (
     "max_new_tokens",
     "repetition_penalty",
 )
+
+MODEL_PATHS = [
+    "google/gemma-3-27b-it",
+    "google/gemma-3-12b-it",
+    "google/gemma-3-4b-it",
+    "google/gemma-3-1b-it",
+    "google/gemma-3-270m-it",
+    "meta-llama/Llama-3.1-70B-Instruct",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "Qwen/Qwen3-32B",
+    "Qwen/Qwen3-0.6B",
+    "Qwen/Qwen3-1.7B",
+    "Qwen/Qwen3-4B",
+    "Qwen/Qwen3-8B",
+    "Qwen/Qwen3-14B",
+    "Qwen/Qwen2.5-0.5B-Instruct",
+    "Qwen/Qwen2.5-1.5B-Instruct",
+    "Qwen/Qwen2.5-3B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
+    "Qwen/Qwen2.5-32B-Instruct",
+    "Qwen/Qwen2.5-72B-Instruct",
+]
 
 
 def _safe_model_name(model_path: str) -> str:
@@ -27,7 +49,7 @@ def _extract_effective_params(config_obj: Any) -> dict[str, Any]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Download generation_config.json for all models in src/model_config.py"
+        description="Download generation_config.json for models listed in runs/save_generation_configs.py"
     )
     parser.add_argument(
         "--output-dir",
@@ -51,7 +73,7 @@ def main() -> None:
 
     summary: dict[str, dict[str, Any] | None] = {}
 
-    for model_path in ALL_MODEL_PATHS:
+    for model_path in MODEL_PATHS:
         safe_name = _safe_model_name(model_path)
         out_path = output_dir / f"{safe_name}.generation_config.json"
 
