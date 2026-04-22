@@ -5,10 +5,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.storage import (
+    _model_storage_component,
     build_expanded_hinted_prompt_path,
     build_hint_generation_path,
     build_hinted_inference_path,
 )
+
+LUKE_AIME_BENCHMARK = "aime2025_2026"
+LUKE_SUPPORTED_HINT_TYPE = "answer_not_revealed"
+LUKE_SUPPORTED_FRACTIONERS = {"mask_word", "truncate_word"}
 
 
 @dataclass(frozen=True)
@@ -65,6 +70,52 @@ def _count_unique_inference_ids(path: Path) -> int:
     return len(ids)
 
 
+def _is_luke_aime_combo(*, benchmark_name: str, hint_type: str, fractioner: str) -> bool:
+    return (
+        benchmark_name == LUKE_AIME_BENCHMARK
+        and hint_type == LUKE_SUPPORTED_HINT_TYPE
+        and fractioner in LUKE_SUPPORTED_FRACTIONERS
+    )
+
+
+def _build_luke_fraction_path(
+    *,
+    benchmark_name: str,
+    model: str,
+    fractioner: str,
+    hint_fraction: float,
+    data_root: str | Path,
+) -> Path:
+    fraction_text = f"{float(hint_fraction):.1f}"
+    return (
+        Path(data_root)
+        / f"luke_{benchmark_name}_results"
+        / fractioner
+        / _model_storage_component(model)
+        / f"fraction_{fraction_text}.jsonl"
+    )
+
+
+def _count_unique_luke_prompt_ids(path: Path) -> int:
+    if not path.exists():
+        return 0
+
+    ids: set[str] = set()
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except Exception:
+                continue
+            prompt_id = row.get("prompt_id")
+            if isinstance(prompt_id, str) and prompt_id:
+                ids.add(prompt_id)
+    return len(ids)
+
+
 def compute_model_hint_progress(
     *,
     benchmark_name: str,
@@ -106,7 +157,22 @@ def compute_model_hint_progress(
             hint_fraction=fraction,
             data_root=data_root,
         )
-        fraction_completed = _count_unique_inference_ids(output_path)
+        local_completed = _count_unique_inference_ids(output_path)
+        luke_completed = 0
+        if _is_luke_aime_combo(
+            benchmark_name=benchmark_name,
+            hint_type=hint_type,
+            fractioner=fractioner,
+        ):
+            luke_path = _build_luke_fraction_path(
+                benchmark_name=benchmark_name,
+                model=model,
+                fractioner=fractioner,
+                hint_fraction=fraction,
+                data_root=data_root,
+            )
+            luke_completed = _count_unique_luke_prompt_ids(luke_path)
+        fraction_completed = max(local_completed, luke_completed)
         if fraction_total > 0:
             fraction_completed = min(fraction_completed, fraction_total)
 
@@ -128,7 +194,7 @@ def compute_model_hint_progress(
     )
 
 
-def print_progress_report(progress_rows: list[ModelHintProgress]) -> None:
+def print_progress_report(progress_rows: list[ModelHintProgress], *, show_complete: bool = True) -> None:
     print("[hinted_progress] progress", flush=True)
     if not progress_rows:
         print("  no models selected", flush=True)
@@ -141,7 +207,8 @@ def print_progress_report(progress_rows: list[ModelHintProgress]) -> None:
             and row.fractions_complete >= row.fractions_total
         )
         if is_complete:
-            print(f"  {row.model} complete", flush=True)
+            if show_complete:
+                print(f"  {row.model} complete", flush=True)
             continue
 
         print(

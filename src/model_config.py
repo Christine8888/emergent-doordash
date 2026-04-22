@@ -113,7 +113,14 @@ QWEN25_MODELS = [
 ]
 
 QWEN35_MODELS = [
-    # ModelSpec("Qwen/Qwen3.5-397B-A17B", constraint=LARGE_MODEL_CONSTRAINT, **QWEN35_SAMPLING),
+    ModelSpec("Qwen/Qwen3.5-0.8B", constraint=SMALL_MODEL_CONSTRAINT, **QWEN35_SAMPLING),
+    ModelSpec("Qwen/Qwen3.5-2B", constraint=SMALL_MODEL_CONSTRAINT, **QWEN35_SAMPLING),
+    ModelSpec("Qwen/Qwen3.5-4B", constraint=SMALL_MODEL_CONSTRAINT, **QWEN35_SAMPLING),
+    ModelSpec("Qwen/Qwen3.5-9B", constraint=MEDIUM_MODEL_CONSTRAINT, **QWEN35_SAMPLING),
+    ModelSpec("Qwen/Qwen3.5-27B", tp=2, constraint=MEDIUM_MODEL_CONSTRAINT, **QWEN35_SAMPLING),
+    ModelSpec("Qwen/Qwen3.5-35B-A3B", constraint=H200_CONSTRAINT, **QWEN35_SAMPLING),
+    ModelSpec("Qwen/Qwen3.5-122B-A10B", tp=2, constraint=H200_CONSTRAINT, **QWEN35_SAMPLING),
+    ModelSpec("Qwen/Qwen3.5-397B-A17B", tp=4, constraint=LARGE_MODEL_CONSTRAINT, **QWEN35_SAMPLING),
 ]
 
 LLAMA_MODELS = [

@@ -82,6 +82,9 @@ class VLLMServer:
         # timeout is too short for large model manifests on a slow or loaded connection.
         env.setdefault("HF_HUB_ETAG_TIMEOUT", str(HF_HUB_ETAG_TIMEOUT_SECONDS))
         env.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", str(HF_HUB_DOWNLOAD_TIMEOUT_SECONDS))
+        # Keep vLLM's internal engine startup timeout aligned with the outer health
+        # wait so large models do not fail inside vLLM before this wrapper gives up.
+        env.setdefault("VLLM_ENGINE_READY_TIMEOUT_S", str(health_timeout))
         self.process = subprocess.Popen(
             cmd,
             env=env,

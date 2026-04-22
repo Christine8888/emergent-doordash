@@ -7,13 +7,6 @@ from src.hinted_progress import ModelHintProgress, compute_model_hint_progress, 
 from src.model_config import ALL_MODEL_PATHS, get_model_spec
 
 DEFAULT_HINT_FRACTIONS = [i / 10 for i in range(11)]
-MODEL_PATHS = [
-    "google/gemma-3-1b-it",
-    "meta-llama/Llama-3.3-70B-Instruct",
-    "Qwen/Qwen2.5-0.5B-Instruct",
-    "Qwen/Qwen2.5-72B-Instruct",
-    "google/gemma-3-270m-it",
-]
 
 
 def _parse_hint_fractions(value: str) -> list[float]:
@@ -48,10 +41,8 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _selected_models(model_paths: list[str]) -> list[str]:
-    if not model_paths:
-        return [get_model_spec(path).name for path in ALL_MODEL_PATHS]
-    return [get_model_spec(model_path).name for model_path in model_paths]
+def _selected_models() -> list[str]:
+    return [get_model_spec(model_path).name for model_path in ALL_MODEL_PATHS]
 
 
 def _selected_hint_types(hint_type: str) -> list[str]:
@@ -64,7 +55,7 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
-    model_names = _selected_models(MODEL_PATHS)
+    model_names = _selected_models()
     hint_types = _selected_hint_types(args.hint_type)
 
     rows: list[ModelHintProgress] = []
@@ -81,7 +72,7 @@ def main() -> None:
                 )
             )
 
-    print_progress_report(rows)
+    print_progress_report(rows, show_complete=False)
 
 
 if __name__ == "__main__":
