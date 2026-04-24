@@ -23,11 +23,24 @@ DATA_ROOT = Path("data")
 PLOTS_ROOT = Path("plots/accuracy_vs_hint")
 
 EXPECTED_FRACTIONS = [i / 10 for i in range(11)]
+EXCLUDE_MODELS: set[str] = {
+    "Qwen/Qwen3.5-0.8B",
+    "Qwen/Qwen3.5-2B",
+    "Qwen/Qwen3.5-4B",
+    "Qwen/Qwen3.5-9B",
+    "Qwen/Qwen3.5-27B",
+}
 
 
 def _safe_component(text: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", text.strip())
     return cleaned or "unknown"
+
+
+def _normalize_model_name(model: str) -> str:
+    # Some sources use full HF-style paths (e.g. "Qwen/Qwen3.5-4B"),
+    # while discovered/local names are basename-only (e.g. "Qwen3.5-4B").
+    return model.strip().split("/")[-1]
 
 
 def _parse_args() -> argparse.Namespace:
@@ -36,7 +49,13 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--benchmark", type=str, required=True)
     parser.add_argument("--hint-type", type=str, required=True)
-    parser.add_argument("--model", type=str, default="all", help="Model name or 'all'.")
+    parser.add_argument(
+        "--model",
+        type=str,
+        nargs="+",
+        default=["all"],
+        help="One-or-more model names, or 'all'.",
+    )
     parser.add_argument(
         "--fractioner",
         type=str,
@@ -47,6 +66,14 @@ def _parse_args() -> argparse.Namespace:
         "--show-values",
         action="store_true",
         help="Annotate plotted points with their mean accuracy values.",
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help=(
+            "Render a single-source plot: prefer local/basic rows, and only use luke rows "
+            "for points missing from local rows."
+        ),
     )
     return parser.parse_args()
 
@@ -182,6 +209,26 @@ def _merge_rows_for_accuracy_table(
     )
 
 
+def _merge_rows_for_clean_plot(
+    local_rows: list[dict[str, Any]],
+    external_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    merged_by_key: dict[tuple[str, str, float], dict[str, Any]] = {}
+
+    for row in external_rows:
+        key = (str(row["model"]), str(row["fractioner"]), float(row["hint_fraction"]))
+        merged_by_key[key] = row
+
+    for row in local_rows:
+        key = (str(row["model"]), str(row["fractioner"]), float(row["hint_fraction"]))
+        merged_by_key[key] = row
+
+    return sorted(
+        merged_by_key.values(),
+        key=lambda row: (str(row["model"]), str(row["fractioner"]), float(row["hint_fraction"])),
+    )
+
+
 def _build_accuracy_table_rows(rows: list[dict[str, Any]]) -> tuple[list[str], list[dict[str, str]]]:
     fractions = sorted({float(row["hint_fraction"]) for row in rows})
     fieldnames = ["model", *[_fraction_column_name(fraction) for fraction in fractions]]
@@ -255,6 +302,11 @@ def _plot(
     if n_models == 1:
         fig, ax = plt.subplots(figsize=(7, 4.5))
         axes = [ax]
+    elif n_models == 4:
+        n_cols = 2
+        n_rows = 2
+        fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.3 * n_rows))
+        axes = axes_obj.flatten() if hasattr(axes_obj, "flatten") else [axes_obj]
     else:
         n_cols = 5
         n_rows = (n_models + n_cols - 1) // n_cols
@@ -395,15 +447,40 @@ def main() -> None:
     if not models_available:
         raise ValueError(f"No models found for benchmark={args.benchmark!r}.")
 
-    if args.model == "all":
+    requested_models = list(args.model)
+    if requested_models == ["all"]:
         models_to_plot = sorted(set(models_available))
     else:
-        if args.model not in models_available:
+        if "all" in requested_models:
             raise ValueError(
-                f"Requested model {args.model!r} not found. "
+                "When passing specific models, do not include 'all'. "
+                f"Requested: {requested_models}"
+            )
+        missing_models = sorted(set(requested_models) - set(models_available))
+        if missing_models:
+            raise ValueError(
+                f"Requested model(s) not found: {missing_models}. "
                 f"Available: {models_available}"
             )
-        models_to_plot = [args.model]
+        models_to_plot = sorted(set(requested_models))
+
+    excluded_model_names = {_normalize_model_name(model) for model in EXCLUDE_MODELS}
+    excluded_models = sorted(
+        model for model in models_to_plot if _normalize_model_name(model) in excluded_model_names
+    )
+    if excluded_models:
+        models_to_plot = [
+            model for model in models_to_plot if _normalize_model_name(model) not in excluded_model_names
+        ]
+        print(
+            "[plot_hinted_accuracy_vs_hint] excluding models via EXCLUDE_MODELS: "
+            f"{excluded_models}"
+        )
+    if not models_to_plot:
+        raise ValueError(
+            "All selected models were excluded by EXCLUDE_MODELS. "
+            "Update EXCLUDE_MODELS or pass different --model values."
+        )
 
     rows: list[dict[str, Any]] = []
     external_rows: list[dict[str, Any]] = []
@@ -498,7 +575,7 @@ def main() -> None:
                         f"fractioner={fractioner} {external_means_text}"
                     )
 
-    if not rows:
+    if not rows and not external_rows:
         raise ValueError("No usable rows collected. Check benchmark/model/hint_type/fractioner.")
 
     rows_sorted = sorted(
@@ -541,10 +618,14 @@ def main() -> None:
         if fit is not None:
             external_fit_map[key] = fit
 
+    model_component = (
+        "all" if requested_models == ["all"] else "__".join(_safe_component(model) for model in models_to_plot)
+    )
+    clean_component = "clean" if args.clean else "full"
     stem = (
         f"{_safe_component(args.benchmark)}__{_safe_component(args.hint_type)}__"
         f"{_safe_component(args.fractioner) if args.fractioner is not None else 'all_complete_fractioners'}__"
-        f"{_safe_component(args.model)}"
+        f"{model_component}__{clean_component}"
     )
     PLOTS_ROOT.mkdir(parents=True, exist_ok=True)
     means_json_path = PLOTS_ROOT / f"{stem}__means_percent.json"
@@ -589,17 +670,38 @@ def main() -> None:
         output_path=accuracy_table_csv_path,
     )
 
+    plot_rows = rows_sorted
+    plot_fit_map = fit_map
+    plot_external_rows = external_rows
+    plot_external_fit_map = external_fit_map
+    if args.clean:
+        plot_rows = _merge_rows_for_clean_plot(rows_sorted, external_rows)
+        clean_series_map: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for row in plot_rows:
+            key = (str(row["model"]), str(row["fractioner"]))
+            clean_series_map.setdefault(key, []).append(row)
+
+        plot_fit_map = {}
+        for key, series_rows in sorted(clean_series_map.items()):
+            fit = _fit_sigmoid_for_series(series_rows)
+            if fit is not None:
+                plot_fit_map[key] = fit
+
+        plot_external_rows = []
+        plot_external_fit_map = {}
+
     _plot(
-        rows_sorted,
-        fit_map=fit_map,
-        external_results=external_rows,
-        external_fit_map=external_fit_map,
+        plot_rows,
+        fit_map=plot_fit_map,
+        external_results=plot_external_rows,
+        external_fit_map=plot_external_fit_map,
         output_png=png_path,
         show_values=args.show_values,
         title=(
             f"Hinted Accuracy vs Hint Fraction\n"
             f"benchmark={args.benchmark} hint_type={args.hint_type} "
-            f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'})"
+            f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
+            f"[{'clean' if args.clean else 'full'}]"
         ),
     )
 
@@ -610,7 +712,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed
-    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner mask_word
-    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner truncate_word
+    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner mask_word --clean
+    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --model Llama-3.1-8B-Instruct Qwen2.5-14B-Instruct Qwen3-4B gemma-3-27b-it --clean
+    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --clean
+
     main()
