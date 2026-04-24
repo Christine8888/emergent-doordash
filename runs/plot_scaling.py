@@ -51,6 +51,7 @@ EXCLUDE_MODELS: set[str] = {
     "Qwen/Qwen3.5-4B",
     "Qwen/Qwen3.5-9B",
     "Qwen/Qwen3.5-27B",
+    "google/gemma-3-270m-it",
 }
 DEFAULT_MODELS_TO_USE: list[str] | None = [
     "google/gemma-3-27b-it",
@@ -71,7 +72,6 @@ DEFAULT_MODELS_TO_USE: list[str] | None = [
     "meta-llama/Llama-3.1-8B-Instruct",
     "google/gemma-3-1b-it",
     "Qwen/Qwen2.5-0.5B-Instruct",
-    "google/gemma-3-270m-it",
     "meta-llama/Llama-3.3-70B-Instruct",
 ]
 
