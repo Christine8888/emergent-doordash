@@ -4,7 +4,6 @@ import asyncio
 import contextlib
 import json
 import os
-import re
 import socket
 import sys
 import time
@@ -28,6 +27,14 @@ from src.storage import (
     make_stable_id,
     read_jsonl,
     write_jsonl,
+)
+from src.token_budget import (
+    MAX_TOKEN_CLAMP_SAFETY_MARGIN,
+    PromptTokenStats,
+    count_prompt_tokens_with_tokenizer as _count_prompt_tokens_with_tokenizer,
+    extract_allowed_max_tokens_from_error as _extract_allowed_max_tokens_from_error,
+    format_exception_message as _format_exception_message,
+    normalize_context_limit as _normalize_context_limit,
 )
 from src.types import (
     ExpandedHintedPromptRecord,
@@ -58,23 +65,67 @@ def _normalize_fraction(value: float) -> float:
     return float(f"{value:.6f}")
 
 
-def _extract_allowed_max_tokens_from_error(error_text: str) -> int | None:
-    patterns = [
-        r"\((\d+)\s*>\s*(\d+)\s*-\s*(\d+)\)",
-        r"maximum context length is\s*(\d+)\s*and your request has\s*(\d+)\s*input tokens",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, error_text)
-        if match is None:
-            continue
-        numbers = [int(group) for group in match.groups()]
-        if len(numbers) == 3:
-            _, context_limit, input_tokens = numbers
-            return max(1, context_limit - input_tokens)
-        if len(numbers) == 2:
-            context_limit, input_tokens = numbers
-            return max(1, context_limit - input_tokens)
-    return None
+def _load_prompt_token_stats(
+    *,
+    model: str,
+    candidates_by_fraction: dict[float, list["PromptCandidate"]],
+    default_context_limit: int,
+) -> PromptTokenStats | None:
+    try:
+        from transformers import AutoTokenizer
+    except Exception as exc:
+        print(
+            f"[hinted_inference] prompt_token_stats_unavailable model={model} "
+            f"details={type(exc).__name__}: {exc}",
+            flush=True,
+        )
+        return None
+
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=True)
+    except Exception as exc:
+        print(
+            f"[hinted_inference] prompt_token_stats_unavailable model={model} "
+            f"details={type(exc).__name__}: {exc}",
+            flush=True,
+        )
+        return None
+    context_limit = _normalize_context_limit(
+        getattr(tokenizer, "model_max_length", None),
+        default=default_context_limit,
+    )
+    prompt_token_counts: dict[str, int] = {}
+    for candidates in candidates_by_fraction.values():
+        for candidate in candidates:
+            messages = [{"role": "user", "content": candidate.prompt}]
+            prompt_token_counts[candidate.inference_id] = _count_prompt_tokens_with_tokenizer(
+                tokenizer,
+                messages=messages,
+                prompt_text=candidate.prompt,
+            )
+    return PromptTokenStats(
+        context_limit=context_limit,
+        prompt_token_counts=prompt_token_counts,
+    )
+
+
+def _compute_preflight_max_tokens(
+    *,
+    requested_max_tokens: int,
+    context_limit: int | None,
+    prompt_token_count: int | None,
+) -> tuple[int, str | None]:
+    if context_limit is None or prompt_token_count is None:
+        return requested_max_tokens, None
+
+    allowed_max_tokens = context_limit - prompt_token_count - MAX_TOKEN_CLAMP_SAFETY_MARGIN
+    if allowed_max_tokens < 1:
+        return 1, (
+            "prompt exceeds model context budget before generation: "
+            f"context_limit={context_limit} prompt_tokens={prompt_token_count} "
+            f"safety_margin={MAX_TOKEN_CLAMP_SAFETY_MARGIN}"
+        )
+    return min(requested_max_tokens, allowed_max_tokens), None
 
 
 def _default_prompt(*, question: str, hint_text: str) -> str:
@@ -550,7 +601,7 @@ class FractionRunSummary:
     elapsed_seconds: float
 
 
-@dataclass(frozen=True)
+@dataclass
 class PromptCandidate:
     hint: HintGenerationRecord
     hint_fraction: float
@@ -559,6 +610,7 @@ class PromptCandidate:
     hint_text_used: str
     prompt: str
     fraction_metadata: dict[str, Any]
+    prompt_token_count: int | None = None
 
 
 @dataclass
@@ -903,6 +955,7 @@ async def _run_all_candidates(
     top_k: int | None,
     repetition_penalty: float | None,
     max_tokens: int,
+    model_context_limit: int | None,
     max_connections: int,
     timeout_seconds: int,
     max_retries: int,
@@ -996,6 +1049,58 @@ async def _run_all_candidates(
             attempts = 0
             request_max_tokens = max_tokens
             effective_max_tokens_used = max_tokens
+            prompt_token_count = item_candidate.prompt_token_count
+
+            preflight_max_tokens, preflight_error = _compute_preflight_max_tokens(
+                requested_max_tokens=max_tokens,
+                context_limit=model_context_limit,
+                prompt_token_count=prompt_token_count,
+            )
+            if preflight_error is not None:
+                print(
+                    f"[hinted_inference] preflight_skip_overlength model={model} "
+                    f"fraction={hint_fraction} inference_id={item_candidate.inference_id} "
+                    f"prompt_tokens={prompt_token_count} context_limit={model_context_limit}",
+                    flush=True,
+                )
+                is_error = True
+                error_text = preflight_error
+                graders = [
+                    GraderResult(
+                        extractor_grader_type="dataset_extract_and_match",
+                        extracted_answer=None,
+                        is_correct=None,
+                        metadata={
+                            "dataset_spec": dataset_spec.name,
+                            "error": error_text,
+                        },
+                    )
+                ]
+                return {
+                    "state": item_state,
+                    "candidate": item_candidate,
+                    "model_output": model_output,
+                    "input_token_count": input_token_count,
+                    "output_token_count": output_token_count,
+                    "stop_reason": stop_reason,
+                    "reasoning_text": reasoning_text,
+                    "is_error": is_error,
+                    "error_text": error_text,
+                    "attempts": attempts,
+                    "retries_used": max(0, attempts - 1),
+                    "effective_max_tokens_used": effective_max_tokens_used,
+                    "prompt_token_count": prompt_token_count,
+                    "graders": graders,
+                }
+            if preflight_max_tokens < request_max_tokens:
+                print(
+                    f"[hinted_inference] preflight_clip_max_tokens model={model} "
+                    f"fraction={hint_fraction} inference_id={item_candidate.inference_id} "
+                    f"old_max_tokens={request_max_tokens} new_max_tokens={preflight_max_tokens} "
+                    f"prompt_tokens={prompt_token_count} context_limit={model_context_limit}",
+                    flush=True,
+                )
+                request_max_tokens = preflight_max_tokens
 
             for attempt_idx in range(max_retries + 1):
                 attempts = attempt_idx + 1
@@ -1040,7 +1145,7 @@ async def _run_all_candidates(
                     ]
                     break
                 except Exception as exc:
-                    error_text = str(exc)
+                    error_text = _format_exception_message(exc)
                     allowed_max_tokens = _extract_allowed_max_tokens_from_error(error_text)
                     if (
                         allowed_max_tokens is not None
@@ -1090,6 +1195,7 @@ async def _run_all_candidates(
                 "attempts": attempts,
                 "retries_used": max(0, attempts - 1),
                 "effective_max_tokens_used": effective_max_tokens_used,
+                "prompt_token_count": prompt_token_count,
                 "graders": graders,
             }
 
@@ -1135,6 +1241,7 @@ async def _run_all_candidates(
                 attempts = int(result["attempts"])
                 retries_used = int(result["retries_used"])
                 effective_max_tokens_used = int(result["effective_max_tokens_used"])
+                prompt_token_count = result["prompt_token_count"]
                 graders = result["graders"]
 
                 state.retry_count += retries_used
@@ -1187,6 +1294,8 @@ async def _run_all_candidates(
                             "provider_metrics_url": backend_config.metrics_url,
                             "provider_model_id": model,
                             "fraction_metadata": fraction_meta,
+                            "prompt_token_count": prompt_token_count,
+                            "context_limit": model_context_limit,
                             "stop_reason": stop_reason,
                             "provider_reasoning": reasoning_text,
                             "host": host,
@@ -1394,6 +1503,27 @@ def run_hinted_inference(
         fractioner=fractioner,
         fraction_paths=fraction_paths,
     )
+    model_context_limit: int | None = None
+    if not build_only:
+        prompt_token_stats = _load_prompt_token_stats(
+            model=model,
+            candidates_by_fraction=candidates_by_fraction,
+            default_context_limit=max_tokens,
+        )
+        if prompt_token_stats is not None:
+            model_context_limit = prompt_token_stats.context_limit
+            for candidates in candidates_by_fraction.values():
+                for candidate in candidates:
+                    candidate.prompt_token_count = prompt_token_stats.prompt_token_counts.get(
+                        candidate.inference_id
+                    )
+            print(
+                f"[hinted_inference] prompt_token_stats_ready model={model} "
+                f"context_limit={model_context_limit} candidates="
+                f"{sum(len(candidates) for candidates in candidates_by_fraction.values())}",
+                flush=True,
+            )
+
     effective_run_metadata: dict[str, Any] = dict(run_metadata) if run_metadata is not None else {}
     effective_run_metadata["expanded_prompt_dataset"] = {
         "data_root": str(data_root),
@@ -1407,6 +1537,7 @@ def run_hinted_inference(
     }
     effective_run_metadata["build_only"] = build_only
     effective_run_metadata["max_requests"] = max_requests
+    effective_run_metadata["model_context_limit"] = model_context_limit
 
     states: list[FractionRunState] = []
     remaining_request_budget = max_requests
@@ -1492,6 +1623,7 @@ def run_hinted_inference(
             top_k=top_k,
             repetition_penalty=repetition_penalty,
             max_tokens=max_tokens,
+            model_context_limit=model_context_limit,
             max_connections=max_connections,
             timeout_seconds=timeout_seconds,
             max_retries=max_retries,

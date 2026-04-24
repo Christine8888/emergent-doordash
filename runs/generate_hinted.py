@@ -697,7 +697,7 @@ python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --model Qwen/Qwen3.5-9B \
+    --model meta-llama/Llama-3.3-70B-Instruct \
     --executor submitit \
     --cluster miso \
     --max-connections 360 \

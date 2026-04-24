@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sqlite3
 import subprocess
 import sys
@@ -16,6 +15,13 @@ from pathlib import Path
 from typing import Any
 
 from src.storage import _model_storage_component, _safe_component, append_jsonl, build_eci_score_path, make_stable_id
+from src.token_budget import (
+    MAX_TOKEN_CLAMP_SAFETY_MARGIN,
+    PromptTokenStats,
+    count_prompt_tokens_with_tokenizer as _count_prompt_tokens_with_tokenizer,
+    extract_allowed_max_tokens_from_error as _extract_allowed_max_tokens_from_error,
+    normalize_context_limit as _normalize_context_limit,
+)
 from src.types import ECIScoreRecord, GraderResult
 from src.vllm_server import VLLMServer, VLLMServerConfig
 
@@ -36,10 +42,6 @@ TASK_SAMPLE_ID_CACHE: dict[str, list[str]] = {}
 SAMPLE_IDS_PREFIX = "__ECI_SAMPLE_IDS__="
 PROMPT_TOKEN_STATS_PREFIX = "__ECI_PROMPT_TOKEN_STATS__="
 PROMPT_PAYLOAD_PREFIX = "__ECI_PROMPT_PAYLOAD__="
-# The local tokenizer count misses part of the chat/request framing that vLLM
-# enforces at serving time. Keep a larger buffer so we stay under the true
-# context budget while still allowing near-32k completions when prompts are tiny.
-MAX_TOKEN_CLAMP_SAFETY_MARGIN = 256
 TASK_PROMPT_TOKEN_STATS_CACHE: dict[tuple[str, str], "PromptTokenStats"] = {}
 
 
@@ -49,25 +51,6 @@ def _timestamp() -> str:
 
 def _log(message: str) -> None:
     print(f"[{_timestamp()}] {message}", flush=True)
-
-
-def _extract_allowed_max_tokens_from_error(error_text: str) -> int | None:
-    patterns = [
-        r"\((\d+)\s*>\s*(\d+)\s*-\s*(\d+)\)",
-        r"maximum context length is\s*(\d+)\s*and your request has\s*(\d+)\s*input tokens",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, error_text)
-        if match is None:
-            continue
-        numbers = [int(group) for group in match.groups()]
-        if len(numbers) == 3:
-            _, context_limit, input_tokens = numbers
-            return max(1, context_limit - input_tokens)
-        if len(numbers) == 2:
-            context_limit, input_tokens = numbers
-            return max(1, context_limit - input_tokens)
-    return None
 
 
 def _should_preflight_clip_max_tokens(model_path: str) -> bool:
@@ -102,12 +85,6 @@ class ClippedSampleRequest:
     epoch: int
     allowed_max_tokens: int
     error_text: str
-
-
-@dataclass(frozen=True)
-class PromptTokenStats:
-    context_limit: int
-    prompt_token_counts: dict[str, int]
 
 
 def _register(config: BenchmarkConfig) -> BenchmarkConfig:
@@ -532,34 +509,6 @@ def _load_task_sample_ids(config: BenchmarkConfig) -> list[str]:
         )
     TASK_SAMPLE_ID_CACHE[config.benchmark_id] = sample_ids
     return sample_ids
-
-
-def _normalize_context_limit(raw_limit: Any, *, default: int) -> int:
-    if isinstance(raw_limit, int) and 0 < raw_limit < 10_000_000:
-        return raw_limit
-    return default
-
-
-def _count_prompt_tokens_with_tokenizer(
-    tokenizer: Any,
-    *,
-    messages: list[dict[str, str]] | None,
-    prompt_text: str | None,
-) -> int:
-    apply_chat_template = getattr(tokenizer, "apply_chat_template", None)
-    if messages and callable(apply_chat_template):
-        token_ids = apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=True,
-        )
-        return len(token_ids)
-    text = prompt_text or ""
-    if not text and messages:
-        text = "\n\n".join(
-            f"{message['role']}: {message['content']}" for message in messages
-        )
-    return len(tokenizer.encode(text, add_special_tokens=True))
 
 
 def _load_task_prompt_token_stats(
