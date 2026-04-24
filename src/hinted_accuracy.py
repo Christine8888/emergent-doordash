@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -16,6 +16,7 @@ LUKE_SUPPORTED_FRACTIONERS = {"mask_word", "truncate_word"}
 EXPECTED_FRACTIONS = [i / 10 for i in range(11)]
 N_BOOTSTRAP = 5000
 RANDOM_SEED = 0
+ProblemIdPredicate = Callable[[str], bool]
 
 
 def safe_component(text: str) -> str:
@@ -216,6 +217,7 @@ def collect_stats_for_fraction(
     *,
     path: Path,
     rng: np.random.Generator,
+    problem_id_predicate: ProblemIdPredicate | None = None,
 ) -> dict[str, float | int] | None:
     sample_to_scores: dict[str, list[float]] = {}
     rows_total = 0
@@ -232,6 +234,8 @@ def collect_stats_for_fraction(
         problem_id = str(row.get("problem_id", "")).strip()
         if not problem_id:
             rows_without_known_label += 1
+            continue
+        if problem_id_predicate is not None and not problem_id_predicate(problem_id):
             continue
 
         is_correct = extract_is_correct(row)
@@ -273,6 +277,7 @@ def load_luke_results_with_ci_for_combo(
     benchmark: str,
     hint_type: str,
     fractioner: str,
+    problem_id_predicate: ProblemIdPredicate | None = None,
 ) -> dict[str, dict[float, dict[str, float]]]:
     if not _is_luke_aime_combo(
         benchmark=benchmark,
@@ -288,6 +293,7 @@ def load_luke_results_with_ci_for_combo(
             model=model,
             hint_type=hint_type,
             fractioner=fractioner,
+            problem_id_predicate=problem_id_predicate,
         )
         rows.extend(model_rows)
     return parse_results_with_ci_payload(rows_to_results_with_ci_payload(rows))
@@ -393,6 +399,7 @@ def collect_complete_fraction_stats(
     expected_fractions: list[float] | None = None,
     data_root: Path = DATA_ROOT,
     random_seed: int = RANDOM_SEED,
+    problem_id_predicate: ProblemIdPredicate | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     expected = EXPECTED_FRACTIONS if expected_fractions is None else expected_fractions
     expected_fraction_set = {float(f"{value:.6f}") for value in expected}
@@ -431,7 +438,11 @@ def collect_complete_fraction_stats(
     warnings = list(incomplete_fraction_reasons)
     for hint_fraction in expected:
         path = by_fraction[float(f"{hint_fraction:.6f}")]
-        stats = collect_stats_for_fraction(path=path, rng=rng)
+        stats = collect_stats_for_fraction(
+            path=path,
+            rng=rng,
+            problem_id_predicate=problem_id_predicate,
+        )
         if stats is None:
             warnings.append(
                 f"unusable fraction rows model={model} fractioner={fractioner} "
@@ -459,6 +470,7 @@ def collect_complete_fraction_stats_from_luke(
     fractioner: str,
     expected_fractions: list[float] | None = None,
     random_seed: int = RANDOM_SEED,
+    problem_id_predicate: ProblemIdPredicate | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     if not _is_luke_aime_combo(
         benchmark=benchmark,
@@ -500,7 +512,11 @@ def collect_complete_fraction_stats_from_luke(
     warnings = list(incomplete_fraction_reasons)
     for hint_fraction in expected:
         path = by_fraction[float(f"{hint_fraction:.6f}")]
-        stats = collect_stats_for_fraction(path=path, rng=rng)
+        stats = collect_stats_for_fraction(
+            path=path,
+            rng=rng,
+            problem_id_predicate=problem_id_predicate,
+        )
         if stats is None:
             warnings.append(
                 f"unusable luke fraction rows model={model} fractioner={fractioner} "

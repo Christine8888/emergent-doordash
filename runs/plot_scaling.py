@@ -21,6 +21,7 @@ from src.joint_scaling_plots import (
     plot_joint_x_axis_absolute_rms_family,
     plot_joint_x_axis_delta_rms_comparison,
     plot_joint_x_axis_delta_rms_family,
+    plot_joint_x_axis_model_sweep_comparison,
 )
 from src.pca import print_pca_report
 from src.scaling_data import (
@@ -216,6 +217,143 @@ def _build_joint_x_axis_comparison_df(
     return comparison_df.sort_values("sort_index").reset_index(drop=True)
 
 
+def _build_joint_x_axis_model_sweep_comparison_df(
+    *,
+    joint_metrics: dict[str, object],
+    x_axes: list[XAxisSpec],
+) -> pd.DataFrame:
+    x_axis_order = {x_axis.name: idx for idx, x_axis in enumerate(x_axes)}
+    frames: list[pd.DataFrame] = []
+    for x_axis in x_axes:
+        metrics = joint_metrics.get(x_axis.name)
+        if not isinstance(metrics, dict):
+            continue
+        sweep_rows = metrics.get("model_sweep_rows")
+        if not isinstance(sweep_rows, list) or not sweep_rows:
+            continue
+
+        sweep_df = pd.DataFrame(sweep_rows)
+        if sweep_df.empty or "n_models" not in sweep_df.columns:
+            continue
+
+        hint_fraction_raw = x_axis.metadata.get("hint_fraction")
+        hint_fraction = (
+            float(hint_fraction_raw)
+            if isinstance(hint_fraction_raw, (int, float, np.floating))
+            else float("nan")
+        )
+        is_hinted_acc_logit_fixed_fraction = (
+            str(x_axis.metadata.get("method_family", "")) == "hinted_acc_logit_fixed_fraction"
+        )
+        comparison_label = (
+            f"h={hint_fraction:.1f}" if is_hinted_acc_logit_fixed_fraction and np.isfinite(hint_fraction)
+            else x_axis.name
+        )
+
+        sweep_df = sweep_df.copy()
+        sweep_df["x_axis_name"] = x_axis.name
+        sweep_df["x_axis_label"] = x_axis.label
+        sweep_df["x_axis_benchmark_label"] = x_axis.benchmark_label
+        sweep_df["hint_fraction"] = hint_fraction
+        sweep_df["comparison_label"] = comparison_label
+        sweep_df["comparison_group"] = (
+            "hinted_acc_logit_fixed_fraction" if is_hinted_acc_logit_fixed_fraction else "other"
+        )
+        sweep_df["sort_index"] = int(x_axis_order.get(x_axis.name, len(x_axis_order)))
+        frames.append(sweep_df)
+
+    if not frames:
+        return pd.DataFrame()
+
+    comparison_df = pd.concat(frames, ignore_index=True)
+    numeric_columns = [
+        "n_models",
+        "rms_h0_test",
+        "rms_indiv_h0_test",
+        "rms_indiv_allfit_h0_test",
+        "delta_rms_h0_test",
+    ]
+    for column in numeric_columns:
+        if column in comparison_df.columns:
+            comparison_df[column] = pd.to_numeric(comparison_df[column], errors="coerce")
+    return comparison_df.sort_values(["sort_index", "n_models"]).reset_index(drop=True)
+
+
+def _rank_joint_x_axis_model_sweep_by_avg_delta(
+    *,
+    comparison_df: pd.DataFrame,
+) -> pd.DataFrame:
+    if comparison_df.empty or "delta_rms_h0_test" not in comparison_df.columns:
+        return pd.DataFrame()
+
+    ranking_df = (
+        comparison_df.dropna(subset=["delta_rms_h0_test"])
+        .groupby(["x_axis_name", "sort_index"], as_index=False)
+        .agg(
+            avg_delta_rms_h0_test=("delta_rms_h0_test", "mean"),
+            best_delta_rms_h0_test=("delta_rms_h0_test", "min"),
+        )
+        .sort_values(["avg_delta_rms_h0_test", "sort_index"], ascending=[True, True])
+        .reset_index(drop=True)
+    )
+    if ranking_df.empty:
+        return ranking_df
+
+    label_df = (
+        comparison_df.sort_values(["x_axis_name", "sort_index", "n_models"])
+        .groupby("x_axis_name", as_index=False)
+        .first()[["x_axis_name", "comparison_label"]]
+    )
+    best_point_df = (
+        comparison_df.dropna(subset=["delta_rms_h0_test"])
+        .sort_values(["x_axis_name", "delta_rms_h0_test", "n_models", "sort_index"])
+        .groupby("x_axis_name", as_index=False)
+        .first()[["x_axis_name", "n_models"]]
+        .rename(columns={"n_models": "best_delta_n_models"})
+    )
+    ranking_df = ranking_df.merge(label_df, on="x_axis_name", how="left")
+    ranking_df = ranking_df.merge(best_point_df, on="x_axis_name", how="left")
+    return ranking_df
+
+
+def _select_top_k_x_axes_by_model_sweep_delta(
+    *,
+    comparison_df: pd.DataFrame,
+    top_k: int,
+) -> pd.DataFrame:
+    if comparison_df.empty or top_k <= 0:
+        return pd.DataFrame()
+
+    ranked_methods = _rank_joint_x_axis_model_sweep_by_avg_delta(comparison_df=comparison_df).head(top_k)
+    if ranked_methods.empty:
+        return pd.DataFrame()
+
+    selected_names = ranked_methods["x_axis_name"].tolist()
+    filtered_df = comparison_df[comparison_df["x_axis_name"].isin(selected_names)].copy()
+    return filtered_df.sort_values(["sort_index", "n_models"]).reset_index(drop=True)
+
+
+def _print_joint_x_axis_model_sweep_delta_ranking(
+    *,
+    comparison_df: pd.DataFrame,
+    log_prefix: str,
+) -> None:
+    ranking_df = _rank_joint_x_axis_model_sweep_by_avg_delta(comparison_df=comparison_df)
+    if ranking_df.empty:
+        return
+
+    print(f"{log_prefix} model_sweep_delta_ranking[criterion=mean delta_rms_h0_test over n_train]")
+    for rank, row in enumerate(ranking_df.itertuples(index=False), start=1):
+        print(
+            f"{log_prefix}   rank={rank} "
+            f"x_axis={row.x_axis_name} "
+            f"label={row.comparison_label} "
+            f"avg_delta={float(row.avg_delta_rms_h0_test):.6f} "
+            f"best_delta={float(row.best_delta_rms_h0_test):.6f} "
+            f"best_delta_n_train={int(row.best_delta_n_models)}"
+        )
+
+
 def _json_safe_scalar(value: object) -> object:
     if value is None:
         return None
@@ -323,6 +461,55 @@ def _write_joint_x_axis_comparison_artifacts(
             )
         ),
     }
+
+    model_sweep_comparison_df = _build_joint_x_axis_model_sweep_comparison_df(
+        joint_metrics=joint_metrics,
+        x_axes=x_axes,
+    )
+    if not model_sweep_comparison_df.empty:
+        _print_joint_x_axis_model_sweep_delta_ranking(
+            comparison_df=model_sweep_comparison_df,
+            log_prefix=log_prefix,
+        )
+        model_sweep_csv_path = comparison_output_dir / "model_sweep_metrics.csv"
+        model_sweep_json_path = comparison_output_dir / "model_sweep_metrics.json"
+        model_sweep_comparison_df.to_csv(model_sweep_csv_path, index=False)
+        model_sweep_json_payload = {
+            "rows": [
+                {
+                    key: _json_safe_scalar(value)
+                    for key, value in row.items()
+                }
+                for row in model_sweep_comparison_df.to_dict(orient="records")
+            ]
+        }
+        model_sweep_json_path.write_text(
+            json.dumps(model_sweep_json_payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        plot_paths["model_sweep_metrics_csv"] = str(model_sweep_csv_path)
+        plot_paths["model_sweep_metrics_json"] = str(model_sweep_json_path)
+        plot_paths["model_sweep_all_x_axes"] = str(
+            plot_joint_x_axis_model_sweep_comparison(
+                comparison_df=model_sweep_comparison_df,
+                label=label,
+                output_dir=comparison_output_dir,
+                filename_stem="model_sweep_all_x_axes",
+            )
+        )
+        top4_model_sweep_df = _select_top_k_x_axes_by_model_sweep_delta(
+            comparison_df=model_sweep_comparison_df,
+            top_k=4,
+        )
+        if not top4_model_sweep_df.empty:
+            plot_paths["model_sweep_top4_delta_x_axes"] = str(
+                plot_joint_x_axis_model_sweep_comparison(
+                    comparison_df=top4_model_sweep_df,
+                    label=f"{label} - top 4 x-axis methods by lowest average delta RMS",
+                    output_dir=comparison_output_dir,
+                    filename_stem="model_sweep_top4_delta_x_axes",
+                )
+            )
 
     family_df = comparison_df[
         comparison_df["comparison_group"] == "hinted_acc_logit_fixed_fraction"

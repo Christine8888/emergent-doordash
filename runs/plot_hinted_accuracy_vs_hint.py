@@ -5,7 +5,7 @@ import csv
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -23,14 +23,17 @@ DATA_ROOT = Path("data")
 PLOTS_ROOT = Path("plots/accuracy_vs_hint")
 
 EXPECTED_FRACTIONS = [i / 10 for i in range(11)]
+AIME_SPLIT_BENCHMARK = "aime2025_2026"
+AIME_SPLIT_HINT_TYPE = "answer_not_revealed"
 EXCLUDE_MODELS: set[str] = {
-    "Qwen/Qwen3.5-0.8B",
-    "Qwen/Qwen3.5-2B",
-    "Qwen/Qwen3.5-4B",
-    "Qwen/Qwen3.5-9B",
-    "Qwen/Qwen3.5-27B",
-    "google/gemma-3-270m-it",
+    # "Qwen/Qwen3.5-0.8B",
+    # "Qwen/Qwen3.5-2B",
+    # "Qwen/Qwen3.5-4B",
+    # "Qwen/Qwen3.5-9B",
+    # "Qwen/Qwen3.5-27B",
+    # "google/gemma-3-270m-it",
 }
+ProblemIdPredicate = Callable[[str], bool]
 
 
 def _safe_component(text: str) -> str:
@@ -42,6 +45,39 @@ def _normalize_model_name(model: str) -> str:
     # Some sources use full HF-style paths (e.g. "Qwen/Qwen3.5-4B"),
     # while discovered/local names are basename-only (e.g. "Qwen3.5-4B").
     return model.strip().split("/")[-1]
+
+
+def _extract_problem_index(problem_id: str) -> int | None:
+    match = re.search(r"_(\d+)$", problem_id.strip())
+    if match is None:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def _problem_ids_for_aime_2025(problem_id: str) -> bool:
+    idx = _extract_problem_index(problem_id)
+    return idx is not None and 1 <= idx <= 30
+
+
+def _problem_ids_for_aime_2026(problem_id: str) -> bool:
+    idx = _extract_problem_index(problem_id)
+    return idx is not None and 31 <= idx <= 60
+
+
+def _split_plot_specs(
+    *,
+    benchmark: str,
+    hint_type: str,
+) -> list[tuple[str, ProblemIdPredicate]]:
+    if benchmark != AIME_SPLIT_BENCHMARK or hint_type != AIME_SPLIT_HINT_TYPE:
+        return []
+    return [
+        ("aime2025", _problem_ids_for_aime_2025),
+        ("aime2026", _problem_ids_for_aime_2026),
+    ]
 
 
 def _parse_args() -> argparse.Namespace:
@@ -139,19 +175,6 @@ def _fit_sigmoid_for_series(series_rows: list[dict[str, Any]]) -> dict[str, floa
     if np.allclose(y, y[0]):
         return None
 
-    # Approximate per-point standard error from 95% CI half-width.
-    ci_half_width = np.asarray(
-        [
-            max(
-                1e-6,
-                0.5 * (float(row["ci_high"]) - float(row["ci_low"])),
-            )
-            for row in rows_sorted
-        ],
-        dtype=float,
-    )
-    sigma = np.maximum(ci_half_width / 1.96, 1e-4)
-
     lower0 = float(np.clip(np.min(y) - 0.02, 0.0, 0.95))
     y_mid = 0.5 * (float(np.min(y)) + float(np.max(y)))
     mid_idx = int(np.argmin(np.abs(y - y_mid)))
@@ -165,8 +188,6 @@ def _fit_sigmoid_for_series(series_rows: list[dict[str, Any]]) -> dict[str, floa
             x,
             y,
             p0=[lower0, slope0, bias0],
-            sigma=sigma,
-            absolute_sigma=True,
             bounds=([0.0, 1e-6, -50.0], [0.99, 100.0, 50.0]),
             maxfev=20000,
         )
@@ -299,6 +320,16 @@ def _plot(
 ) -> None:
     models = sorted({row["model"] for row in results} | {row["model"] for row in external_results})
     n_models = len(models)
+    fractioners_all = sorted(
+        {str(row["fractioner"]) for row in results} | {str(row["fractioner"]) for row in external_results}
+    )
+    if fractioners_all:
+        cmap = plt.cm.get_cmap("tab20", len(fractioners_all))
+        fractioner_color_map = {
+            fractioner: cmap(index) for index, fractioner in enumerate(fractioners_all)
+        }
+    else:
+        fractioner_color_map: dict[str, Any] = {}
 
     if n_models == 1:
         fig, ax = plt.subplots(figsize=(7, 4.5))
@@ -314,14 +345,43 @@ def _plot(
         fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.3 * n_rows))
         axes = axes_obj.flatten() if hasattr(axes_obj, "flatten") else [axes_obj]
 
+    all_y_values = [
+        float(row["ci_low"])
+        for row in results
+        if isinstance(row, dict) and "ci_low" in row
+    ] + [
+        float(row["ci_high"])
+        for row in results
+        if isinstance(row, dict) and "ci_high" in row
+    ] + [
+        float(row["ci_low"])
+        for row in external_results
+        if isinstance(row, dict) and "ci_low" in row
+    ] + [
+        float(row["ci_high"])
+        for row in external_results
+        if isinstance(row, dict) and "ci_high" in row
+    ]
+    if all_y_values:
+        y_min = min(all_y_values)
+        y_max = max(all_y_values)
+    else:
+        y_min, y_max = 0.0, 1.0
+    y_padding = 0.03
+    y_min_plot = max(0.0, y_min - y_padding)
+    y_max_plot = min(1.0, y_max + y_padding)
+    if y_max_plot - y_min_plot < 0.08:
+        y_mid = 0.5 * (y_min_plot + y_max_plot)
+        y_min_plot = max(0.0, y_mid - 0.04)
+        y_max_plot = min(1.0, y_mid + 0.04)
+
     for idx, model in enumerate(models):
         ax = axes[idx]
         model_rows = [row for row in results if row["model"] == model]
         external_model_rows = [row for row in external_results if row["model"] == model]
         fractioners = sorted({str(row["fractioner"]) for row in model_rows})
-        cmap = plt.cm.tab10
-        for j, fractioner in enumerate(fractioners):
-            color = cmap(j / max(len(fractioners) - 1, 1))
+        for fractioner in fractioners:
+            color = fractioner_color_map.get(fractioner, "#1f77b4")
             series_rows = sorted(
                 [row for row in model_rows if row["fractioner"] == fractioner],
                 key=lambda row: float(row["hint_fraction"]),
@@ -381,7 +441,7 @@ def _plot(
             high = np.asarray([float(row["ci_high"]) for row in series_rows], dtype=float)
             yerr = np.vstack([y - low, high - y])
 
-            overlay_color = "#111111"
+            overlay_color = fractioner_color_map.get(fractioner, "#111111")
             ax.errorbar(
                 x,
                 y,
@@ -425,7 +485,7 @@ def _plot(
         ax.set_ylabel("Accuracy")
         ax.grid(True, alpha=0.3)
         ax.set_xlim(-0.05, 1.05)
-        ax.set_ylim(-0.05, 1.05)
+        ax.set_ylim(y_min_plot, y_max_plot)
         ax.legend(fontsize=7)
 
     for idx in range(n_models, len(axes)):
@@ -436,6 +496,127 @@ def _plot(
     output_png.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_png, dpi=200, bbox_inches="tight")
     plt.close(fig)
+
+
+def _build_fit_map(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, float]]:
+    fit_map: dict[tuple[str, str], dict[str, float]] = {}
+    series_map: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in sorted(
+        rows,
+        key=lambda r: (str(r["model"]), str(r["fractioner"]), float(r["hint_fraction"])),
+    ):
+        key = (str(row["model"]), str(row["fractioner"]))
+        series_map.setdefault(key, []).append(row)
+    for key, series_rows in sorted(series_map.items()):
+        fit = _fit_sigmoid_for_series(series_rows)
+        if fit is not None:
+            fit_map[key] = fit
+    return fit_map
+
+
+def _collect_rows_for_models(
+    *,
+    benchmark: str,
+    hint_type: str,
+    models_to_plot: list[str],
+    fractioner: str | None,
+    problem_id_predicate: ProblemIdPredicate | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    rows: list[dict[str, Any]] = []
+    external_rows: list[dict[str, Any]] = []
+    external_cache: dict[str, dict[str, dict[float, dict[str, float]]]] = {}
+
+    for model in models_to_plot:
+        if fractioner is not None:
+            fractioners = [fractioner]
+        else:
+            fractioners = canonical_discover_fractioners(
+                benchmark=benchmark,
+                model=model,
+                hint_type=hint_type,
+            )
+        if not fractioners:
+            print(
+                f"[plot_hinted_accuracy_vs_hint][WARN] no fractioners for "
+                f"model={model} hint_type={hint_type}"
+            )
+            continue
+
+        for current_fractioner in fractioners:
+            local_fraction_rows, local_warnings = collect_complete_fraction_stats(
+                benchmark=benchmark,
+                model=model,
+                hint_type=hint_type,
+                fractioner=current_fractioner,
+                data_root=DATA_ROOT,
+                problem_id_predicate=problem_id_predicate,
+            )
+            if not local_fraction_rows:
+                if local_warnings:
+                    print(
+                        f"[plot_hinted_accuracy_vs_hint][WARN] no local combo results for "
+                        f"model={model} fractioner={current_fractioner} warnings={local_warnings}"
+                    )
+            else:
+                rows.extend(local_fraction_rows)
+                print(
+                    f"[plot_hinted_accuracy_vs_hint] included model={model} "
+                    f"fractioner={current_fractioner} n_points={len(local_fraction_rows)}"
+                )
+                means_text = ", ".join(
+                    f"{float(row['hint_fraction']):.1f}:{float(row['accuracy']):.4f}"
+                    for row in local_fraction_rows
+                )
+                print(
+                    f"[plot_hinted_accuracy_vs_hint] means model={model} "
+                    f"fractioner={current_fractioner} {means_text}"
+                )
+
+            external_payload = external_cache.get(current_fractioner)
+            if external_payload is None:
+                external_payload = load_luke_results_with_ci_for_combo(
+                    benchmark=benchmark,
+                    hint_type=hint_type,
+                    fractioner=current_fractioner,
+                    problem_id_predicate=problem_id_predicate,
+                )
+                external_cache[current_fractioner] = external_payload
+
+            external_model_payload = external_payload.get(model)
+            if external_model_payload:
+                missing_external = sorted(
+                    {float(f"{value:.6f}") for value in EXPECTED_FRACTIONS}
+                    - set(external_model_payload.keys())
+                )
+                if missing_external:
+                    print(
+                        f"[plot_hinted_accuracy_vs_hint][WARN] missing external fractions "
+                        f"model={model} fractioner={current_fractioner} missing_fractions={missing_external}"
+                    )
+                else:
+                    current_external_rows: list[dict[str, Any]] = []
+                    for hint_fraction in EXPECTED_FRACTIONS:
+                        stats = external_model_payload[float(hint_fraction)]
+                        current_external_rows.append(
+                            {
+                                "model": model,
+                                "fractioner": current_fractioner,
+                                "hint_fraction": float(hint_fraction),
+                                "accuracy": float(stats["accuracy"]),
+                                "ci_low": float(stats["ci_low"]),
+                                "ci_high": float(stats["ci_high"]),
+                            }
+                        )
+                    external_rows.extend(current_external_rows)
+                    external_means_text = ", ".join(
+                        f"{float(row['hint_fraction']):.1f}:{float(row['accuracy']):.4f}"
+                        for row in current_external_rows
+                    )
+                    print(
+                        f"[plot_hinted_accuracy_vs_hint] external means model={model} "
+                        f"fractioner={current_fractioner} {external_means_text}"
+                    )
+    return rows, external_rows
 
 
 def main() -> None:
@@ -483,98 +664,12 @@ def main() -> None:
             "Update EXCLUDE_MODELS or pass different --model values."
         )
 
-    rows: list[dict[str, Any]] = []
-    external_rows: list[dict[str, Any]] = []
-    external_cache: dict[str, dict[str, dict[float, dict[str, float]]]] = {}
-
-    for model in models_to_plot:
-        if args.fractioner is not None:
-            fractioners = [args.fractioner]
-        else:
-            fractioners = canonical_discover_fractioners(
-                benchmark=args.benchmark,
-                model=model,
-                hint_type=args.hint_type,
-            )
-        if not fractioners:
-            print(
-                f"[plot_hinted_accuracy_vs_hint][WARN] no fractioners for "
-                f"model={model} hint_type={args.hint_type}"
-            )
-            continue
-
-        for fractioner in fractioners:
-            local_fraction_rows, local_warnings = collect_complete_fraction_stats(
-                benchmark=args.benchmark,
-                model=model,
-                hint_type=args.hint_type,
-                fractioner=fractioner,
-                data_root=DATA_ROOT,
-            )
-            if not local_fraction_rows:
-                if local_warnings:
-                    print(
-                        f"[plot_hinted_accuracy_vs_hint][WARN] no local combo results for "
-                        f"model={model} fractioner={fractioner} warnings={local_warnings}"
-                    )
-            else:
-                rows.extend(local_fraction_rows)
-                print(
-                    f"[plot_hinted_accuracy_vs_hint] included model={model} "
-                    f"fractioner={fractioner} n_points={len(local_fraction_rows)}"
-                )
-                means_text = ", ".join(
-                    f"{float(row['hint_fraction']):.1f}:{float(row['accuracy']):.4f}"
-                    for row in local_fraction_rows
-                )
-                print(
-                    f"[plot_hinted_accuracy_vs_hint] means model={model} "
-                    f"fractioner={fractioner} {means_text}"
-                )
-
-            external_payload = external_cache.get(fractioner)
-            if external_payload is None:
-                external_payload = load_luke_results_with_ci_for_combo(
-                    benchmark=args.benchmark,
-                    hint_type=args.hint_type,
-                    fractioner=fractioner,
-                )
-                external_cache[fractioner] = external_payload
-
-            external_model_payload = external_payload.get(model)
-            if external_model_payload:
-                missing_external = sorted(
-                    {float(f"{value:.6f}") for value in EXPECTED_FRACTIONS}
-                    - set(external_model_payload.keys())
-                )
-                if missing_external:
-                    print(
-                        f"[plot_hinted_accuracy_vs_hint][WARN] missing external fractions "
-                        f"model={model} fractioner={fractioner} missing_fractions={missing_external}"
-                    )
-                else:
-                    current_external_rows: list[dict[str, Any]] = []
-                    for hint_fraction in EXPECTED_FRACTIONS:
-                        stats = external_model_payload[float(hint_fraction)]
-                        current_external_rows.append(
-                            {
-                                "model": model,
-                                "fractioner": fractioner,
-                                "hint_fraction": float(hint_fraction),
-                                "accuracy": float(stats["accuracy"]),
-                                "ci_low": float(stats["ci_low"]),
-                                "ci_high": float(stats["ci_high"]),
-                            }
-                        )
-                    external_rows.extend(current_external_rows)
-                    external_means_text = ", ".join(
-                        f"{float(row['hint_fraction']):.1f}:{float(row['accuracy']):.4f}"
-                        for row in current_external_rows
-                    )
-                    print(
-                        f"[plot_hinted_accuracy_vs_hint] external means model={model} "
-                        f"fractioner={fractioner} {external_means_text}"
-                    )
+    rows, external_rows = _collect_rows_for_models(
+        benchmark=args.benchmark,
+        hint_type=args.hint_type,
+        models_to_plot=models_to_plot,
+        fractioner=args.fractioner,
+    )
 
     if not rows and not external_rows:
         raise ValueError("No usable rows collected. Check benchmark/model/hint_type/fractioner.")
@@ -587,37 +682,8 @@ def main() -> None:
     for row in rows_sorted:
         key = (str(row["model"]), str(row["fractioner"]))
         series_map.setdefault(key, []).append(row)
-
-    fit_map: dict[tuple[str, str], dict[str, float]] = {}
-    for key, series_rows in sorted(series_map.items()):
-        model, fractioner = key
-        fit = _fit_sigmoid_for_series(series_rows)
-        if fit is None:
-            print(
-                f"[plot_hinted_accuracy_vs_hint][WARN] sigmoid fit failed/skipped "
-                f"model={model} fractioner={fractioner}"
-            )
-            continue
-        fit_map[key] = fit
-        print(
-            f"[plot_hinted_accuracy_vs_hint] fit model={model} fractioner={fractioner} "
-            f"midpoint={float(fit['sigmoid_midpoint']):.4f} "
-            f"rmse={float(fit['sigmoid_rmse']):.4f}"
-        )
-
-    external_fit_map: dict[tuple[str, str], dict[str, float]] = {}
-    external_series_map: dict[tuple[str, str], list[dict[str, Any]]] = {}
-    for row in sorted(
-        external_rows,
-        key=lambda r: (str(r["model"]), str(r["fractioner"]), float(r["hint_fraction"])),
-    ):
-        key = (str(row["model"]), str(row["fractioner"]))
-        external_series_map.setdefault(key, []).append(row)
-
-    for key, series_rows in sorted(external_series_map.items()):
-        fit = _fit_sigmoid_for_series(series_rows)
-        if fit is not None:
-            external_fit_map[key] = fit
+    fit_map = _build_fit_map(rows_sorted)
+    external_fit_map = _build_fit_map(external_rows)
 
     model_component = (
         "all" if requested_models == ["all"] else "__".join(_safe_component(model) for model in models_to_plot)
@@ -677,17 +743,7 @@ def main() -> None:
     plot_external_fit_map = external_fit_map
     if args.clean:
         plot_rows = _merge_rows_for_clean_plot(rows_sorted, external_rows)
-        clean_series_map: dict[tuple[str, str], list[dict[str, Any]]] = {}
-        for row in plot_rows:
-            key = (str(row["model"]), str(row["fractioner"]))
-            clean_series_map.setdefault(key, []).append(row)
-
-        plot_fit_map = {}
-        for key, series_rows in sorted(clean_series_map.items()):
-            fit = _fit_sigmoid_for_series(series_rows)
-            if fit is not None:
-                plot_fit_map[key] = fit
-
+        plot_fit_map = _build_fit_map(plot_rows)
         plot_external_rows = []
         plot_external_fit_map = {}
 
@@ -711,10 +767,58 @@ def main() -> None:
     print(f"[plot_hinted_accuracy_vs_hint] wrote_accuracy_table_csv= {accuracy_table_csv_path}")
     print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {png_path}")
 
+    for split_name, split_predicate in _split_plot_specs(
+        benchmark=args.benchmark,
+        hint_type=args.hint_type,
+    ):
+        split_rows, split_external_rows = _collect_rows_for_models(
+            benchmark=args.benchmark,
+            hint_type=args.hint_type,
+            models_to_plot=models_to_plot,
+            fractioner=args.fractioner,
+            problem_id_predicate=split_predicate,
+        )
+        if not split_rows and not split_external_rows:
+            print(
+                "[plot_hinted_accuracy_vs_hint][WARN] skipping split plot with no data "
+                f"split={split_name}"
+            )
+            continue
+
+        split_rows_sorted = sorted(
+            split_rows,
+            key=lambda r: (str(r["model"]), str(r["fractioner"]), float(r["hint_fraction"])),
+        )
+        split_plot_rows = split_rows_sorted
+        split_plot_fit_map = _build_fit_map(split_rows_sorted)
+        split_plot_external_rows = split_external_rows
+        split_plot_external_fit_map = _build_fit_map(split_external_rows)
+        if args.clean:
+            split_plot_rows = _merge_rows_for_clean_plot(split_rows_sorted, split_external_rows)
+            split_plot_fit_map = _build_fit_map(split_plot_rows)
+            split_plot_external_rows = []
+            split_plot_external_fit_map = {}
+
+        split_png_path = PLOTS_ROOT / f"{stem}__{split_name}__bootstrap.png"
+        _plot(
+            split_plot_rows,
+            fit_map=split_plot_fit_map,
+            external_results=split_plot_external_rows,
+            external_fit_map=split_plot_external_fit_map,
+            output_png=split_png_path,
+            show_values=args.show_values,
+            title=(
+                f"Hinted Accuracy vs Hint Fraction ({split_name})\n"
+                f"benchmark={args.benchmark} hint_type={args.hint_type} "
+                f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
+                f"[{'clean' if args.clean else 'full'}]"
+            ),
+        )
+        print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {split_png_path}")
+
 
 if __name__ == "__main__":
     # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner mask_word --clean
-    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --model Llama-3.1-8B-Instruct Qwen2.5-14B-Instruct Qwen3-4B gemma-3-27b-it --clean
     # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --clean
 
     main()

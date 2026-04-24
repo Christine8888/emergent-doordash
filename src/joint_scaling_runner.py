@@ -33,6 +33,19 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _json_safe_scalar(value: object) -> object:
+    if value is None:
+        return None
+    if isinstance(value, (np.bool_, bool)):
+        return bool(value)
+    if isinstance(value, (np.integer, int)):
+        return int(value)
+    if isinstance(value, (np.floating, float)):
+        value_float = float(value)
+        return None if np.isnan(value_float) else value_float
+    return value
+
+
 def run_joint_scaling_for_x_axis(
     *,
     base_rows: list[dict[str, Any]],
@@ -256,6 +269,13 @@ def run_joint_scaling_for_x_axis(
     metrics["mean_midpoint_error_all"] = (
         float(np.mean(list(midpoint_errors_all.values()))) if midpoint_errors_all else float("nan")
     )
+    metrics["model_sweep_rows"] = [
+        {
+            key: _json_safe_scalar(value)
+            for key, value in row.items()
+        }
+        for row in sweep_df.to_dict(orient="records")
+    ]
 
     _write_json(output_dir / "metrics.json", metrics)
     return metrics

@@ -818,6 +818,63 @@ def plot_joint_model_sweep(
     return output_path
 
 
+def plot_joint_x_axis_model_sweep_comparison(
+    *,
+    comparison_df: pd.DataFrame,
+    label: str,
+    output_dir: Path,
+    filename_stem: str,
+) -> Path:
+    if comparison_df.empty:
+        raise ValueError("comparison_df must not be empty for model sweep comparison plotting.")
+
+    plot_df = comparison_df.sort_values(["sort_index", "n_models"]).reset_index(drop=True)
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6), sharex=True)
+
+    for _, method_df in plot_df.groupby("x_axis_name", sort=False):
+        method_df = method_df.sort_values("n_models").reset_index(drop=True)
+        line_label = str(method_df["comparison_label"].iloc[0])
+        axes[0].plot(
+            method_df["n_models"],
+            method_df["rms_h0_test"],
+            "o-",
+            linewidth=2,
+            label=line_label,
+        )
+        axes[1].plot(
+            method_df["n_models"],
+            method_df["delta_rms_h0_test"],
+            "o-",
+            linewidth=2,
+            label=line_label,
+        )
+
+    axes[0].set_xlabel("number of train models")
+    axes[0].set_ylabel("rms")
+    axes[0].set_title("test models only, hint = 0")
+    axes[0].grid(True, alpha=0.3)
+
+    axes[1].set_xlabel("number of train models")
+    axes[1].set_ylabel("delta RMS (joint - individual)")
+    axes[1].set_title("test models only, hint = 0\n(negative = joint wins)")
+    axes[1].axhline(0.0, color="black", linestyle="--", alpha=0.5)
+    axes[1].grid(True, alpha=0.3)
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.02), ncol=3, frameon=False)
+
+    fig.suptitle(
+        format_title_text([f"{label} - model sweep across x-axis methods"], width=90),
+        fontsize=12,
+    )
+    fig.tight_layout(rect=(0.0, 0.06, 1.0, 1.0))
+
+    output_path = output_dir / f"{filename_stem}.png"
+    save_figure(fig, output_path)
+    return output_path
+
+
 def plot_joint_x_axis_delta_rms_comparison(
     *,
     comparison_df: pd.DataFrame,
