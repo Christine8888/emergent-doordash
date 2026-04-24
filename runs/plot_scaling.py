@@ -26,6 +26,7 @@ from src.pca import print_pca_report
 from src.scaling_data import (
     build_base_rows,
     canonicalize_model_name,
+    load_eci_map,
     load_canonical_combo_results,
     resolve_models_to_use,
 )
@@ -44,6 +45,13 @@ PC_BENCHMARK_ORDER = [EVAL_TO_ECI[eval_name] for eval_name in EVAL_TO_ECI]
 DEFAULT_JOINT_LOWER_ASYMPTOTE = 0.0
 DEFAULT_HINTED_PC_HINT_FRACTIONS = [fraction for fraction in EXPECTED_FRACTIONS if fraction > 0.0]
 DEFAULT_X_AXIS_METHODS = list(SUPPORTED_X_AXIS_METHODS)
+EXCLUDE_MODELS: set[str] = {
+    "Qwen/Qwen3.5-0.8B",
+    "Qwen/Qwen3.5-2B",
+    "Qwen/Qwen3.5-4B",
+    "Qwen/Qwen3.5-9B",
+    "Qwen/Qwen3.5-27B",
+}
 DEFAULT_MODELS_TO_USE: list[str] | None = [
     "google/gemma-3-27b-it",
     "meta-llama/Llama-3.1-70B-Instruct",
@@ -61,6 +69,10 @@ DEFAULT_MODELS_TO_USE: list[str] | None = [
     "Qwen/Qwen2.5-7B-Instruct",
     "google/gemma-3-4b-it",
     "meta-llama/Llama-3.1-8B-Instruct",
+    "google/gemma-3-1b-it",
+    "Qwen/Qwen2.5-0.5B-Instruct",
+    "google/gemma-3-270m-it",
+    "meta-llama/Llama-3.3-70B-Instruct",
 ]
 
 
@@ -97,6 +109,11 @@ class ScalingRunResult:
     output_dir: Path
     plot_paths: dict[str, dict[str, str]]
     joint_metrics: dict[str, object] | None
+
+
+def _normalize_model_name(model: str) -> str:
+    # Support both full model paths and basename-only names.
+    return str(model).strip().split("/")[-1]
 
 
 def _parse_args() -> argparse.Namespace:
@@ -343,8 +360,22 @@ def run_scaling(config: ScalingRunConfig) -> ScalingRunResult:
         )
 
     x_axis_methods = list(config.x_axis_methods)
+    if config.eci_file is None:
+        eci_dependent_methods = {"eci", "eci_pc1"}
+        dropped_methods = [method for method in x_axis_methods if method in eci_dependent_methods]
+        if dropped_methods:
+            x_axis_methods = [method for method in x_axis_methods if method not in eci_dependent_methods]
+            print(
+                f"{config.log_prefix} dropping ECI-dependent x-axis methods because --eci-file was not provided: "
+                f"{sorted(set(dropped_methods))}"
+            )
     if config.joint_x_axis is not None and config.joint_x_axis not in x_axis_methods:
-        x_axis_methods.append(str(config.joint_x_axis))
+        requested_joint_x_axis = str(config.joint_x_axis)
+        if config.eci_file is None and requested_joint_x_axis in {"eci", "eci_pc1"}:
+            raise ValueError(
+                f"joint_x_axis={requested_joint_x_axis!r} requires --eci-file, but none was provided."
+            )
+        x_axis_methods.append(requested_joint_x_axis)
 
     needs_scores_df = any(method == "eci_pc1" for method in x_axis_methods)
     scores_df = load_baseline_scores() if needs_scores_df else None
@@ -365,6 +396,40 @@ def run_scaling(config: ScalingRunConfig) -> ScalingRunResult:
         benchmark=config.benchmark,
         preferred_models=config.preferred_models,
     )
+    excluded_model_names = {_normalize_model_name(model) for model in EXCLUDE_MODELS}
+    excluded_models = sorted(
+        model for model in models if _normalize_model_name(model) in excluded_model_names
+    )
+    if excluded_models:
+        models = [
+            model for model in models if _normalize_model_name(model) not in excluded_model_names
+        ]
+        print(
+            f"{config.log_prefix} excluding models via EXCLUDE_MODELS: {excluded_models}"
+        )
+    if not models:
+        raise ValueError(
+            "All selected models were excluded by EXCLUDE_MODELS. "
+            "Update EXCLUDE_MODELS or adjust preferred_models."
+        )
+    if config.eci_file is not None:
+        eci_map = load_eci_map(Path(config.eci_file))
+        models_with_eci = set(eci_map.keys())
+        missing_eci_models = sorted(
+            model for model in models if canonicalize_model_name(model) not in models_with_eci
+        )
+        if missing_eci_models:
+            models = [
+                model for model in models if canonicalize_model_name(model) in models_with_eci
+            ]
+            print(
+                f"{config.log_prefix} skipping models missing ECI scores from {config.eci_file}: "
+                f"{missing_eci_models}"
+            )
+        if not models:
+            raise ValueError(
+                "No models left after applying EXCLUDE_MODELS and ECI availability filtering."
+            )
     if config.num_holdout_models < 0:
         raise ValueError(f"num_holdout_models must be >= 0, got {config.num_holdout_models}")
     if config.num_holdout_models > len(models):
@@ -546,16 +611,13 @@ python -m runs.plot_scaling \
     --num-holdout-models 0 \
     --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh__prompt_type_answer_only--hellaswag__split_validation--math__levels_5__fewshot_0--mmlu_5_shot__language_en_us__cot_true--piqa--winogrande__dataset_name_winogrande_xl__fewshot_5.csv
 
+
+
 python -m runs.plot_scaling \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --num-holdout-models 0 \
-    --facet-by family \
-    --eci-file data/eci_model_capabilities__simple__arc_challenge--bbh__prompt_type_answer_only--hellaswag__split_validation--math__levels_5__fewshot_0--mmlu_5_shot__language_en_us__cot_true--piqa--winogrande__dataset_name_winogrande_xl__fewshot_5.csv
-
-
-
+    --num-holdout-models 0 
 
 """
  

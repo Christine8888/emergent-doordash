@@ -31,6 +31,14 @@ def save_figure(fig: plt.Figure, output_path: Path) -> None:
     plt.close(fig)
 
 
+def _x_padding_from_df(df: pd.DataFrame, x_field: str) -> tuple[float, float, float]:
+    x_min = float(df[x_field].min())
+    x_max = float(df[x_field].max())
+    x_span = max(x_max - x_min, 1e-6)
+    x_padding = max(0.2, 0.1 * x_span)
+    return x_min, x_max, x_padding
+
+
 def plot_pca_component_weights(
     *,
     components: np.ndarray,
@@ -400,7 +408,8 @@ def plot_joint_accuracy_vs_x_by_hint(
     fig, ax = plt.subplots(figsize=(12, 7))
     hint_fractions = sorted(df["hint_fraction"].unique().tolist())
     colors = {h: plt.cm.viridis(i / max(len(hint_fractions) - 1, 1)) for i, h in enumerate(hint_fractions)}
-    x_range = np.linspace(float(df[x_field].min()) - 5.0, float(df[x_field].max()) + 5.0, 120)
+    x_min, x_max, x_padding = _x_padding_from_df(df, x_field)
+    x_range = np.linspace(x_min - x_padding, x_max + x_padding, 120)
 
     for hint_fraction in hint_fractions:
         hint_df = df[df["hint_fraction"] == hint_fraction].sort_values(x_field)
@@ -458,7 +467,8 @@ def plot_joint_individual_fits_by_hint(
 ) -> Path:
     hint_fractions = sorted(df["hint_fraction"].unique().tolist())
     colors = {h: plt.cm.viridis(i / max(len(hint_fractions) - 1, 1)) for i, h in enumerate(hint_fractions)}
-    x_range = np.linspace(float(df[x_field].min()) - 5.0, float(df[x_field].max()) + 5.0, 120)
+    x_min, x_max, x_padding = _x_padding_from_df(df, x_field)
+    x_range = np.linspace(x_min - x_padding, x_max + x_padding, 120)
 
     n_cols = 7
     n_rows = max(1, int(np.ceil(len(hint_fractions) / n_cols)))
