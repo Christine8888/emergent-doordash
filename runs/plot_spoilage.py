@@ -83,6 +83,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--benchmark", type=str, required=True)
     parser.add_argument("--data-root", type=str, required=False, default="data")
     parser.add_argument("--plots-root", type=str, required=False, default="plots")
+    parser.add_argument("--hint-type", type=str, required=False, default=None, help="Optional hint type filter (e.g. answer_not_revealed).")
+    parser.add_argument(
+        "--fractioner",
+        type=str,
+        nargs="+",
+        required=False,
+        default=None,
+        help="Optional one-or-more fractioner filters (e.g. mask_word truncate_word).",
+    )
     return parser
 
 
@@ -108,7 +117,14 @@ def main() -> None:
     plotted_any = False
     y_max_global = 0.0
 
-    for hint_type, fractioner in HINT_FRACTIONER_COMBOS:
+    selected_combos: list[tuple[str, str]] = HINT_FRACTIONER_COMBOS
+    if args.hint_type is not None:
+        selected_combos = [combo for combo in selected_combos if combo[0] == args.hint_type]
+    if args.fractioner is not None:
+        selected_fractioners = set(args.fractioner)
+        selected_combos = [combo for combo in selected_combos if combo[1] in selected_fractioners]
+
+    for hint_type, fractioner in selected_combos:
         hint_path = build_hint_generation_path(
             benchmark_name=args.benchmark,
             hint_type=hint_type,
@@ -167,5 +183,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # python -m runs.plot_spoilage --benchmark aime2025_2026
+    # python -m runs.plot_spoilage --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner mask_word truncate_word
     main()
