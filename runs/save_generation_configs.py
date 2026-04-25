@@ -10,7 +10,40 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.model_config import ALL_MODEL_PATHS
+MODELS = [
+    "Qwen/Qwen3-0.6B",
+    "Qwen/Qwen3-1.7B",
+    "Qwen/Qwen3-4B",
+    "Qwen/Qwen3-8B",
+    "Qwen/Qwen3-14B",
+    "Qwen/Qwen3-30B-A3B",
+    "Qwen/Qwen3-32B",
+    "Qwen/Qwen3-235B-A22B",
+    "Qwen/Qwen2.5-0.5B-Instruct",
+    "Qwen/Qwen2.5-1.5B-Instruct",
+    "Qwen/Qwen2.5-3B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
+    "Qwen/Qwen2.5-32B-Instruct",
+    "Qwen/Qwen2.5-72B-Instruct",
+    "meta-llama/Llama-2-7b-chat-hf",
+    "meta-llama/Llama-2-13b-chat-hf",
+    "meta-llama/Llama-2-70b-chat-hf",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.1-70B-Instruct",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "google/gemma-3-270m-it",
+    "google/gemma-3-1b-it",
+    "google/gemma-3-4b-it",
+    "google/gemma-3-12b-it",
+    "google/gemma-3-27b-it",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "google/gemma-4-E2B-it",
+    "google/gemma-4-E4B-it",
+    "google/gemma-4-31B-it",
+    "google/gemma-4-26B-A4B-it",
+]
 
 PARAM_KEYS = (
     "do_sample",
@@ -38,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         type=str,
         default="data/model_generation_configs",
-        help="Directory to save generation configs for models in src.model_config.ALL_MODEL_PATHS.",
+        help="Directory to save generation configs for models in MODELS.",
     )
     return parser
 
@@ -56,7 +89,7 @@ def main() -> None:
 
     summary: dict[str, dict[str, Any] | None] = {}
 
-    for model_path in ALL_MODEL_PATHS:
+    for model_path in MODELS:
         safe_name = _safe_model_name(model_path)
         out_path = output_dir / f"{safe_name}.generation_config.json"
 

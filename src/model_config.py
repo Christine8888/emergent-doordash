@@ -163,6 +163,10 @@ GEMMA_MODELS = [
     ModelSpec("google/gemma-3-4b-it", constraint=SMALL_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
     ModelSpec("google/gemma-3-12b-it", constraint=LARGE_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
     ModelSpec("google/gemma-3-27b-it", tp=2, constraint=MEDIUM_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
+    ModelSpec("google/gemma-4-E2B-it", constraint=SMALL_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
+    ModelSpec("google/gemma-4-E4B-it", constraint=SMALL_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
+    ModelSpec("google/gemma-4-31B-it", tp=2, constraint=MEDIUM_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
+    ModelSpec("google/gemma-4-26B-A4B-it", tp=2, constraint=MEDIUM_MODEL_CONSTRAINT, **GEMMA_SAMPLING),
 ]
 
 OPENAI_MODELS = [
