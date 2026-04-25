@@ -41,6 +41,12 @@ def _parse_args() -> argparse.Namespace:
         help="Fractioner to plot.",
     )
     parser.add_argument(
+        "--hint-fraction",
+        type=float,
+        default=None,
+        help="Optional specific hint fraction to include (e.g. 0.3).",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=PLOTS_ROOT,
@@ -124,6 +130,7 @@ def collect_rows(
     benchmark: str,
     hint_type_filter: str | None,
     fractioner_filter: str | None,
+    hint_fraction_filter: float | None,
 ) -> list[dict[str, Any]]:
     benchmark_dir = _benchmark_dir(benchmark)
     if not benchmark_dir.exists():
@@ -146,6 +153,12 @@ def collect_rows(
                 try:
                     hint_fraction = _parse_fraction_from_filename(jsonl_path.name)
                 except ValueError:
+                    continue
+                if hint_fraction_filter is not None and not math.isclose(
+                    hint_fraction,
+                    hint_fraction_filter,
+                    abs_tol=1e-9,
+                ):
                     continue
                 stats = _read_completion_stats(jsonl_path)
                 ckpt_complete = _read_checkpoint_complete(jsonl_path.with_suffix(".ckpt.json"))
@@ -210,15 +223,17 @@ def _plot_hint_type_histogram(
     fractioner: str,
     rows: list[dict[str, Any]],
     output_dir: Path,
+    hint_fraction_filter: float | None,
 ) -> Path:
     models = [model for model in _sort_models(rows) if _model_series(rows, model)]
     if not models:
         raise ValueError(f"No plottable rows for hint_type={hint_type} fractioner={fractioner}")
 
-    n_cols = min(4, len(models))
-    n_rows = math.ceil(len(models) / n_cols)
+    n_cols = 5
+    n_rows = max(4, math.ceil(len(models) / n_cols))
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(4.5 * n_cols, 3.6 * n_rows), squeeze=False)
     axes_flat = list(axes.flatten())
+    max_hist_count = 0.0
 
     for idx, model in enumerate(models):
         ax = axes_flat[idx]
@@ -230,7 +245,7 @@ def _plot_hint_type_histogram(
             target.extend(_load_output_token_lengths(row))
 
         if complete_values:
-            ax.hist(
+            complete_counts, _, _ = ax.hist(
                 complete_values,
                 bins=20,
                 color="#1f77b4",
@@ -238,8 +253,10 @@ def _plot_hint_type_histogram(
                 edgecolor="none",
                 label="complete",
             )
+            if len(complete_counts) > 0:
+                max_hist_count = max(max_hist_count, float(max(complete_counts)))
         if incomplete_values:
-            ax.hist(
+            incomplete_counts, _, _ = ax.hist(
                 incomplete_values,
                 bins=20,
                 color="#ff7f0e",
@@ -247,6 +264,8 @@ def _plot_hint_type_histogram(
                 edgecolor="none",
                 label="partial/unknown",
             )
+            if len(incomplete_counts) > 0:
+                max_hist_count = max(max_hist_count, float(max(incomplete_counts)))
 
         ax.set_title(model, fontsize=9)
         ax.set_xlabel("output token count")
@@ -255,6 +274,10 @@ def _plot_hint_type_histogram(
         ax.grid(True, alpha=0.3)
         ax.legend(loc="upper left", fontsize=8)
 
+    shared_y_max = max(1.0, max_hist_count * 1.05)
+    for idx in range(len(models)):
+        axes_flat[idx].set_ylim(0.0, shared_y_max)
+
     for idx in range(len(models), len(axes_flat)):
         axes_flat[idx].set_visible(False)
 
@@ -262,6 +285,11 @@ def _plot_hint_type_histogram(
         (
             f"{benchmark}: output token length histogram by model\n"
             f"hint_type={hint_type} fractioner={fractioner}"
+            + (
+                f" hint_fraction={hint_fraction_filter:.1f}"
+                if hint_fraction_filter is not None
+                else ""
+            )
         ),
         fontsize=13,
     )
@@ -270,7 +298,9 @@ def _plot_hint_type_histogram(
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / (
         f"{_safe_component(benchmark)}__{_safe_component(hint_type)}__"
-        f"{_safe_component(fractioner)}__max_tokens_hist_by_model.png"
+        f"{_safe_component(fractioner)}__"
+        f"{_safe_component(f'hint_fraction_{hint_fraction_filter:.1f}') if hint_fraction_filter is not None else 'all_hint_fractions'}__"
+        f"max_tokens_hist_by_model.png"
     )
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
@@ -314,6 +344,7 @@ def main() -> None:
         benchmark=args.benchmark,
         hint_type_filter=args.hint_type,
         fractioner_filter=args.fractioner,
+        hint_fraction_filter=args.hint_fraction,
     )
     csv_path = _write_csv(rows, args.output_dir, args.benchmark)
 
@@ -326,6 +357,7 @@ def main() -> None:
             fractioner=_safe_component(args.fractioner),
             rows=hint_type_rows,
             output_dir=args.output_dir,
+            hint_fraction_filter=args.hint_fraction,
         )
         plot_paths.append(plot_path)
         model_count = len({row["model"] for row in hint_type_rows if row["max_output_tokens"] is not None})
@@ -340,4 +372,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     # python -m runs.plot_hinted_max_tokens_vs_hint_all_models --benchmark aime2025_2026 --fractioner mask_word
+    # python -m runs.plot_hinted_max_tokens_vs_hint_all_models --benchmark aime2025_2026 --fractioner mask_word --hint-fraction 0.0
     main()

@@ -690,30 +690,23 @@ if __name__ == "__main__":
 
 """
 
-
-
 MISO
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
-    --fractioner mask_word \
-    --model meta-llama/Llama-3.3-70B-Instruct \
+    --fractioner truncate_word \
+    --model Qwen/Qwen3.5-35B-A3B \
     --executor submitit \
     --cluster miso \
     --max-connections 360 \
     --num-gpus 8 \
     --checkpoint-every 1000
 
-^260 works well, 400 untested
-^ 260 is too much for Qwen3-32B but good for 14B
-^260 is not enough for gemma 12B
-
-
 NLP
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
-    --fractioner mask_word \
+    --fractioner truncate_word \
     --model Qwen/Qwen3.5-4B \
     --executor submitit \
     --cluster sphinx \

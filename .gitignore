@@ -8,6 +8,7 @@ __pycache__/
 
 # suze
 inspect_logs/
+standalone/
 
 # Distribution / packaging
 .Python

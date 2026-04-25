@@ -20,15 +20,20 @@ MODEL_PATHS = [
     "google/gemma-3-4b-it",
     "google/gemma-3-1b-it",
     "google/gemma-3-270m-it",
+
     "meta-llama/Llama-3.1-70B-Instruct",
     "meta-llama/Llama-3.1-8B-Instruct",
     "meta-llama/Llama-3.3-70B-Instruct",
+
     "Qwen/Qwen3-32B",
     "Qwen/Qwen3-0.6B",
     "Qwen/Qwen3-1.7B",
     "Qwen/Qwen3-4B",
     "Qwen/Qwen3-8B",
     "Qwen/Qwen3-14B",
+    "Qwen/Qwen3-30B-A3B",
+    "Qwen/Qwen3-235B-A22B",
+
     "Qwen/Qwen2.5-0.5B-Instruct",
     "Qwen/Qwen2.5-1.5B-Instruct",
     "Qwen/Qwen2.5-3B-Instruct",
@@ -49,6 +54,8 @@ MODEL_PATHS = [
     "Qwen/Qwen3.5-35B-A3B",
     "Qwen/Qwen3.5-122B-A10B",
     "Qwen/Qwen3.5-397B-A17B",
+
+
 ]
 
 
