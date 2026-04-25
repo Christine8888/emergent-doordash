@@ -707,8 +707,8 @@ MISO
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
-    --fractioner mask_word \
-    --model Qwen/Qwen2.5-72B-Instruct \
+    --fractioner truncate_word \
+    --model meta-llama/Llama-2-7b-chat-hf \
     --executor submitit \
     --cluster miso \
     --max-connections 360 \

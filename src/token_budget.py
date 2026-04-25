@@ -17,6 +17,15 @@ class PromptTokenStats:
 
 
 def extract_allowed_max_tokens_from_error(error_text: str) -> int | None:
+    max_total_tokens_match = re.search(
+        r"max_tokens\s*=\s*\d+\s*cannot\s+be\s+greater\s+than\s+"
+        r"(?:max_model_len\s*=\s*)?max_total_tokens\s*=\s*(\d+)",
+        error_text,
+        flags=re.IGNORECASE,
+    )
+    if max_total_tokens_match is not None:
+        return max(1, int(max_total_tokens_match.group(1)))
+
     paren_match = re.search(
         r"\((\d+)\s*>\s*(\d+)\s*-\s*(\d+)\)",
         error_text,

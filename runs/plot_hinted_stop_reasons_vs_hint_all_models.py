@@ -457,14 +457,15 @@ def main() -> None:
         )
         plot_paths.append(plot_path)
         print(
-            f"wrote plot={plot_path} models={len(_sort_models(hint_type_rows))} rows={len(hint_type_rows)}",
+            f"wrote plot= {plot_path} models={len(_sort_models(hint_type_rows))} rows={len(hint_type_rows)}",
             flush=True,
         )
 
-    print(f"wrote csv={csv_path}", flush=True)
+    print(f"wrote csv= {csv_path}", flush=True)
     print(f"plots_written={len(plot_paths)}", flush=True)
 
 
 if __name__ == "__main__":
     # python -m runs.plot_hinted_stop_reasons_vs_hint_all_models --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner mask_word
+    # python -m runs.plot_hinted_stop_reasons_vs_hint_all_models --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner truncate_word
     main()

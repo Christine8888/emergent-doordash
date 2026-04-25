@@ -42,7 +42,7 @@ SUPPORTED_X_AXIS_METHODS = (
     "eci",
     "eci_pc1",
     "hinted_pc1",
-    "hinted_pc12_theta",
+    "hinted_pc12_linear",
     *HINTED_ACC_LOGIT_METHODS,
 )
 
@@ -313,7 +313,7 @@ def build_hinted_pc_x_axis(
     )
 
 
-def build_hinted_pc12_theta_x_axis(
+def build_hinted_pc12_linear_x_axis(
     *,
     benchmark: str,
     hint_type: str,
@@ -326,7 +326,7 @@ def build_hinted_pc12_theta_x_axis(
     lower_asymptote: float | None,
     canonicalize_model_name: Callable[[str], str] | None = None,
 ) -> XAxisSpec:
-    from scipy.optimize import minimize_scalar
+    from scipy.optimize import minimize
 
     pca_result, projected_scores, selected_hint_fractions, shared_fractioners = _fit_hinted_train_pca_and_project(
         benchmark=benchmark,
@@ -338,7 +338,7 @@ def build_hinted_pc12_theta_x_axis(
         canonicalize_model_name=canonicalize_model_name,
     )
     if projected_scores.shape[1] < 2:
-        raise ValueError("hinted_pc12_theta requires at least two hinted PCA components.")
+        raise ValueError("hinted_pc12_linear requires at least two hinted PCA components.")
 
     pc1_map = {
         str(model_name): float(projected_scores[idx, 0])
@@ -350,16 +350,29 @@ def build_hinted_pc12_theta_x_axis(
     }
     fit_model_set = set(str(model_name) for model_name in fit_models)
 
-    def build_theta_x_map(theta: float) -> dict[str, float]:
-        weight_pc1 = float(np.cos(theta))
-        weight_pc2 = float(np.sin(theta))
+    def normalize_weights(weights: np.ndarray) -> np.ndarray | None:
+        weights_array = np.asarray(weights, dtype=float)
+        norm = float(np.linalg.norm(weights_array))
+        if not np.isfinite(norm) or norm <= 1e-12:
+            return None
+        return weights_array / norm
+
+    def build_linear_x_map(weights: np.ndarray) -> dict[str, float]:
+        normalized_weights = normalize_weights(weights)
+        if normalized_weights is None:
+            raise ValueError(f"Cannot build PC1/PC2 x-axis from weights={weights}")
+        weight_pc1 = float(normalized_weights[0])
+        weight_pc2 = float(normalized_weights[1])
         return {
             str(model_name): weight_pc1 * pc1_map[str(model_name)] + weight_pc2 * pc2_map[str(model_name)]
             for model_name in selected_models
         }
 
-    def objective(theta: float) -> float:
-        x_map = build_theta_x_map(float(theta))
+    def objective(weights: np.ndarray) -> float:
+        normalized_weights = normalize_weights(weights)
+        if normalized_weights is None:
+            return float("inf")
+        x_map = build_linear_x_map(normalized_weights)
         df = build_joint_scaling_df(
             base_rows=base_rows,
             x_map=x_map,
@@ -375,21 +388,42 @@ def build_hinted_pc12_theta_x_axis(
         )
         return float(joint_result["optimizer_fun"])
 
-    theta_result = minimize_scalar(
-        objective,
-        bounds=(0.0, float(np.pi)),
-        method="bounded",
-        options={"maxiter": 200},
-    )
-    theta = float(theta_result.x)
-    weight_pc1 = float(np.cos(theta))
-    weight_pc2 = float(np.sin(theta))
-    model_to_x = build_theta_x_map(theta)
+    initial_weights = [
+        np.asarray([+1.0, 0.0], dtype=float),
+        np.asarray([-1.0, 0.0], dtype=float),
+        np.asarray([0.0, +1.0], dtype=float),
+        np.asarray([0.0, -1.0], dtype=float),
+        np.asarray([+1.0, +1.0], dtype=float),
+        np.asarray([+1.0, -1.0], dtype=float),
+        np.asarray([-1.0, +1.0], dtype=float),
+        np.asarray([-1.0, -1.0], dtype=float),
+    ]
+    constraint = {
+        "type": "eq",
+        "fun": lambda weights: float(np.dot(weights, weights) - 1.0),
+    }
+    optimize_results = [
+        minimize(
+            objective,
+            normalize_weights(weights),
+            method="SLSQP",
+            constraints=[constraint],
+            options={"maxiter": 200},
+        )
+        for weights in initial_weights
+    ]
+    linear_result = min(optimize_results, key=lambda result: float(result.fun))
+    normalized_weights = normalize_weights(np.asarray(linear_result.x, dtype=float))
+    if normalized_weights is None:
+        raise ValueError("PC1/PC2 linear optimizer returned invalid zero weights.")
+    weight_pc1 = float(normalized_weights[0])
+    weight_pc2 = float(normalized_weights[1])
+    model_to_x = build_linear_x_map(normalized_weights)
     return XAxisSpec(
-        name="hinted_pc12_theta",
-        label="Hinted PC1/PC2 Theta",
+        name="hinted_pc12_linear",
+        label="Hinted PC1/PC2 Linear",
         benchmark_label=_format_hint_fraction_label(selected_hint_fractions),
-        equation=f"C = {weight_pc1:+.3f}·PC1 {weight_pc2:+.3f}·PC2 (theta={theta:.3f})",
+        equation=f"C = {weight_pc1:+.3f}·PC1 {weight_pc2:+.3f}·PC2",
         model_to_x=model_to_x,
         metadata={
             "pca_result": pca_result,
@@ -400,11 +434,12 @@ def build_hinted_pc12_theta_x_axis(
             "shared_fractioners": list(shared_fractioners),
             "fit_model_names": list(fit_models),
             "project_model_names": list(selected_models),
-            "theta": theta,
-            "theta_weight_pc1": weight_pc1,
-            "theta_weight_pc2": weight_pc2,
-            "theta_optimizer_success": bool(theta_result.success),
-            "theta_optimizer_fun": float(theta_result.fun),
+            "linear_weight_pc1": weight_pc1,
+            "linear_weight_pc2": weight_pc2,
+            "linear_optimizer_success": bool(linear_result.success),
+            "linear_optimizer_fun": float(linear_result.fun),
+            "linear_optimizer_status": int(linear_result.status),
+            "linear_optimizer_message": str(linear_result.message),
             "pc1_map": dict(pc1_map),
             "pc2_map": dict(pc2_map),
         },
@@ -569,11 +604,11 @@ def build_x_axes_from_methods(
             )
             continue
 
-        if method == "hinted_pc12_theta":
+        if method == "hinted_pc12_linear":
             if base_rows is None:
-                raise ValueError("hinted_pc12_theta requires base_rows.")
+                raise ValueError("hinted_pc12_linear requires base_rows.")
             x_axes.append(
-                build_hinted_pc12_theta_x_axis(
+                build_hinted_pc12_linear_x_axis(
                     benchmark=benchmark,
                     hint_type=hint_type,
                     fractioner=fractioner,
