@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -31,6 +31,7 @@ from src.scaling_data import (
     load_canonical_combo_results,
     resolve_models_to_use,
 )
+from src.model_config import filter_models_for_fractioner, models_excluded_from_selection
 from src.scaling_runner import plot_accuracy_views_for_x_axes
 from src.joint_scaling_runner import run_joint_scaling_for_x_axis
 from src.x_axes import (
@@ -46,35 +47,6 @@ PC_BENCHMARK_ORDER = [EVAL_TO_ECI[eval_name] for eval_name in EVAL_TO_ECI]
 DEFAULT_JOINT_LOWER_ASYMPTOTE = 0.0
 DEFAULT_HINTED_PC_HINT_FRACTIONS = [fraction for fraction in EXPECTED_FRACTIONS if fraction > 0.0]
 DEFAULT_X_AXIS_METHODS = list(SUPPORTED_X_AXIS_METHODS)
-EXCLUDE_MODELS: set[str] = {
-    "Qwen/Qwen3.5-0.8B",
-    "Qwen/Qwen3.5-2B",
-    "Qwen/Qwen3.5-4B",
-    "Qwen/Qwen3.5-9B",
-    "Qwen/Qwen3.5-27B",
-    "google/gemma-3-270m-it",
-}
-DEFAULT_MODELS_TO_USE: list[str] | None = [
-    "google/gemma-3-27b-it",
-    "meta-llama/Llama-3.1-70B-Instruct",
-    "Qwen/Qwen3-32B",
-    "Qwen/Qwen3-14B",
-    "Qwen/Qwen2.5-32B-Instruct",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "google/gemma-3-12b-it",
-    "Qwen/Qwen3-0.6B",
-    "Qwen/Qwen3-1.7B",
-    "Qwen/Qwen3-4B",
-    "Qwen/Qwen3-8B",
-    "Qwen/Qwen2.5-1.5B-Instruct",
-    "Qwen/Qwen2.5-3B-Instruct",
-    "Qwen/Qwen2.5-7B-Instruct",
-    "google/gemma-3-4b-it",
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "google/gemma-3-1b-it",
-    "Qwen/Qwen2.5-0.5B-Instruct",
-    "meta-llama/Llama-3.3-70B-Instruct",
-]
 
 
 @dataclass
@@ -94,11 +66,7 @@ class ScalingRunConfig:
     output_root: Path = PLOTS_ROOT
     output_subdir: Path | None = None
     log_prefix: str = "[plot_scaling]"
-    preferred_models: list[str] | None = field(
-        default_factory=lambda: (
-            None if DEFAULT_MODELS_TO_USE is None else list(DEFAULT_MODELS_TO_USE)
-        )
-    )
+    preferred_models: list[str] | None = None
     restrict_models_to_x_axes: bool = False
     joint_lower_asymptote: float = DEFAULT_JOINT_LOWER_ASYMPTOTE
     pca_summary_lines_fn: Callable[[XAxisSpec], list[str] | None] | None = None
@@ -110,11 +78,6 @@ class ScalingRunResult:
     output_dir: Path
     plot_paths: dict[str, dict[str, str]]
     joint_metrics: dict[str, object] | None
-
-
-def _normalize_model_name(model: str) -> str:
-    # Support both full model paths and basename-only names.
-    return str(model).strip().split("/")[-1]
 
 
 def _parse_args() -> argparse.Namespace:
@@ -578,26 +541,36 @@ def run_scaling(config: ScalingRunConfig) -> ScalingRunResult:
         hint_type=config.hint_type,
         fractioner=config.fractioner,
     )
+    preferred_models = config.preferred_models
+    if preferred_models is not None:
+        excluded_preferred_models = models_excluded_from_selection(
+            list(preferred_models),
+            config.fractioner,
+        )
+        if excluded_preferred_models:
+            preferred_models = filter_models_for_fractioner(
+                list(preferred_models),
+                config.fractioner,
+            )
+            print(
+                f"{config.log_prefix} excluding preferred models via model_config: "
+                f"{excluded_preferred_models}"
+            )
     models = resolve_models_to_use(
         available_models=available_models,
         benchmark=config.benchmark,
-        preferred_models=config.preferred_models,
+        preferred_models=preferred_models,
     )
-    excluded_model_names = {_normalize_model_name(model) for model in EXCLUDE_MODELS}
-    excluded_models = sorted(
-        model for model in models if _normalize_model_name(model) in excluded_model_names
-    )
+    excluded_models = models_excluded_from_selection(models, config.fractioner)
     if excluded_models:
-        models = [
-            model for model in models if _normalize_model_name(model) not in excluded_model_names
-        ]
+        models = filter_models_for_fractioner(models, config.fractioner)
         print(
-            f"{config.log_prefix} excluding models via EXCLUDE_MODELS: {excluded_models}"
+            f"{config.log_prefix} excluding models via model_config: {excluded_models}"
         )
     if not models:
         raise ValueError(
-            "All selected models were excluded by EXCLUDE_MODELS. "
-            "Update EXCLUDE_MODELS or adjust preferred_models."
+            "All selected models were excluded by model_config. "
+            "Update FRACTIONER_EXCLUDED_MODELS or adjust preferred_models."
         )
     if config.eci_file is not None:
         eci_map = load_eci_map(Path(config.eci_file))
@@ -615,7 +588,7 @@ def run_scaling(config: ScalingRunConfig) -> ScalingRunResult:
             )
         if not models:
             raise ValueError(
-                "No models left after applying EXCLUDE_MODELS and ECI availability filtering."
+                "No models left after applying model_config exclusions and ECI availability filtering."
             )
     if config.num_holdout_models < 0:
         raise ValueError(f"num_holdout_models must be >= 0, got {config.num_holdout_models}")
@@ -780,7 +753,6 @@ def main() -> None:
             run_joint_for_all_x_axes=True,
             output_root=PLOTS_ROOT,
             log_prefix="[plot_scaling]",
-            preferred_models=DEFAULT_MODELS_TO_USE,
         )
     )
 
@@ -804,6 +776,12 @@ python -m runs.plot_scaling \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
+    --num-holdout-models 0 
+
+python -m runs.plot_scaling \
+    --benchmark aime2025_2026 \
+    --hint-type answer_not_revealed \
+    --fractioner truncate_word \
     --num-holdout-models 0 
 
 """

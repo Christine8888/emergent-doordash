@@ -2,8 +2,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.model_config import ALL_MODEL_PATHS
 
 PARAM_KEYS = (
     "do_sample",
@@ -13,50 +20,6 @@ PARAM_KEYS = (
     "max_new_tokens",
     "repetition_penalty",
 )
-
-MODEL_PATHS = [
-    "google/gemma-3-27b-it",
-    "google/gemma-3-12b-it",
-    "google/gemma-3-4b-it",
-    "google/gemma-3-1b-it",
-    "google/gemma-3-270m-it",
-
-    "meta-llama/Llama-3.1-70B-Instruct",
-    "meta-llama/Llama-3.1-8B-Instruct",
-    "meta-llama/Llama-3.3-70B-Instruct",
-
-    "Qwen/Qwen3-32B",
-    "Qwen/Qwen3-0.6B",
-    "Qwen/Qwen3-1.7B",
-    "Qwen/Qwen3-4B",
-    "Qwen/Qwen3-8B",
-    "Qwen/Qwen3-14B",
-    "Qwen/Qwen3-30B-A3B",
-    "Qwen/Qwen3-235B-A22B",
-
-    "Qwen/Qwen2.5-0.5B-Instruct",
-    "Qwen/Qwen2.5-1.5B-Instruct",
-    "Qwen/Qwen2.5-3B-Instruct",
-    "Qwen/Qwen2.5-7B-Instruct",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "Qwen/Qwen2.5-32B-Instruct",
-    "Qwen/Qwen2.5-72B-Instruct",
-    
-    "meta-llama/Llama-2-7b-chat-hf",
-    "meta-llama/Llama-2-13b-chat-hf",
-    "meta-llama/Llama-2-70b-chat-hf",
-
-    "Qwen/Qwen3.5-0.8B",
-    "Qwen/Qwen3.5-2B",
-    "Qwen/Qwen3.5-4B",
-    "Qwen/Qwen3.5-9B",
-    "Qwen/Qwen3.5-27B",
-    "Qwen/Qwen3.5-35B-A3B",
-    "Qwen/Qwen3.5-122B-A10B",
-    "Qwen/Qwen3.5-397B-A17B",
-
-
-]
 
 
 def _safe_model_name(model_path: str) -> str:
@@ -75,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         type=str,
         default="data/model_generation_configs",
-        help="Directory to save per-model generation config files and a summary JSON.",
+        help="Directory to save generation configs for models in src.model_config.ALL_MODEL_PATHS.",
     )
     return parser
 
@@ -93,7 +56,7 @@ def main() -> None:
 
     summary: dict[str, dict[str, Any] | None] = {}
 
-    for model_path in MODEL_PATHS:
+    for model_path in ALL_MODEL_PATHS:
         safe_name = _safe_model_name(model_path)
         out_path = output_dir / f"{safe_name}.generation_config.json"
 

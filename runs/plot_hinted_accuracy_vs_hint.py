@@ -17,6 +17,11 @@ from src.hinted_accuracy import (
     discover_models_for_benchmark as canonical_discover_models_for_benchmark,
     load_luke_results_with_ci_for_combo,
 )
+from src.model_config import (
+    filter_models_for_fractioner,
+    is_model_excluded_for_fractioner,
+    models_excluded_from_selection,
+)
 
 
 DATA_ROOT = Path("data")
@@ -25,26 +30,12 @@ PLOTS_ROOT = Path("plots/accuracy_vs_hint")
 EXPECTED_FRACTIONS = [i / 10 for i in range(11)]
 AIME_SPLIT_BENCHMARK = "aime2025_2026"
 AIME_SPLIT_HINT_TYPE = "answer_not_revealed"
-EXCLUDE_MODELS: set[str] = {
-    # "Qwen/Qwen3.5-0.8B",
-    # "Qwen/Qwen3.5-2B",
-    # "Qwen/Qwen3.5-4B",
-    # "Qwen/Qwen3.5-9B",
-    # "Qwen/Qwen3.5-27B",
-    # "google/gemma-3-270m-it",
-}
 ProblemIdPredicate = Callable[[str], bool]
 
 
 def _safe_component(text: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", text.strip())
     return cleaned or "unknown"
-
-
-def _normalize_model_name(model: str) -> str:
-    # Some sources use full HF-style paths (e.g. "Qwen/Qwen3.5-4B"),
-    # while discovered/local names are basename-only (e.g. "Qwen3.5-4B").
-    return model.strip().split("/")[-1]
 
 
 def _extract_problem_index(problem_id: str) -> int | None:
@@ -112,6 +103,14 @@ def _parse_args() -> argparse.Namespace:
             "for points missing from local rows."
         ),
     )
+    parser.add_argument(
+        "--include-split-plots",
+        action="store_true",
+        help=(
+            "Also render split plots for benchmark subsets (e.g., aime2025/aime2026 when "
+            "supported). Disabled by default."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -121,7 +120,7 @@ def _discover_models(
     hint_type: str,
     fractioner: str | None,
 ) -> list[str]:
-    models = set(canonical_discover_models_for_benchmark(benchmark))
+    models = set(canonical_discover_models_for_benchmark(benchmark, fractioner=fractioner))
 
     fractioners = [fractioner] if fractioner is not None else []
     if not fractioners:
@@ -153,7 +152,7 @@ def _discover_models(
             ).keys()
         )
 
-    models = local_models | luke_models
+    models = set(filter_models_for_fractioner(sorted(local_models | luke_models), fractioner))
 
     if not models:
         benchmark_dir = DATA_ROOT / "hinted_inference" / _safe_component(benchmark)
@@ -543,6 +542,13 @@ def _collect_rows_for_models(
             continue
 
         for current_fractioner in fractioners:
+            if is_model_excluded_for_fractioner(model, current_fractioner):
+                print(
+                    f"[plot_hinted_accuracy_vs_hint] excluding model={model} "
+                    f"for fractioner={current_fractioner} via model_config",
+                    flush=True,
+                )
+                continue
             local_fraction_rows, local_warnings = collect_complete_fraction_stats(
                 benchmark=benchmark,
                 model=model,
@@ -638,6 +644,15 @@ def main() -> None:
                 "When passing specific models, do not include 'all'. "
                 f"Requested: {requested_models}"
             )
+        excluded_requested_models = models_excluded_from_selection(
+            requested_models,
+            args.fractioner,
+        )
+        if excluded_requested_models:
+            raise ValueError(
+                f"Requested model(s) excluded for fractioner={args.fractioner!r}: "
+                f"{excluded_requested_models}"
+            )
         missing_models = sorted(set(requested_models) - set(models_available))
         if missing_models:
             raise ValueError(
@@ -645,23 +660,10 @@ def main() -> None:
                 f"Available: {models_available}"
             )
         models_to_plot = sorted(set(requested_models))
-
-    excluded_model_names = {_normalize_model_name(model) for model in EXCLUDE_MODELS}
-    excluded_models = sorted(
-        model for model in models_to_plot if _normalize_model_name(model) in excluded_model_names
-    )
-    if excluded_models:
-        models_to_plot = [
-            model for model in models_to_plot if _normalize_model_name(model) not in excluded_model_names
-        ]
-        print(
-            "[plot_hinted_accuracy_vs_hint] excluding models via EXCLUDE_MODELS: "
-            f"{excluded_models}"
-        )
     if not models_to_plot:
         raise ValueError(
-            "All selected models were excluded by EXCLUDE_MODELS. "
-            "Update EXCLUDE_MODELS or pass different --model values."
+            "All selected models were excluded by model_config. "
+            "Update FRACTIONER_EXCLUDED_MODELS or pass different --model values."
         )
 
     rows, external_rows = _collect_rows_for_models(
@@ -767,54 +769,55 @@ def main() -> None:
     print(f"[plot_hinted_accuracy_vs_hint] wrote_accuracy_table_csv= {accuracy_table_csv_path}")
     print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {png_path}")
 
-    for split_name, split_predicate in _split_plot_specs(
-        benchmark=args.benchmark,
-        hint_type=args.hint_type,
-    ):
-        split_rows, split_external_rows = _collect_rows_for_models(
+    if args.include_split_plots:
+        for split_name, split_predicate in _split_plot_specs(
             benchmark=args.benchmark,
             hint_type=args.hint_type,
-            models_to_plot=models_to_plot,
-            fractioner=args.fractioner,
-            problem_id_predicate=split_predicate,
-        )
-        if not split_rows and not split_external_rows:
-            print(
-                "[plot_hinted_accuracy_vs_hint][WARN] skipping split plot with no data "
-                f"split={split_name}"
+        ):
+            split_rows, split_external_rows = _collect_rows_for_models(
+                benchmark=args.benchmark,
+                hint_type=args.hint_type,
+                models_to_plot=models_to_plot,
+                fractioner=args.fractioner,
+                problem_id_predicate=split_predicate,
             )
-            continue
+            if not split_rows and not split_external_rows:
+                print(
+                    "[plot_hinted_accuracy_vs_hint][WARN] skipping split plot with no data "
+                    f"split={split_name}"
+                )
+                continue
 
-        split_rows_sorted = sorted(
-            split_rows,
-            key=lambda r: (str(r["model"]), str(r["fractioner"]), float(r["hint_fraction"])),
-        )
-        split_plot_rows = split_rows_sorted
-        split_plot_fit_map = _build_fit_map(split_rows_sorted)
-        split_plot_external_rows = split_external_rows
-        split_plot_external_fit_map = _build_fit_map(split_external_rows)
-        if args.clean:
-            split_plot_rows = _merge_rows_for_clean_plot(split_rows_sorted, split_external_rows)
-            split_plot_fit_map = _build_fit_map(split_plot_rows)
-            split_plot_external_rows = []
-            split_plot_external_fit_map = {}
+            split_rows_sorted = sorted(
+                split_rows,
+                key=lambda r: (str(r["model"]), str(r["fractioner"]), float(r["hint_fraction"])),
+            )
+            split_plot_rows = split_rows_sorted
+            split_plot_fit_map = _build_fit_map(split_rows_sorted)
+            split_plot_external_rows = split_external_rows
+            split_plot_external_fit_map = _build_fit_map(split_external_rows)
+            if args.clean:
+                split_plot_rows = _merge_rows_for_clean_plot(split_rows_sorted, split_external_rows)
+                split_plot_fit_map = _build_fit_map(split_plot_rows)
+                split_plot_external_rows = []
+                split_plot_external_fit_map = {}
 
-        split_png_path = PLOTS_ROOT / f"{stem}__{split_name}__bootstrap.png"
-        _plot(
-            split_plot_rows,
-            fit_map=split_plot_fit_map,
-            external_results=split_plot_external_rows,
-            external_fit_map=split_plot_external_fit_map,
-            output_png=split_png_path,
-            show_values=args.show_values,
-            title=(
-                f"Hinted Accuracy vs Hint Fraction ({split_name})\n"
-                f"benchmark={args.benchmark} hint_type={args.hint_type} "
-                f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
-                f"[{'clean' if args.clean else 'full'}]"
-            ),
-        )
-        print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {split_png_path}")
+            split_png_path = PLOTS_ROOT / f"{stem}__{split_name}__bootstrap.png"
+            _plot(
+                split_plot_rows,
+                fit_map=split_plot_fit_map,
+                external_results=split_plot_external_rows,
+                external_fit_map=split_plot_external_fit_map,
+                output_png=split_png_path,
+                show_values=args.show_values,
+                title=(
+                    f"Hinted Accuracy vs Hint Fraction ({split_name})\n"
+                    f"benchmark={args.benchmark} hint_type={args.hint_type} "
+                    f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
+                    f"[{'clean' if args.clean else 'full'}]"
+                ),
+            )
+            print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {split_png_path}")
 
 
 if __name__ == "__main__":

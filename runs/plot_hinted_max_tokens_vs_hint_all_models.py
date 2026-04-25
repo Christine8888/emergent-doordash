@@ -10,6 +10,8 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 
+from src.model_config import is_model_excluded_for_fractioner
+
 
 DATA_ROOT = Path("data")
 PLOTS_ROOT = Path("plots/hinted_max_tokens_vs_hint")
@@ -139,6 +141,8 @@ def collect_rows(
     rows: list[dict[str, Any]] = []
     for model_dir in sorted(path for path in benchmark_dir.iterdir() if path.is_dir()):
         model = model_dir.name
+        if is_model_excluded_for_fractioner(model, fractioner_filter):
+            continue
         for combo_dir in sorted(path for path in model_dir.iterdir() if path.is_dir()):
             try:
                 hint_type, fractioner = _split_combo_name(combo_dir.name)

@@ -14,6 +14,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.model_config import is_model_excluded_for_fractioner
+
 DATA_ROOT = PROJECT_ROOT / "data"
 DATASETS_ROOT = DATA_ROOT / "datasets"
 HINTED_INFERENCE_ROOT = DATA_ROOT / "hinted_inference"
@@ -54,7 +56,15 @@ def _discover_hint_fractioners(benchmark_name: str, model_name: str) -> list[str
     root = HINTED_INFERENCE_ROOT / benchmark_name / model_name
     if not root.exists():
         return []
-    return sorted(path.name for path in root.iterdir() if path.is_dir())
+    hint_fractioners: list[str] = []
+    for path in root.iterdir():
+        if not path.is_dir():
+            continue
+        _hint_type, fractioner = _split_hint_fractioner(path.name)
+        if is_model_excluded_for_fractioner(model_name, fractioner):
+            continue
+        hint_fractioners.append(path.name)
+    return sorted(hint_fractioners)
 
 
 def _discover_fraction_files(benchmark_name: str, model_name: str, hint_fractioner: str) -> list[Path]:

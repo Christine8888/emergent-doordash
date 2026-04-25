@@ -7,6 +7,8 @@ from typing import Any, Callable
 
 import numpy as np
 
+from src.model_config import filter_models_for_fractioner
+
 
 DATA_ROOT = Path("data")
 LUKE_AIME_RESULTS_ROOT = DATA_ROOT / "luke_aime2025_2026_results"
@@ -56,11 +58,12 @@ def _discover_luke_models_for_fractioner(fractioner: str) -> list[str]:
     fractioner_dir = LUKE_AIME_RESULTS_ROOT / safe_component(fractioner)
     if not fractioner_dir.exists():
         return []
-    return sorted(
+    models = sorted(
         path.name
         for path in fractioner_dir.iterdir()
         if path.is_dir() and path.name != "submitit_logs"
     )
+    return filter_models_for_fractioner(models, fractioner)
 
 
 def _discover_luke_fraction_files(
@@ -332,12 +335,17 @@ def parse_results_with_ci_payload(
     return out
 
 
-def discover_models_for_benchmark(benchmark: str, *, data_root: Path = DATA_ROOT) -> list[str]:
+def discover_models_for_benchmark(
+    benchmark: str,
+    *,
+    data_root: Path = DATA_ROOT,
+    fractioner: str | None = None,
+) -> list[str]:
     models: set[str] = set()
     benchmark_dir = data_root / "hinted_inference" / safe_component(benchmark)
     if benchmark_dir.exists():
         models.update(path.name for path in benchmark_dir.iterdir() if path.is_dir())
-    return sorted(models)
+    return filter_models_for_fractioner(sorted(models), fractioner)
 
 
 def discover_fractioners(
@@ -561,7 +569,11 @@ def load_local_results_with_ci_for_combo(
     data_root: Path = DATA_ROOT,
 ) -> dict[str, dict[float, dict[str, float]]]:
     rows: list[dict[str, Any]] = []
-    for model in discover_models_for_benchmark(benchmark, data_root=data_root):
+    for model in discover_models_for_benchmark(
+        benchmark,
+        data_root=data_root,
+        fractioner=fractioner,
+    ):
         model_rows, _warnings = collect_complete_fraction_stats(
             benchmark=benchmark,
             model=model,

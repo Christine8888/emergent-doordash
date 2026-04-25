@@ -9,7 +9,13 @@ from typing import Any
 
 from src.hint_types import HintType
 from src.hinted_inference import build_expanded_hinted_prompt_dataset, run_hinted_inference
-from src.model_config import ALL_MODEL_PATHS, ModelSpec, get_model_spec
+from src.model_config import (
+    ALL_MODEL_PATHS,
+    ModelSpec,
+    filter_model_specs_for_fractioner,
+    get_model_spec,
+    models_excluded_from_selection,
+)
 from src.storage import build_hint_generation_path, build_hinted_inference_path, read_jsonl
 from src.types import ExpandedHintedPromptRecord, HintGenerationRecord, HintedInferenceRecord
 from src.vllm_server import DEFAULT_HEALTH_TIMEOUT_SECONDS, VLLMServer, VLLMServerConfig
@@ -370,13 +376,20 @@ def _apply_job_cap(models: list[ModelSpec], max_jobs: int | None) -> list[ModelS
     return models[:max_jobs]
 
 
-def _selected_models(model: str) -> list[ModelSpec]:
+def _selected_models(model: str, *, fractioner: str) -> list[ModelSpec]:
     if not MODELS_TO_RUN:
         raise ValueError("MODELS_TO_RUN cannot be empty")
     if model == "all":
-        return [get_model_spec(model_path) for model_path in MODELS_TO_RUN]
+        selected = [get_model_spec(model_path) for model_path in MODELS_TO_RUN]
+        selected = filter_model_specs_for_fractioner(selected, fractioner)
+        if not selected:
+            raise ValueError(f"All MODELS_TO_RUN entries are excluded for fractioner={fractioner!r}")
+        return selected
     if model not in MODELS_TO_RUN:
         raise ValueError(f"Model {model!r} is not in MODELS_TO_RUN")
+    excluded = models_excluded_from_selection([model], fractioner)
+    if excluded:
+        raise ValueError(f"Model {model!r} is excluded for fractioner={fractioner!r}")
     return [get_model_spec(model)]
 
 
@@ -666,7 +679,7 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
-    models = _selected_models(args.model)
+    models = _selected_models(args.model, fractioner=args.fractioner)
     models = _apply_job_cap(models, args.max_jobs)
     _validate_together_pricing(models, backend=args.backend)
     sampling_params_by_model = _load_sampling_params(models)
@@ -694,7 +707,7 @@ MISO
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
-    --fractioner truncate_word \
+    --fractioner mask_word \
     --model Qwen/Qwen2.5-72B-Instruct \
     --executor submitit \
     --cluster miso \

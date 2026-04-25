@@ -143,12 +143,72 @@ GEMMA_MODELS = [
 ]
 
 OPENAI_MODELS = [
-    # ModelSpec("openai/gpt-oss-120b", tp=4, constraint=LARGE_MODEL_CONSTRAINT, **OPENAI_SAMPLING),
-    # ModelSpec("openai/gpt-oss-20b", tp=4, constraint=LARGE_MODEL_CONSTRAINT, **OPENAI_SAMPLING),
+    ModelSpec("openai/gpt-oss-120b", tp=4, constraint=LARGE_MODEL_CONSTRAINT, **OPENAI_SAMPLING),
+    ModelSpec("openai/gpt-oss-20b", tp=4, constraint=LARGE_MODEL_CONSTRAINT, **OPENAI_SAMPLING),
 ]
 
 ALL_MODELS = QWEN3_MODELS + QWEN25_MODELS + LLAMA_MODELS + GEMMA_MODELS + OPENAI_MODELS + QWEN35_MODELS
 ALL_MODEL_PATHS = [m.path for m in ALL_MODELS]
+
+MASK_WORD_EXCLUDED_MODELS: set[str] = {
+    "Qwen/Qwen3.5-0.8B",
+    "Qwen/Qwen3.5-2B",
+    "Qwen/Qwen3.5-4B",
+    "Qwen/Qwen3.5-9B",
+    "Qwen/Qwen3.5-27B",
+    # "google/gemma-3-270m-it",
+}
+TRUNCATE_WORD_EXCLUDED_MODELS: set[str] = set()
+
+FRACTIONER_EXCLUDED_MODELS: dict[str, set[str]] = {
+    "mask_word": MASK_WORD_EXCLUDED_MODELS,
+    "truncate_word": TRUNCATE_WORD_EXCLUDED_MODELS,
+}
+
+
+def normalize_model_name(model: str) -> str:
+    return str(model).strip().split("/")[-1]
+
+
+def excluded_models_for_fractioner(fractioner: str | None) -> set[str]:
+    if fractioner is None:
+        return set()
+    return set(FRACTIONER_EXCLUDED_MODELS.get(fractioner, set()))
+
+
+def is_model_excluded_for_fractioner(model: str, fractioner: str | None) -> bool:
+    excluded_model_names = {
+        normalize_model_name(excluded_model)
+        for excluded_model in excluded_models_for_fractioner(fractioner)
+    }
+    return normalize_model_name(model) in excluded_model_names
+
+
+def models_excluded_from_selection(models: list[str], fractioner: str | None) -> list[str]:
+    return sorted(
+        model
+        for model in models
+        if is_model_excluded_for_fractioner(model, fractioner)
+    )
+
+
+def filter_models_for_fractioner(models: list[str], fractioner: str | None) -> list[str]:
+    return [
+        model
+        for model in models
+        if not is_model_excluded_for_fractioner(model, fractioner)
+    ]
+
+
+def filter_model_specs_for_fractioner(
+    models: list[ModelSpec],
+    fractioner: str | None,
+) -> list[ModelSpec]:
+    return [
+        model
+        for model in models
+        if not is_model_excluded_for_fractioner(model.path, fractioner)
+    ]
 
 
 def get_model_spec(model_path: str) -> ModelSpec:
@@ -158,11 +218,23 @@ def get_model_spec(model_path: str) -> ModelSpec:
     raise KeyError(f"Unknown model path: {model_path!r}")
 
 
-def select_models(model: str, *, max_models: int | None = None) -> list[ModelSpec]:
+def select_models(
+    model: str,
+    *,
+    max_models: int | None = None,
+    fractioner: str | None = None,
+) -> list[ModelSpec]:
     if model == "all":
         selected = list(ALL_MODELS)
     else:
+        excluded = models_excluded_from_selection([model], fractioner)
+        if excluded:
+            raise ValueError(
+                f"Model {model!r} is excluded for fractioner={fractioner!r}"
+            )
         selected = [get_model_spec(model)]
+
+    selected = filter_model_specs_for_fractioner(selected, fractioner)
 
     if max_models is not None:
         if max_models < 1:

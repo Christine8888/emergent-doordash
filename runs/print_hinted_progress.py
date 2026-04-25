@@ -4,7 +4,7 @@ import argparse
 
 from src.hint_types import HintType
 from src.hinted_progress import ModelHintProgress, compute_model_hint_progress, print_progress_report
-from src.model_config import ALL_MODEL_PATHS, get_model_spec
+from src.model_config import ALL_MODEL_PATHS, filter_models_for_fractioner, get_model_spec
 
 DEFAULT_HINT_FRACTIONS = [i / 10 for i in range(11)]
 
@@ -41,8 +41,11 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _selected_models() -> list[str]:
-    return [get_model_spec(model_path).name for model_path in ALL_MODEL_PATHS]
+def _selected_models(fractioner: str) -> list[str]:
+    model_paths = filter_models_for_fractioner(list(ALL_MODEL_PATHS), fractioner)
+    if not model_paths:
+        raise ValueError(f"All models are excluded for fractioner={fractioner!r}")
+    return [get_model_spec(model_path).name for model_path in model_paths]
 
 
 def _selected_hint_types(hint_type: str) -> list[str]:
@@ -55,7 +58,7 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
-    model_names = _selected_models()
+    model_names = _selected_models(args.fractioner)
     hint_types = _selected_hint_types(args.hint_type)
 
     rows: list[ModelHintProgress] = []

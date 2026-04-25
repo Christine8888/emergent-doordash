@@ -11,6 +11,8 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 
+from src.model_config import is_model_excluded_for_fractioner, models_excluded_from_selection
+
 
 DATA_ROOT = Path("data")
 PLOTS_ROOT = Path("plots/hinted_stop_reasons_vs_hint")
@@ -157,6 +159,8 @@ def collect_rows(
     rows: list[dict[str, Any]] = []
     for model_dir in sorted(path for path in benchmark_dir.iterdir() if path.is_dir()):
         model = model_dir.name
+        if is_model_excluded_for_fractioner(model, fractioner_filter):
+            continue
         if model_filter is not None and model not in model_filter:
             continue
         for combo_dir in sorted(path for path in model_dir.iterdir() if path.is_dir()):
@@ -411,6 +415,15 @@ def main() -> None:
             raise ValueError(
                 "When passing specific models, do not include 'all'. "
                 f"Requested: {requested_models}"
+            )
+        excluded_requested_models = models_excluded_from_selection(
+            requested_models,
+            args.fractioner,
+        )
+        if excluded_requested_models:
+            raise ValueError(
+                f"Requested model(s) excluded for fractioner={args.fractioner!r}: "
+                f"{excluded_requested_models}"
             )
         model_filter = set(requested_models)
         model_component = "__".join(_safe_component(model) for model in sorted(model_filter))
