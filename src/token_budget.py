@@ -49,6 +49,14 @@ def extract_allowed_max_tokens_from_error(error_text: str) -> int | None:
     return None
 
 
+def apply_max_token_safety_margin(
+    allowed_max_tokens: int,
+    *,
+    safety_margin: int = MAX_TOKEN_CLAMP_SAFETY_MARGIN,
+) -> int:
+    return max(1, allowed_max_tokens - max(0, safety_margin))
+
+
 def format_exception_message(exc: Exception) -> str:
     message = str(exc).strip()
     if message:

@@ -18,6 +18,7 @@ from src.storage import _model_storage_component, _safe_component, append_jsonl,
 from src.token_budget import (
     MAX_TOKEN_CLAMP_SAFETY_MARGIN,
     PromptTokenStats,
+    apply_max_token_safety_margin as _apply_max_token_safety_margin,
     count_prompt_tokens_with_tokenizer as _count_prompt_tokens_with_tokenizer,
     extract_allowed_max_tokens_from_error as _extract_allowed_max_tokens_from_error,
     normalize_context_limit as _normalize_context_limit,
@@ -1246,14 +1247,15 @@ def _extract_clipped_sample_requests(
         sample_error = sample.get("error")
         if sample_error is not None:
             error_text = _stringify_sample_error(sample_error)
-            allowed_max_tokens = _extract_allowed_max_tokens_from_error(error_text)
-            if allowed_max_tokens is None:
+            raw_allowed_max_tokens = _extract_allowed_max_tokens_from_error(error_text)
+            if raw_allowed_max_tokens is None:
                 formatted_error = f"id={problem_id} epoch={epoch} error={error_text}"
                 if _is_recoverable_incomplete_sample_error(error_text):
                     incomplete_errors.append(formatted_error)
                 else:
                     unresolved_errors.append(formatted_error)
                 continue
+            allowed_max_tokens = _apply_max_token_safety_margin(raw_allowed_max_tokens)
             clip_requests_by_key[(str(problem_id), epoch)] = ClippedSampleRequest(
                 problem_id=str(problem_id),
                 epoch=epoch,
@@ -1265,14 +1267,15 @@ def _extract_clipped_sample_requests(
         output_overflow_text = _extract_output_max_token_overflow(sample)
         if output_overflow_text is None:
             continue
-        allowed_max_tokens = _extract_allowed_max_tokens_from_error(output_overflow_text)
-        if allowed_max_tokens is None:
+        raw_allowed_max_tokens = _extract_allowed_max_tokens_from_error(output_overflow_text)
+        if raw_allowed_max_tokens is None:
             formatted_error = f"id={problem_id} epoch={epoch} error={output_overflow_text}"
             if _is_recoverable_incomplete_sample_error(output_overflow_text):
                 incomplete_errors.append(formatted_error)
             else:
                 unresolved_errors.append(formatted_error)
             continue
+        allowed_max_tokens = _apply_max_token_safety_margin(raw_allowed_max_tokens)
         clip_requests_by_key[(str(problem_id), epoch)] = ClippedSampleRequest(
             problem_id=str(problem_id),
             epoch=epoch,

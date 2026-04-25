@@ -31,6 +31,7 @@ from src.storage import (
 from src.token_budget import (
     MAX_TOKEN_CLAMP_SAFETY_MARGIN,
     PromptTokenStats,
+    apply_max_token_safety_margin as _apply_max_token_safety_margin,
     count_prompt_tokens_with_tokenizer as _count_prompt_tokens_with_tokenizer,
     extract_allowed_max_tokens_from_error as _extract_allowed_max_tokens_from_error,
     format_exception_message as _format_exception_message,
@@ -1146,7 +1147,12 @@ async def _run_all_candidates(
                     break
                 except Exception as exc:
                     error_text = _format_exception_message(exc)
-                    allowed_max_tokens = _extract_allowed_max_tokens_from_error(error_text)
+                    raw_allowed_max_tokens = _extract_allowed_max_tokens_from_error(error_text)
+                    allowed_max_tokens = (
+                        _apply_max_token_safety_margin(raw_allowed_max_tokens)
+                        if raw_allowed_max_tokens is not None
+                        else None
+                    )
                     if (
                         allowed_max_tokens is not None
                         and allowed_max_tokens < request_max_tokens
@@ -1157,6 +1163,8 @@ async def _run_all_candidates(
                             f"[hinted_inference] clip_max_tokens model={model} "
                             f"fraction={hint_fraction} inference_id={item_candidate.inference_id} "
                             f"attempt={attempt_idx + 1}/{max_retries + 1} "
+                            f"raw_allowed_max_tokens={raw_allowed_max_tokens} "
+                            f"safety_margin={MAX_TOKEN_CLAMP_SAFETY_MARGIN} "
                             f"new_max_tokens={request_max_tokens}",
                             flush=True,
                         )

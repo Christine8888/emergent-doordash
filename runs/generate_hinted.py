@@ -695,7 +695,7 @@ python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner truncate_word \
-    --model Qwen/Qwen3.5-35B-A3B \
+    --model Qwen/Qwen2.5-72B-Instruct \
     --executor submitit \
     --cluster miso \
     --max-connections 360 \
