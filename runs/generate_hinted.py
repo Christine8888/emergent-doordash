@@ -17,6 +17,7 @@ from src.model_config import (
     models_excluded_from_selection,
 )
 from src.storage import build_hint_generation_path, build_hinted_inference_path, read_jsonl
+from src.token_budget import MAX_TOKEN_CLAMP_SAFETY_MARGIN
 from src.types import ExpandedHintedPromptRecord, HintGenerationRecord, HintedInferenceRecord
 from src.vllm_server import DEFAULT_HEALTH_TIMEOUT_SECONDS, VLLMServer, VLLMServerConfig
 
@@ -87,6 +88,7 @@ def _run_single_model_job(
     dtype: str,
     backend: str,
     build_only: bool,
+    context_limit_override: int | None,
     token_pricing_per_million: dict[str, float] | None,
 ) -> dict[str, Any]:
     if build_only:
@@ -110,6 +112,7 @@ def _run_single_model_job(
             vllm_metrics_url=None,
             backend=backend,
             build_only=True,
+            context_limit_override=context_limit_override,
             token_pricing_per_million=token_pricing_per_million,
             run_metadata=run_metadata,
         )
@@ -149,6 +152,7 @@ def _run_single_model_job(
                     vllm_metrics_url=f"http://localhost:{server.port}/metrics",
                     backend=backend,
                     build_only=False,
+                    context_limit_override=context_limit_override,
                     token_pricing_per_million=token_pricing_per_million,
                     run_metadata=run_metadata,
                 )
@@ -173,6 +177,7 @@ def _run_single_model_job(
                 vllm_metrics_url=None,
                 backend=backend,
                 build_only=False,
+                context_limit_override=context_limit_override,
                 token_pricing_per_million=token_pricing_per_million,
                 run_metadata=run_metadata,
             )
@@ -336,7 +341,21 @@ def _estimate_together_cost_for_model(
             _count_prompt_tokens(tokenizer=tokenizer, prompt=row.prompt)
             for row in pending_rows
         )
-        max_output_tokens = len(pending_rows) * MAX_TOKENS
+        if spec.context_limit is None:
+            max_output_tokens = len(pending_rows) * MAX_TOKENS
+        else:
+            max_output_tokens = sum(
+                max(
+                    1,
+                    min(
+                        MAX_TOKENS,
+                        spec.context_limit
+                        - _count_prompt_tokens(tokenizer=tokenizer, prompt=row.prompt)
+                        - MAX_TOKEN_CLAMP_SAFETY_MARGIN,
+                    ),
+                )
+                for row in pending_rows
+            )
 
         total_pending_requests += len(pending_rows)
         total_input_tokens += input_tokens
@@ -523,6 +542,7 @@ def _build_run_metadata(
             "name": spec.name,
             "tp": spec.tp,
             "constraint": spec.constraint,
+            "context_limit": spec.context_limit,
             "sampling_params": sampling_params,
         },
         "parallelism": {
@@ -616,6 +636,7 @@ def _run_local(
             dtype=args.dtype,
             backend=args.backend,
             build_only=args.build_only,
+            context_limit_override=spec.context_limit,
             token_pricing_per_million=token_pricing_per_million,
         )
         results.append(result)
@@ -689,6 +710,7 @@ def _run_submitit(
             dtype=args.dtype,
             backend=args.backend,
             build_only=args.build_only,
+            context_limit_override=spec.context_limit,
             token_pricing_per_million=token_pricing_per_million,
         )
         jobs.append(job)
@@ -773,7 +795,7 @@ python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --model meta-llama/Llama-2-13b-chat-hf \
+    --model Qwen/Qwen2.5-72B-Instruct \
     --executor submitit \
     --cluster miso \
     --max-connections 360 \

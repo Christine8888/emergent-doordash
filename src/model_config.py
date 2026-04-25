@@ -15,6 +15,7 @@ class ModelSpec:
     tp: int = 1
     account: str | None = None
     constraint: str | None = None
+    context_limit: int | None = None
     do_sample: bool = True
     temperature: float = 1.0
     top_p: float = 1.0
@@ -111,7 +112,13 @@ QWEN25_MODELS = [
     ModelSpec("Qwen/Qwen2.5-7B-Instruct", constraint=MEDIUM_MODEL_CONSTRAINT, **QWEN25_SAMPLING),
     ModelSpec("Qwen/Qwen2.5-14B-Instruct", constraint=LARGE_MODEL_CONSTRAINT, **QWEN25_SAMPLING),
     ModelSpec("Qwen/Qwen2.5-32B-Instruct", constraint=H200_CONSTRAINT, **QWEN25_SAMPLING),
-    ModelSpec("Qwen/Qwen2.5-72B-Instruct", tp=2, constraint=H200_CONSTRAINT, **QWEN25_SAMPLING),
+    ModelSpec(
+        "Qwen/Qwen2.5-72B-Instruct",
+        tp=2,
+        constraint=H200_CONSTRAINT,
+        context_limit=32768,
+        **QWEN25_SAMPLING,
+    ),
 ]
 
 QWEN35_MODELS = [
@@ -126,9 +133,25 @@ QWEN35_MODELS = [
 ]
 
 LLAMA_MODELS = [
-    ModelSpec("meta-llama/Llama-2-7b-chat-hf", constraint=MEDIUM_MODEL_CONSTRAINT, **LLAMA_SAMPLING),
-    ModelSpec("meta-llama/Llama-2-13b-chat-hf", constraint=LARGE_MODEL_CONSTRAINT, **LLAMA_SAMPLING),
-    ModelSpec("meta-llama/Llama-2-70b-chat-hf", tp=2, constraint=H200_CONSTRAINT, **LLAMA_SAMPLING),
+    ModelSpec(
+        "meta-llama/Llama-2-7b-chat-hf",
+        constraint=MEDIUM_MODEL_CONSTRAINT,
+        context_limit=4096,
+        **LLAMA_SAMPLING,
+    ),
+    ModelSpec(
+        "meta-llama/Llama-2-13b-chat-hf",
+        constraint=LARGE_MODEL_CONSTRAINT,
+        context_limit=4096,
+        **LLAMA_SAMPLING,
+    ),
+    ModelSpec(
+        "meta-llama/Llama-2-70b-chat-hf",
+        tp=2,
+        constraint=H200_CONSTRAINT,
+        context_limit=4096,
+        **LLAMA_SAMPLING,
+    ),
     ModelSpec("meta-llama/Llama-3.1-8B-Instruct", constraint=MEDIUM_MODEL_CONSTRAINT, **LLAMA_SAMPLING),
     ModelSpec("meta-llama/Llama-3.1-70B-Instruct", tp=2, constraint=H200_CONSTRAINT, **LLAMA_SAMPLING),
     ModelSpec("meta-llama/Llama-3.3-70B-Instruct", tp=2, constraint=H200_CONSTRAINT, **LLAMA_SAMPLING),

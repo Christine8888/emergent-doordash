@@ -71,6 +71,7 @@ def _load_prompt_token_stats(
     model: str,
     candidates_by_fraction: dict[float, list["PromptCandidate"]],
     default_context_limit: int,
+    context_limit_override: int | None = None,
 ) -> PromptTokenStats | None:
     try:
         from transformers import AutoTokenizer
@@ -91,10 +92,13 @@ def _load_prompt_token_stats(
             flush=True,
         )
         return None
-    context_limit = _normalize_context_limit(
-        getattr(tokenizer, "model_max_length", None),
-        default=default_context_limit,
-    )
+    if context_limit_override is not None:
+        context_limit = context_limit_override
+    else:
+        context_limit = _normalize_context_limit(
+            getattr(tokenizer, "model_max_length", None),
+            default=default_context_limit,
+        )
     prompt_token_counts: dict[str, int] = {}
     for candidates in candidates_by_fraction.values():
         for candidate in candidates:
@@ -1528,6 +1532,7 @@ def run_hinted_inference(
     vllm_metrics_url: str | None = None,
     backend: str = "local-vllm",
     build_only: bool = False,
+    context_limit_override: int | None = None,
     token_pricing_per_million: dict[str, float] | None = None,
     run_metadata: dict[str, Any] | None = None,
 ) -> list[FractionRunSummary]:
@@ -1541,6 +1546,8 @@ def run_hinted_inference(
         raise ValueError("timeout_seconds must be >= 1")
     if max_retries < 0:
         raise ValueError("max_retries must be >= 0")
+    if context_limit_override is not None and context_limit_override < 1:
+        raise ValueError("context_limit_override must be >= 1")
 
     normalized_fractions = [_normalize_fraction(v) for v in hint_fractions]
     normalized_fractions = sorted(set(normalized_fractions))
@@ -1577,6 +1584,7 @@ def run_hinted_inference(
             model=model,
             candidates_by_fraction=candidates_by_fraction,
             default_context_limit=max_tokens,
+            context_limit_override=context_limit_override,
         )
         if prompt_token_stats is not None:
             model_context_limit = prompt_token_stats.context_limit
@@ -1605,6 +1613,7 @@ def run_hinted_inference(
     }
     effective_run_metadata["build_only"] = build_only
     effective_run_metadata["max_requests"] = max_requests
+    effective_run_metadata["context_limit_override"] = context_limit_override
     effective_run_metadata["model_context_limit"] = model_context_limit
     effective_run_metadata["token_pricing_per_million"] = token_pricing_per_million
 
