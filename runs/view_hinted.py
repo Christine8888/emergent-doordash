@@ -15,6 +15,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.model_config import is_model_excluded_for_fractioner
+from src.hinted_outputs import (
+    combined_model_response_text,
+    extract_provider_reasoning,
+    response_text_stats,
+)
 
 DATA_ROOT = PROJECT_ROOT / "data"
 DATASETS_ROOT = DATA_ROOT / "datasets"
@@ -153,7 +158,12 @@ def load_hinted_df(path_str: str) -> pd.DataFrame:
     df["grader_extracted_answer"] = [triplet[1] for triplet in grader_triplets]
     df["grader_type"] = [triplet[2] for triplet in grader_triplets]
     df["grader_label"] = df["grader_is_correct"].apply(_grader_label)
-    df["model_output_chars"] = df["model_output"].fillna("").astype(str).str.len()
+    text_stats = [response_text_stats(row) for row in rows]
+    df["provider_reasoning"] = [extract_provider_reasoning(row) for row in rows]
+    df["provider_reasoning_chars"] = [stats["provider_reasoning_chars"] for stats in text_stats]
+    df["visible_output_chars"] = [stats["visible_output_chars"] for stats in text_stats]
+    df["combined_output_chars"] = [stats["combined_output_chars"] for stats in text_stats]
+    df["model_output_chars"] = df["visible_output_chars"]
 
     def _meta_get(meta: Any, key: str) -> Any:
         if isinstance(meta, dict):
@@ -241,7 +251,7 @@ def main() -> None:
             }[x],
         )
         problem_id_query = st.text_input("Problem ID contains", value="").strip()
-        output_query = st.text_input("Model output contains (all words)", value="").strip()
+        output_query = st.text_input("Response contains (all words)", value="").strip()
         max_preview_rows = st.slider("Preview rows", min_value=25, max_value=2000, value=200, step=25)
 
     filtered = hinted_df.copy()
@@ -256,29 +266,30 @@ def main() -> None:
             _normalize_problem_id_series(filtered).str.contains(problem_id_query, case=False, regex=False)
         ]
     if output_query:
-        output_series = filtered["model_output"].fillna("").astype(str)
+        output_series = filtered["_raw_row"].apply(lambda row: combined_model_response_text(row))
         for term in output_query.split():
             filtered = filtered[output_series.str.contains(term, case=False, regex=False, na=False)]
-            output_series = filtered["model_output"].fillna("").astype(str)
+            output_series = filtered["_raw_row"].apply(lambda row: combined_model_response_text(row))
 
     known = filtered["grader_is_correct"].dropna()
     known_total = int(len(known))
     known_correct = int((known == True).sum())  # noqa: E712
     accuracy_text = f"{(known_correct / known_total * 100):.1f}%" if known_total > 0 else "N/A"
 
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Inference Rows (all)", int(len(hinted_df)))
     m2.metric("Inference Rows (filtered)", int(len(filtered)))
     m3.metric("Grader Accuracy", accuracy_text)
+    m4.metric("Rows With Reasoning", int((filtered["provider_reasoning_chars"] > 0).sum()))
     if not dataset_df.empty:
         dataset_problem_count = int(dataset_df["problem_id"].astype(str).nunique())
         covered = int(_normalize_problem_id_series(filtered).nunique())
-        m4.metric(
+        m5.metric(
             "Problem Coverage",
             f"{(covered / dataset_problem_count * 100):.1f}%" if dataset_problem_count > 0 else "0.0%",
         )
     else:
-        m4.metric("Problem Coverage", "N/A")
+        m5.metric("Problem Coverage", "N/A")
 
     tabs = st.tabs(["Summary", "Problem Browser"])
 
@@ -295,6 +306,9 @@ def main() -> None:
                 "is_error",
                 "input_token_count",
                 "output_token_count",
+                "provider_reasoning_chars",
+                "visible_output_chars",
+                "combined_output_chars",
                 "model_output_chars",
                 "created_at",
                 "slurm_job_id",
@@ -419,13 +433,21 @@ def main() -> None:
                         "hint_fraction": row.get("hint_fraction"),
                         "input_token_count": row.get("input_token_count"),
                         "output_token_count": row.get("output_token_count"),
+                        "provider_reasoning_chars": row.get("provider_reasoning_chars"),
+                        "visible_output_chars": row.get("visible_output_chars"),
+                        "combined_output_chars": row.get("combined_output_chars"),
                         "created_at": row.get("created_at"),
                         "slurm_job_id": row.get("slurm_job_id"),
                     },
                     expanded=False,
                 )
 
-                st.markdown("**Model Output**")
+                provider_reasoning = str(row.get("provider_reasoning", "") or "").strip()
+                if provider_reasoning:
+                    st.markdown("**Provider Reasoning**")
+                    st.code(provider_reasoning, language="text")
+
+                st.markdown("**Visible Model Output**")
                 st.code(str(row.get("model_output", "")), language="text")
 
                 raw = row.get("_raw_row", {})

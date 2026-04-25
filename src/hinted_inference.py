@@ -196,6 +196,22 @@ def _safe_usage_tokens(usage: Any, *keys: str) -> int:
     return 0
 
 
+def _calculate_usage_cost(
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    token_pricing_per_million: dict[str, float] | None,
+) -> float:
+    if token_pricing_per_million is None:
+        return 0.0
+    input_rate = float(token_pricing_per_million.get("input", 0.0))
+    output_rate = float(token_pricing_per_million.get("output", 0.0))
+    return (
+        input_tokens / 1_000_000.0 * input_rate
+        + output_tokens / 1_000_000.0 * output_rate
+    )
+
+
 def _extract_stop_reason(response: Any) -> str | None:
     if isinstance(response, dict):
         choices = response.get("choices")
@@ -256,6 +272,11 @@ def _extract_completion_text(response: dict[str, Any]) -> str:
 
 
 def _extract_reasoning_text(response: dict[str, Any]) -> str | None:
+    for key in ("provider_reasoning", "reasoning", "reasoning_content"):
+        value = response.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+
     choices = response.get("choices")
     if not isinstance(choices, list) or not choices:
         return None
@@ -267,17 +288,20 @@ def _extract_reasoning_text(response: dict[str, Any]) -> str | None:
     if not isinstance(message, dict):
         return None
 
-    reasoning = message.get("reasoning")
-    if isinstance(reasoning, str):
-        return reasoning
-    if isinstance(reasoning, list):
+    for key in ("provider_reasoning", "reasoning", "reasoning_content"):
+        reasoning = message.get(key)
+        if isinstance(reasoning, str) and reasoning.strip():
+            return reasoning
+        if not isinstance(reasoning, list):
+            continue
         parts: list[str] = []
         for part in reasoning:
-            if not isinstance(part, dict):
-                continue
-            text = part.get("text")
-            if isinstance(text, str):
-                parts.append(text)
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
         if parts:
             return "".join(parts)
 
@@ -287,7 +311,7 @@ def _extract_reasoning_text(response: dict[str, Any]) -> str | None:
         for part in content:
             if not isinstance(part, dict):
                 continue
-            if part.get("type") == "reasoning_text":
+            if part.get("type") in {"reasoning_text", "reasoning", "thinking"}:
                 text = part.get("text")
                 if isinstance(text, str):
                     parts.append(text)
@@ -521,6 +545,7 @@ def _save_checkpoint(
     retry_count: int | None = None,
     total_input_tokens: int | None = None,
     total_output_tokens: int | None = None,
+    total_cost: float | None = None,
     elapsed_seconds: float | None = None,
 ) -> None:
     payload = {
@@ -547,6 +572,8 @@ def _save_checkpoint(
         payload["total_input_tokens"] = total_input_tokens
     if total_output_tokens is not None:
         payload["total_output_tokens"] = total_output_tokens
+    if total_cost is not None:
+        payload["total_cost"] = total_cost
     if elapsed_seconds is not None:
         payload["elapsed_seconds"] = elapsed_seconds
     if run_metadata is not None:
@@ -599,6 +626,7 @@ class FractionRunSummary:
     retry_count: int
     total_input_tokens: int
     total_output_tokens: int
+    total_cost: float
     elapsed_seconds: float
 
 
@@ -630,6 +658,7 @@ class FractionRunState:
     retry_count: int = 0
     total_input_tokens: int = 0
     total_output_tokens: int = 0
+    total_cost: float = 0.0
     last_inference_id: str | None = None
 
 
@@ -738,13 +767,13 @@ def build_expanded_hinted_prompt_dataset(
         write_jsonl(output_path, records)
         fraction_paths[hint_fraction] = output_path
         per_fraction_counts[f"{hint_fraction:.6f}"] = len(records)
-        print(
-            f"[hinted_inference] expanded prompts built fraction={hint_fraction} rows={len(records)} "
-            f"path={output_path}",
-            flush=True,
-        )
 
     first_path = next(iter(fraction_paths.values()))
+    print(
+        f"[hinted_inference] expanded_prompts fractions={len(fraction_paths)} "
+        f"rows={sum(per_fraction_counts.values())} dir={first_path.parent}",
+        flush=True,
+    )
     manifest_path = first_path.parent / "manifest.json"
     _atomic_write_json(
         manifest_path,
@@ -886,6 +915,7 @@ def _save_fraction_checkpoint(
         retry_count=state.retry_count,
         total_input_tokens=state.total_input_tokens,
         total_output_tokens=state.total_output_tokens,
+        total_cost=state.total_cost,
         elapsed_seconds=elapsed_seconds,
     )
 
@@ -902,6 +932,7 @@ def _to_fraction_summary(state: FractionRunState, *, elapsed_seconds: float) -> 
         retry_count=state.retry_count,
         total_input_tokens=state.total_input_tokens,
         total_output_tokens=state.total_output_tokens,
+        total_cost=state.total_cost,
         elapsed_seconds=elapsed_seconds,
     )
 
@@ -964,6 +995,7 @@ async def _run_all_candidates(
     backend: str,
     run_id: str,
     checkpoint_every: int,
+    token_pricing_per_million: dict[str, float] | None = None,
     run_metadata: dict[str, Any] | None = None,
 ) -> float:
     canonical_model = _model_storage_component(model)
@@ -1042,6 +1074,7 @@ async def _run_all_candidates(
             model_output = ""
             input_token_count = 0
             output_token_count = 0
+            request_cost = 0.0
             stop_reason: str | None = None
             reasoning_text: str | None = None
             graders: list[GraderResult]
@@ -1083,6 +1116,7 @@ async def _run_all_candidates(
                     "model_output": model_output,
                     "input_token_count": input_token_count,
                     "output_token_count": output_token_count,
+                    "cost": request_cost,
                     "stop_reason": stop_reason,
                     "reasoning_text": reasoning_text,
                     "is_error": is_error,
@@ -1126,6 +1160,11 @@ async def _run_all_candidates(
                     input_token_count = _safe_usage_tokens(usage, "prompt_tokens", "input_tokens")
                     output_token_count = _safe_usage_tokens(
                         usage, "completion_tokens", "output_tokens"
+                    )
+                    request_cost = _calculate_usage_cost(
+                        input_tokens=input_token_count,
+                        output_tokens=output_token_count,
+                        token_pricing_per_million=token_pricing_per_million,
                     )
                     stop_reason = _extract_stop_reason(response)
 
@@ -1196,6 +1235,7 @@ async def _run_all_candidates(
                 "model_output": model_output,
                 "input_token_count": input_token_count,
                 "output_token_count": output_token_count,
+                "cost": request_cost,
                 "stop_reason": stop_reason,
                 "reasoning_text": reasoning_text,
                 "is_error": is_error,
@@ -1242,8 +1282,17 @@ async def _run_all_candidates(
                 model_output = str(result["model_output"])
                 input_token_count = int(result["input_token_count"])
                 output_token_count = int(result["output_token_count"])
+                request_cost = float(result["cost"])
                 stop_reason = result["stop_reason"]
                 reasoning_text = result["reasoning_text"]
+                provider_reasoning_text = (
+                    reasoning_text.strip() if isinstance(reasoning_text, str) else ""
+                )
+                combined_output_text = (
+                    f"{provider_reasoning_text}\n\n{model_output}"
+                    if provider_reasoning_text and model_output
+                    else provider_reasoning_text or model_output
+                )
                 is_error = bool(result["is_error"])
                 error_text = result["error_text"]
                 attempts = int(result["attempts"])
@@ -1277,7 +1326,7 @@ async def _run_all_candidates(
                         model_output=model_output,
                         input_token_count=input_token_count,
                         output_token_count=output_token_count,
-                        cost=0.0,
+                        cost=request_cost,
                         is_error=is_error,
                         graders=graders,
                         hint=hint,
@@ -1301,11 +1350,20 @@ async def _run_all_candidates(
                             "provider_base_url": backend_config.base_url,
                             "provider_metrics_url": backend_config.metrics_url,
                             "provider_model_id": model,
+                            "cost_method": (
+                                "calculated_from_usage_tokens"
+                                if token_pricing_per_million is not None
+                                else "not_calculated"
+                            ),
+                            "token_pricing_per_million": token_pricing_per_million,
                             "fraction_metadata": fraction_meta,
                             "prompt_token_count": prompt_token_count,
                             "context_limit": model_context_limit,
                             "stop_reason": stop_reason,
                             "provider_reasoning": reasoning_text,
+                            "provider_reasoning_chars": len(provider_reasoning_text),
+                            "visible_output_chars": len(model_output),
+                            "combined_output_chars": len(combined_output_text),
                             "host": host,
                             "pid": pid,
                             "slurm_job_id": slurm_job_id,
@@ -1322,6 +1380,7 @@ async def _run_all_candidates(
                 state.processed_this_run += 1
                 state.total_input_tokens += input_token_count
                 state.total_output_tokens += output_token_count
+                state.total_cost += request_cost
                 global_processed += 1
                 global_input_tokens += input_token_count
                 global_output_tokens += output_token_count
@@ -1469,6 +1528,7 @@ def run_hinted_inference(
     vllm_metrics_url: str | None = None,
     backend: str = "local-vllm",
     build_only: bool = False,
+    token_pricing_per_million: dict[str, float] | None = None,
     run_metadata: dict[str, Any] | None = None,
 ) -> list[FractionRunSummary]:
     if checkpoint_every < 1:
@@ -1546,6 +1606,7 @@ def run_hinted_inference(
     effective_run_metadata["build_only"] = build_only
     effective_run_metadata["max_requests"] = max_requests
     effective_run_metadata["model_context_limit"] = model_context_limit
+    effective_run_metadata["token_pricing_per_million"] = token_pricing_per_million
 
     states: list[FractionRunState] = []
     remaining_request_budget = max_requests
@@ -1639,6 +1700,7 @@ def run_hinted_inference(
             backend=backend,
             run_id=run_id,
             checkpoint_every=checkpoint_every,
+            token_pricing_per_million=token_pricing_per_million,
             run_metadata=effective_run_metadata,
         )
     )

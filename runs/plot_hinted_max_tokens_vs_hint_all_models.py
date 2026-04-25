@@ -10,6 +10,7 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 
+from src.hinted_outputs import response_text_stats
 from src.model_config import is_model_excluded_for_fractioner
 
 
@@ -88,6 +89,10 @@ def _read_completion_stats(path: Path) -> dict[str, Any]:
     record_count = 0
     error_count = 0
     max_output_tokens: int | None = None
+    rows_with_provider_reasoning = 0
+    max_provider_reasoning_chars = 0
+    max_visible_output_chars = 0
+    max_combined_output_chars = 0
 
     for row in _iter_jsonl(path):
         if not isinstance(row, dict):
@@ -99,11 +104,30 @@ def _read_completion_stats(path: Path) -> dict[str, Any]:
         if isinstance(output_token_count, int):
             if max_output_tokens is None or output_token_count > max_output_tokens:
                 max_output_tokens = output_token_count
+        text_stats = response_text_stats(row)
+        if text_stats["provider_reasoning_chars"] > 0:
+            rows_with_provider_reasoning += 1
+        max_provider_reasoning_chars = max(
+            max_provider_reasoning_chars,
+            text_stats["provider_reasoning_chars"],
+        )
+        max_visible_output_chars = max(
+            max_visible_output_chars,
+            text_stats["visible_output_chars"],
+        )
+        max_combined_output_chars = max(
+            max_combined_output_chars,
+            text_stats["combined_output_chars"],
+        )
 
     return {
         "record_count": record_count,
         "error_count": error_count,
         "max_output_tokens": max_output_tokens,
+        "rows_with_provider_reasoning": rows_with_provider_reasoning,
+        "max_provider_reasoning_chars": max_provider_reasoning_chars,
+        "max_visible_output_chars": max_visible_output_chars,
+        "max_combined_output_chars": max_combined_output_chars,
     }
 
 
@@ -176,6 +200,10 @@ def collect_rows(
                         "record_count": stats["record_count"],
                         "error_count": stats["error_count"],
                         "max_output_tokens": stats["max_output_tokens"],
+                        "rows_with_provider_reasoning": stats["rows_with_provider_reasoning"],
+                        "max_provider_reasoning_chars": stats["max_provider_reasoning_chars"],
+                        "max_visible_output_chars": stats["max_visible_output_chars"],
+                        "max_combined_output_chars": stats["max_combined_output_chars"],
                         "is_complete": ckpt_complete,
                         "jsonl_path": str(jsonl_path),
                     }
@@ -183,7 +211,8 @@ def collect_rows(
                 print(
                     f"collected model={model} hint_type={hint_type} fractioner={fractioner} "
                     f"fraction={hint_fraction:.1f} rows={stats['record_count']} "
-                    f"max_output_tokens={stats['max_output_tokens']}",
+                    f"max_output_tokens={stats['max_output_tokens']} "
+                    f"rows_with_reasoning={stats['rows_with_provider_reasoning']}",
                     flush=True,
                 )
 
@@ -323,6 +352,10 @@ def _write_csv(rows: list[dict[str, Any]], output_dir: Path, benchmark: str) -> 
         "record_count",
         "error_count",
         "max_output_tokens",
+        "rows_with_provider_reasoning",
+        "max_provider_reasoning_chars",
+        "max_visible_output_chars",
+        "max_combined_output_chars",
         "is_complete",
         "jsonl_path",
     ]

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -46,6 +46,15 @@ TOGETHER_SERVERLESS_PRICING_PER_MILLION: dict[str, dict[str, float]] = {
 }
 
 
+def _format_duration(seconds: float) -> str:
+    total_seconds = max(0, int(round(seconds)))
+    hours, rem = divmod(total_seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours:d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+
 def _parse_bool(value: str) -> bool:
     lowered = value.strip().lower()
     if lowered in {"true", "1", "yes"}:
@@ -78,6 +87,7 @@ def _run_single_model_job(
     dtype: str,
     backend: str,
     build_only: bool,
+    token_pricing_per_million: dict[str, float] | None,
 ) -> dict[str, Any]:
     if build_only:
         summaries = run_hinted_inference(
@@ -100,6 +110,7 @@ def _run_single_model_job(
             vllm_metrics_url=None,
             backend=backend,
             build_only=True,
+            token_pricing_per_million=token_pricing_per_million,
             run_metadata=run_metadata,
         )
     else:
@@ -138,6 +149,7 @@ def _run_single_model_job(
                     vllm_metrics_url=f"http://localhost:{server.port}/metrics",
                     backend=backend,
                     build_only=False,
+                    token_pricing_per_million=token_pricing_per_million,
                     run_metadata=run_metadata,
                 )
         elif backend == "together-serverless":
@@ -161,6 +173,7 @@ def _run_single_model_job(
                 vllm_metrics_url=None,
                 backend=backend,
                 build_only=False,
+                token_pricing_per_million=token_pricing_per_million,
                 run_metadata=run_metadata,
             )
         else:
@@ -244,6 +257,12 @@ def _get_together_pricing_per_million(model_name: str) -> dict[str, float]:
             "Expected both 'input' and 'output' prices per million tokens."
         )
     return pricing
+
+
+def _get_token_pricing_per_million(*, model_name: str, backend: str) -> dict[str, float] | None:
+    if backend == "together-serverless":
+        return _get_together_pricing_per_million(model_name)
+    return None
 
 
 def _load_tokenizer(model_name: str) -> Any:
@@ -365,7 +384,18 @@ def _print_dry_run_estimates(args: argparse.Namespace, models: list[ModelSpec]) 
 
     estimates = [_estimate_together_cost_for_model(args=args, spec=spec) for spec in models]
     print("[generate_hinted] together dry-run estimate", flush=True)
-    print(json.dumps(estimates, indent=2), flush=True)
+    for estimate in estimates:
+        print(
+            "[generate_hinted] "
+            f"model={estimate['model']} "
+            f"requests={estimate['request_count']} "
+            f"input_tokens={estimate['input_tokens']} "
+            f"max_output_tokens={estimate['max_output_tokens']} "
+            f"estimated_input_cost_usd={estimate['estimated_input_cost_usd']:.6f} "
+            f"max_output_cost_usd={estimate['max_output_cost_usd']:.6f} "
+            f"max_total_cost_usd={estimate['max_total_cost_usd']:.6f}",
+            flush=True,
+        )
 
 
 def _apply_job_cap(models: list[ModelSpec], max_jobs: int | None) -> list[ModelSpec]:
@@ -536,34 +566,15 @@ def _build_run_metadata(
 
 
 def _print_plan(args: argparse.Namespace, models: list[ModelSpec]) -> None:
-    print("[generate_hinted] plan", flush=True)
     print(
-        json.dumps(
-            {
-                "executor": args.executor,
-                "backend": args.backend,
-                "benchmark": args.benchmark,
-                "hint_type": args.hint_type,
-                "fractioner": args.fractioner,
-                "hint_fractions": HINT_FRACTIONS,
-                "models": [m.path for m in models],
-            },
-            indent=2,
-        ),
+        "[generate_hinted] "
+        f"executor={args.executor} backend={args.backend} benchmark={args.benchmark} "
+        f"hint_type={args.hint_type} fractioner={args.fractioner} "
+        f"fractions={len(HINT_FRACTIONS)} models={len(models)}",
         flush=True,
     )
-
     for spec in models:
-        for fraction in HINT_FRACTIONS:
-            path = build_hinted_inference_path(
-                benchmark_name=args.benchmark,
-                model=spec.path,
-                hint_type=args.hint_type,
-                fractioner=args.fractioner,
-                hint_fraction=fraction,
-                data_root="data",
-            )
-            print(f"  output -> {path}", flush=True)
+        print(f"[generate_hinted] model={spec.path}", flush=True)
 
 
 def _run_local(
@@ -575,6 +586,10 @@ def _run_local(
     for spec in models:
         tp, dp, requested_gpus = _resolve_parallelism(spec, args.num_gpus)
         sampling_params = sampling_params_by_model.get(spec.path, {})
+        token_pricing_per_million = _get_token_pricing_per_million(
+            model_name=spec.path,
+            backend=args.backend,
+        )
         run_metadata = _build_run_metadata(
             args=args,
             spec=spec,
@@ -601,6 +616,7 @@ def _run_local(
             dtype=args.dtype,
             backend=args.backend,
             build_only=args.build_only,
+            token_pricing_per_million=token_pricing_per_million,
         )
         results.append(result)
     return results
@@ -625,6 +641,10 @@ def _run_submitit(
         time_hours = _resolve_slurm_time_hours(slurm_account=account)
         cpus_per_task, mem_gb = _resolve_slurm_resources(requested_gpus=requested_gpus)
         sampling_params = sampling_params_by_model.get(spec.path, {})
+        token_pricing_per_million = _get_token_pricing_per_million(
+            model_name=spec.path,
+            backend=args.backend,
+        )
         run_metadata = _build_run_metadata(
             args=args,
             spec=spec,
@@ -669,10 +689,54 @@ def _run_submitit(
             dtype=args.dtype,
             backend=args.backend,
             build_only=args.build_only,
+            token_pricing_per_million=token_pricing_per_million,
         )
         jobs.append(job)
         print(f"[generate_hinted] submitted job_id={job.job_id} model={spec.path}", flush=True)
     return jobs
+
+
+def _print_run_results(results: list[dict[str, Any]], *, elapsed_seconds: float) -> None:
+    total_success = 0
+    total_error = 0
+    total_retry = 0
+    total_input_tokens = 0
+    total_output_tokens = 0
+    total_cost = 0.0
+
+    print("[generate_hinted] completed", flush=True)
+    for result in results:
+        summaries = result["summaries"]
+        success = sum(int(summary["written_success"]) for summary in summaries)
+        error = sum(int(summary["written_error"]) for summary in summaries)
+        retry = sum(int(summary["retry_count"]) for summary in summaries)
+        input_tokens = sum(int(summary["total_input_tokens"]) for summary in summaries)
+        output_tokens = sum(int(summary["total_output_tokens"]) for summary in summaries)
+        cost = sum(float(summary.get("total_cost", 0.0)) for summary in summaries)
+
+        total_success += success
+        total_error += error
+        total_retry += retry
+        total_input_tokens += input_tokens
+        total_output_tokens += output_tokens
+        total_cost += cost
+
+        print(
+            "[generate_hinted] "
+            f"model={result['model']} "
+            f"success={success} error={error} retry={retry} "
+            f"input_tokens={input_tokens} output_tokens={output_tokens} "
+            f"estimated_cost_usd={cost:.6f}",
+            flush=True,
+        )
+
+    print(
+        "[generate_hinted] total "
+        f"success={total_success} error={total_error} retry={total_retry} "
+        f"input_tokens={total_input_tokens} output_tokens={total_output_tokens} "
+        f"estimated_cost_usd={total_cost:.6f} elapsed={_format_duration(elapsed_seconds)}",
+        flush=True,
+    )
 
 
 def main() -> None:
@@ -690,8 +754,9 @@ def main() -> None:
         return
 
     if args.executor == "local":
+        started_at = time.monotonic()
         results = _run_local(args, models, sampling_params_by_model)
-        print(json.dumps(results, indent=2), flush=True)
+        _print_run_results(results, elapsed_seconds=time.monotonic() - started_at)
         return
 
     _run_submitit(args, models, sampling_params_by_model)
@@ -707,8 +772,8 @@ MISO
 python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
-    --fractioner truncate_word \
-    --model meta-llama/Llama-2-7b-chat-hf \
+    --fractioner mask_word \
+    --model meta-llama/Llama-2-13b-chat-hf \
     --executor submitit \
     --cluster miso \
     --max-connections 360 \
@@ -734,11 +799,15 @@ python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --model Qwen/Qwen3.5-397B-A17B \
-    --max-connections 48 \
+    --model openai/gpt-oss-20b \
+    --max-connections 40 \
     --checkpoint-every 1000 \
-    --backend together-serverless \
-    --dry-run true
+    --backend together-serverless 
+
+20 connections, 20 requests works
+ --max-requests 100 --max-connections 20 also fine
+  --max-requests 100 --max-connections 30 also fine
+    --max-requests 200 --max-connections 40 also fine
 
 
 "max_total_cost_usd": 128.26805549999997, (for openai/gpt-oss-120b)
