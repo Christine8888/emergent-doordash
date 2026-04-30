@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, Literal
 
 
 @dataclass(frozen=True)
@@ -29,6 +29,16 @@ class DatasetSpecBase(ABC):
 
     def is_correct(self, extracted_answer: str | None, problem: Problem) -> bool:
         raise NotImplementedError
+
+    def grade_response(self, response_text: str, problem: Problem) -> dict[str, Any]:
+        extracted_answer = self.extract_answer(response_text)
+        return {
+            "is_correct": self.is_correct(extracted_answer, problem),
+            "extracted_answer": extracted_answer,
+            "metadata": {
+                "grader_type": "dataset_extract_and_match",
+            },
+        }
 
     def build_prompt(self, problem: Problem) -> str:
         return problem.question
@@ -76,6 +86,25 @@ class DatasetSpecBase(ABC):
 
 _ANSWER_TAG_RE = re.compile(r"<answer>(.*?)</answer>", re.IGNORECASE | re.DOTALL)
 _CHOICE_LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+HLE_JUDGE_PROMPT = """Judge whether the following [response] to [question] is correct or not based on the precise and unambiguous [correct_answer] below.
+
+[question]: {question}
+
+[response]: {response}
+
+Your judgement must be in the format and criteria specified below:
+
+extracted_final_answer: The final exact answer extracted from the [response]. Put the extracted answer as 'None' if there is no exact, final answer to extract from the response.
+
+[correct_answer]: {correct_answer}
+
+reasoning: Explain why the extracted_final_answer is correct or incorrect based on [correct_answer], focusing only on if there are meaningful differences between [correct_answer] and the extracted_final_answer. Do not comment on any background to the problem, do not attempt to solve the problem, do not argue for any answer different than [correct_answer], focus only on whether the answers match.
+
+correct: Answer 'yes' if extracted_final_answer matches the [correct_answer] given above, or is within a small margin of error for numerical problems. Answer 'no' otherwise, i.e. if there if there is any inconsistency, ambiguity, non-equivalency, or if the extracted answer is incorrect.
+
+
+confidence: The extracted confidence score between 0|\%| and 100|\%| from [response]. Put 100 if there is no confidence score available."""
 
 
 def _extract_tagged_answer(response_text: str) -> str | None:
@@ -159,6 +188,19 @@ def _extract_multiple_choice_answer(
 
 def _safe_literal_eval(text: str) -> Any:
     return ast.literal_eval(text)
+
+
+def _json_safe_value(value: Any) -> Any:
+    """Convert dataset values to something stable for local JSONL caches."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, list):
+        return [_json_safe_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_safe_value(item) for key, item in value.items()}
+    return str(value)
 
 
 def _extract_last_boxed_or_tagged_answer(response_text: str) -> str | None:
@@ -709,6 +751,183 @@ class CRUXEvalSpec(DatasetSpecBase):
             )
 
 
+class HLESpec(DatasetSpecBase):
+    name = "hle"
+    default_judge_model = "o3-2025-04-16"
+
+    @staticmethod
+    def _answer_to_text(answer: Any) -> str:
+        if isinstance(answer, str):
+            return answer
+        return json.dumps(_json_safe_value(answer), ensure_ascii=False)
+
+    def load_problems(self) -> list[Problem]:
+        cache_path = self._dataset_cache_path()
+        if cache_path.exists():
+            return self._load_problems_from_cache(cache_path)
+
+        from datasets import load_dataset
+
+        dataset = load_dataset("cais/hle", split="test")
+        problems: list[Problem] = []
+        for i, example in enumerate(dataset, start=1):
+            row = {str(key): _json_safe_value(value) for key, value in dict(example).items()}
+            image = str(row.get("image") or "").strip()
+            problem_id = str(row.get("id") or f"{self.name}_{i:05d}")
+            metadata = {
+                "id": row.get("id"),
+                "answer_type": row.get("answer_type"),
+                "image": image,
+                "text_only": image == "",
+                "category": row.get("category"),
+                "raw_subject": row.get("raw_subject"),
+                "raw_example": row,
+            }
+            problems.append(
+                Problem(
+                    problem_id=problem_id,
+                    question=str(row.get("question") or "").strip(),
+                    answer=self._answer_to_text(row.get("answer")),
+                    source="cais/hle:test",
+                    metadata=metadata,
+                )
+            )
+        self._save_problems_to_cache(cache_path, problems)
+        return problems
+
+    def build_prompt(self, problem: Problem) -> str:
+        return problem.question
+
+    def extract_answer(self, response_text: str) -> str | None:
+        tagged = _extract_tagged_answer(response_text)
+        if tagged is not None:
+            return tagged
+        answer_line_matches = re.findall(
+            r"(?im)^\s*answer\s*:\s*(.*?)\s*$",
+            response_text.strip(),
+        )
+        if answer_line_matches:
+            return answer_line_matches[-1].strip() or None
+        lines = [line.strip() for line in response_text.strip().splitlines() if line.strip()]
+        return lines[-1] if lines else None
+
+    @staticmethod
+    def _normalize_multiple_choice(text: str | None) -> str | None:
+        if text is None:
+            return None
+        value = _normalize_free_form_answer(text)
+        match = re.fullmatch(r"(?i)(?:option|choice|answer)?\s*[\(\[]?([A-Z])[\)\].]?", value)
+        if match is not None:
+            return match.group(1).upper()
+        matches = re.findall(
+            r"(?i)(?:answer|choice|option)\s*(?:is|:)?\s*[\(\[]?([A-Z])[\)\]]?",
+            text,
+        )
+        if matches:
+            return matches[-1].upper()
+        return value.upper() if len(value) == 1 and value.isalpha() else None
+
+    @staticmethod
+    def _parse_json_object(text: str) -> dict[str, Any] | None:
+        stripped = text.strip()
+        if stripped.startswith("```"):
+            stripped = re.sub(r"^```(?:json)?", "", stripped).strip()
+            stripped = re.sub(r"```$", "", stripped).strip()
+        try:
+            payload = json.loads(stripped)
+        except Exception:
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def _judge_exact_match_response(self, response_text: str, problem: Problem) -> dict[str, Any]:
+        import os
+
+        from pydantic import BaseModel
+        from openai import OpenAI
+
+        class ExtractedAnswer(BaseModel):
+            extracted_final_answer: str
+            reasoning: str
+            correct: Literal["yes", "no"]
+            confidence: int
+            strict: Literal[True] = True
+
+        judge_model = os.environ.get("HLE_JUDGE_MODEL", self.default_judge_model)
+        prompt = HLE_JUDGE_PROMPT.format(
+            question=problem.question,
+            correct_answer=problem.answer,
+            response=response_text,
+        )
+        client = OpenAI()
+        completion = client.beta.chat.completions.parse(
+            model=judge_model,
+            max_completion_tokens=4096,
+            messages=[{"role": "user", "content": prompt}],
+            response_format=ExtractedAnswer,
+        )
+        content = completion.choices[0].message.parsed
+        if content is None:
+            raise RuntimeError("HLE judge returned no parsed response.")
+        extracted = content.extracted_final_answer
+        is_correct = content.correct == "yes"
+        confidence = content.confidence
+        return {
+            "is_correct": is_correct,
+            "extracted_answer": extracted,
+            "metadata": {
+                "grader_type": "hle_official_style_llm_judge",
+                "judge_model": judge_model,
+                "answer_type": problem.metadata.get("answer_type"),
+                "reasoning": content.reasoning,
+                "confidence": max(0, min(100, confidence)),
+            },
+        }
+
+    def grade_response(self, response_text: str, problem: Problem) -> dict[str, Any]:
+        answer_type = str(problem.metadata.get("answer_type") or "")
+        extracted_answer = self.extract_answer(response_text)
+        if answer_type == "multipleChoice":
+            normalized_pred = self._normalize_multiple_choice(extracted_answer)
+            normalized_gold = self._normalize_multiple_choice(problem.answer)
+            return {
+                "is_correct": normalized_pred is not None and normalized_pred == normalized_gold,
+                "extracted_answer": normalized_pred,
+                "metadata": {
+                    "grader_type": "hle_multiple_choice_exact_match",
+                    "answer_type": answer_type,
+                    "raw_extracted_answer": extracted_answer,
+                    "gold_answer": normalized_gold,
+                },
+            }
+        if answer_type == "exactMatch":
+            return self._judge_exact_match_response(response_text, problem)
+        return {
+            "is_correct": _normalize_free_form_answer(extracted_answer or "")
+            == _normalize_free_form_answer(problem.answer),
+            "extracted_answer": extracted_answer,
+            "metadata": {
+                "grader_type": "hle_unknown_answer_type_fallback",
+                "answer_type": answer_type,
+            },
+        }
+
+    def is_correct(self, extracted_answer: str | None, problem: Problem) -> bool:
+        answer_type = str(problem.metadata.get("answer_type") or "")
+        if answer_type == "multipleChoice":
+            normalized_pred = self._normalize_multiple_choice(extracted_answer)
+            normalized_gold = self._normalize_multiple_choice(problem.answer)
+            return normalized_pred is not None and normalized_pred == normalized_gold
+        if answer_type == "exactMatch":
+            # Exact-match HLE rows require the full model response for the official-style judge.
+            # Use grade_response() when evaluating model outputs.
+            return _normalize_free_form_answer(extracted_answer or "") == _normalize_free_form_answer(
+                problem.answer
+            )
+        return _normalize_free_form_answer(extracted_answer or "") == _normalize_free_form_answer(
+            problem.answer
+        )
+
+
 def get_dataset_spec(benchmark_name: str) -> DatasetSpecBase:
     specs = {
         "aime2025_2026": AIME20252026Spec(),
@@ -722,5 +941,7 @@ def get_dataset_spec(benchmark_name: str) -> DatasetSpecBase:
         "math_level_5": MathLevel5Spec(),
         "mathlevel5": MathLevel5Spec(),
         "cruxeval": CRUXEvalSpec(),
+        "hle": HLESpec(),
+        "cais/hle": HLESpec(),
     }
     return specs[benchmark_name.lower()]

@@ -1,8 +1,10 @@
 from __future__ import annotations
+import base64
 import httpx
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
+import re
 from typing import Any
 
 from src.datasets import get_dataset_spec
@@ -18,6 +20,8 @@ ANTHROPIC_MODELS: set[str] = {
 OPENAI_MODELS: set[str] = {
     "gpt-5.4",
 }
+
+PromptContent = str | list[dict[str, Any]]
 
 
 def _is_max_token_stop(*, provider: str, stop_reason: Any) -> bool:
@@ -96,10 +100,88 @@ def _parse_openai_message_text(content: Any) -> str:
     return str(content).strip() if content is not None else ""
 
 
+def _extension_for_media_type(media_type: str) -> str:
+    return {
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+    }.get(media_type.lower(), ".bin")
+
+
+def _decode_data_image_uri(value: str) -> tuple[str, bytes] | None:
+    match = re.fullmatch(r"data:(image/[a-zA-Z0-9.+-]+);base64,(.*)", value.strip(), flags=re.DOTALL)
+    if match is None:
+        return None
+    media_type = match.group(1).lower()
+    payload = re.sub(r"\s+", "", match.group(2))
+    return media_type, base64.b64decode(payload)
+
+
+def _materialize_problem_images(problem) -> list[dict[str, Any]]:
+    if problem.source != "cais/hle:test":
+        return []
+    image_value = str(problem.metadata.get("image") or "").strip()
+    if not image_value:
+        return []
+    decoded = _decode_data_image_uri(image_value)
+    if decoded is None:
+        return [
+            {
+                "source_field": "image",
+                "source_type": "unsupported",
+                "saved": False,
+                "error": "expected data:image/...;base64,...",
+            }
+        ]
+    media_type, data = decoded
+    image_dir = Path("data") / "hle_images" / problem.problem_id
+    image_dir.mkdir(parents=True, exist_ok=True)
+    image_path = image_dir / f"question{_extension_for_media_type(media_type)}"
+    if not image_path.exists() or image_path.read_bytes() != data:
+        image_path.write_bytes(data)
+    return [
+        {
+            "source_field": "image",
+            "source_type": "data_uri",
+            "saved": True,
+            "path": str(image_path),
+            "media_type": media_type,
+            "byte_count": len(data),
+        }
+    ]
+
+
+def _build_model_prompt_content(*, prompt: str, problem) -> tuple[PromptContent, list[dict[str, Any]]]:
+    image_metadata = _materialize_problem_images(problem)
+    image_parts: list[dict[str, Any]] = []
+    for item in image_metadata:
+        path = item.get("path")
+        media_type = item.get("media_type")
+        if item.get("saved") is not True or not isinstance(path, str) or not isinstance(media_type, str):
+            continue
+        data = Path(path).read_bytes()
+        image_parts.append(
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": base64.b64encode(data).decode("ascii"),
+                },
+            }
+        )
+    if not image_parts:
+        return prompt, image_metadata
+    return [{"type": "text", "text": prompt}, *image_parts], image_metadata
+
+
 def query_anthropic_hint(
-    prompt: str,
+    prompt: PromptContent,
     model: str,
     *,
+    system_prompt: str | None,
     max_tokens: int,
     temperature: float,
     thinking_enabled: bool,
@@ -114,6 +196,8 @@ def query_anthropic_hint(
         "temperature": temperature,
         "messages": [{"role": "user", "content": prompt}],
     }
+    if system_prompt is not None:
+        request["system"] = system_prompt
     thinking_mode = "disabled"
     effort: str | None = None
     if thinking_enabled:
@@ -141,9 +225,10 @@ def query_anthropic_hint(
 
 
 def query_openai_hint(
-    prompt: str,
+    prompt: PromptContent,
     model: str,
     *,
+    system_prompt: str | None,
     max_tokens: int,
     temperature: float,
     thinking_enabled: bool,
@@ -151,11 +236,18 @@ def query_openai_hint(
 ) -> dict[str, Any]:
     from openai import OpenAI
 
+    if not isinstance(prompt, str):
+        raise ValueError("OpenAI hint generation does not yet support HLE multimodal prompt content.")
+
     client = OpenAI(timeout=httpx.Timeout(7200, connect=30))
     effort = thinking_effort if thinking_enabled else "none"
+    messages: list[dict[str, Any]] = []
+    if system_prompt is not None:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
     completion = client.chat.completions.create(
         model=model,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
         temperature=temperature,
         max_completion_tokens=max_tokens,
         reasoning_effort=effort,
@@ -177,9 +269,10 @@ def query_openai_hint(
 
 
 def query_model_hint(
-    prompt: str,
+    prompt: PromptContent,
     model: str,
     *,
+    system_prompt: str | None,
     max_tokens: int,
     temperature: float,
     thinking_enabled: bool,
@@ -190,6 +283,7 @@ def query_model_hint(
         return query_anthropic_hint(
             prompt=prompt,
             model=model,
+            system_prompt=system_prompt,
             max_tokens=max_tokens,
             temperature=temperature,
             thinking_enabled=thinking_enabled,
@@ -199,6 +293,7 @@ def query_model_hint(
         return query_openai_hint(
             prompt=prompt,
             model=model,
+            system_prompt=system_prompt,
             max_tokens=max_tokens,
             temperature=temperature,
             thinking_enabled=thinking_enabled,
@@ -257,6 +352,12 @@ def _generate_record_for_task(
     ]
     attempt_idx = 0
     context_metadata = hint_type_spec.context_metadata(generation_context)
+    system_prompt = hint_type_spec.system_prompt
+    prompt_content, prompt_image_metadata = _build_model_prompt_content(
+        prompt=prompt,
+        problem=problem,
+    )
+    prompt_image_count = sum(1 for item in prompt_image_metadata if item.get("saved") is True)
 
     for attempt_model, max_attempts in attempt_plan:
         provider_name = _provider_for_model_id(attempt_model)
@@ -275,12 +376,13 @@ def _generate_record_for_task(
             _log(
                 f"[hint_generation] request benchmark={benchmark_name} hint_type={hint_type} "
                 f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
-                f"model={attempt_model}"
+                f"model={attempt_model} images={prompt_image_count}"
             )
             try:
                 usage = query_model_hint(
-                    prompt=prompt,
+                    prompt=prompt_content,
                     model=attempt_model,
+                    system_prompt=system_prompt,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     thinking_enabled=thinking_enabled,
@@ -301,6 +403,8 @@ def _generate_record_for_task(
                         "question": problem.question,
                         "answer": problem.answer,
                         "prompt": prompt,
+                        "system_prompt": system_prompt,
+                        "prompt_image_metadata": prompt_image_metadata,
                         "provider": provider_name,
                         "thinking_enabled": thinking_enabled,
                         "thinking_mode": query_error_thinking_mode,
@@ -334,6 +438,8 @@ def _generate_record_for_task(
                         "question": problem.question,
                         "answer": problem.answer,
                         "prompt": prompt,
+                        "system_prompt": system_prompt,
+                        "prompt_image_metadata": prompt_image_metadata,
                         "model_output": usage["model_output"],
                         "provider": usage["provider"],
                         "input_token_count": usage["input_token_count"],
@@ -377,6 +483,8 @@ def _generate_record_for_task(
                         "question": problem.question,
                         "answer": problem.answer,
                         "prompt": prompt,
+                        "system_prompt": system_prompt,
+                        "prompt_image_metadata": prompt_image_metadata,
                         "model_output": usage["model_output"],
                         "provider": usage["provider"],
                         "input_token_count": usage["input_token_count"],
@@ -425,6 +533,8 @@ def _generate_record_for_task(
                         "question": problem.question,
                         "answer": problem.answer,
                         "prompt": prompt,
+                        "system_prompt": system_prompt,
+                        "prompt_image_metadata": prompt_image_metadata,
                         "model_output": usage["model_output"],
                         "provider": usage["provider"],
                         "input_token_count": usage["input_token_count"],
@@ -482,7 +592,11 @@ def _generate_record_for_task(
                 "grade_model_output": should_grade_output,
                 "dataset_spec": dataset_spec.name,
                 "problem_source": problem.source,
+                "problem_answer_type": problem.metadata.get("answer_type"),
+                "problem_text_only": problem.metadata.get("text_only"),
                 "temperature": temperature,
+                "system_prompt": system_prompt,
+                "prompt_image_metadata": prompt_image_metadata,
                 "extracted_answer": successful_extracted,
                 "grader_metadata": successful_grader_metadata,
                 "first_model": first_model,

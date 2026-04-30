@@ -9,6 +9,13 @@ import re
 from src.datasets import DatasetSpecBase, Problem
 from src.storage import build_hint_generation_path, read_jsonl
 
+HLE_SYSTEM_PROMPT = (
+    "Your response should be in the following format:\n"
+    "Explanation: {your explanation for your answer choice}\n"
+    "Answer: {your chosen answer}\n"
+    "Confidence: {your confidence score between 0% and 100% for your answer}"
+)
+
 
 def _parse_bag_hints(text: str) -> list[str]:
     pattern = re.compile(
@@ -28,6 +35,7 @@ class HintType(str, Enum):
     answer_not_revealed = "answer_not_revealed"
     bag_of_hints = "bag_of_hints"
     basic_hint = "basic_hint"
+    basic_hint_hle = "basic_hint_hle"
 
 
 class HintGenerationContext(TypedDict, total=False):
@@ -53,6 +61,7 @@ class HintTypeSpecBase(ABC):
     post_process_version: str
     grade_model_output: bool
     allowed_fractioners: tuple[str, ...]
+    system_prompt: str | None
 
     def __init__(
         self,
@@ -72,6 +81,7 @@ class HintTypeSpecBase(ABC):
         self.grade_model_output = grade_model_output
         self.allowed_fractioners = allowed_fractioners
         self.source_hint_type = source_hint_type
+        self.system_prompt = None
         if uses_context is None:
             uses_context = source_hint_type is not None
 
@@ -90,24 +100,30 @@ class HintTypeSpecBase(ABC):
         self.required_context_keys = required_context_keys
         self._source_rows_by_problem_cache: dict[str, dict[str, list[dict[str, Any]]]] = {}
 
-    def _source_rows_by_problem(self, benchmark_name: str) -> dict[str, list[dict[str, Any]]]:
-        if self.source_hint_type is None:
+    def _source_rows_by_problem(
+        self,
+        benchmark_name: str,
+        *,
+        source_hint_type: HintType | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        source_hint_type = source_hint_type or self.source_hint_type
+        if source_hint_type is None:
             raise ValueError(f"Hint type {self.name.value!r} has no source_hint_type configured.")
 
-        cache_key = f"{benchmark_name}::{self.source_hint_type.value}"
+        cache_key = f"{benchmark_name}::{source_hint_type.value}"
         if cache_key in self._source_rows_by_problem_cache:
             return self._source_rows_by_problem_cache[cache_key]
 
         path = build_hint_generation_path(
             benchmark_name=benchmark_name,
-            hint_type=self.source_hint_type.value,
+            hint_type=source_hint_type.value,
             data_root="data",
         )
         source_path = Path(path)
         if not source_path.exists():
             raise ValueError(
                 f"Missing source hints for derived hint type {self.name.value!r}. "
-                f"Expected file: {source_path}. Generate {self.source_hint_type.value!r} first."
+                f"Expected file: {source_path}. Generate {source_hint_type.value!r} first."
             )
 
         rows = read_jsonl(path, model_cls=None)
@@ -140,6 +156,7 @@ class HintTypeSpecBase(ABC):
         if self.source_hint_type is None:
             return {}
 
+        source_hint_type = self.source_hint_type
         by_problem = self._source_rows_by_problem(benchmark_name)
         if problem.problem_id not in by_problem:
             raise ValueError(
@@ -176,7 +193,7 @@ class HintTypeSpecBase(ABC):
         source_row = matching_rows[-1]
         source_path = build_hint_generation_path(
             benchmark_name=benchmark_name,
-            hint_type=self.source_hint_type.value,
+            hint_type=source_hint_type.value,
             data_root="data",
         )
         return {
@@ -354,14 +371,35 @@ class BasicHintTypeSpec(HintTypeSpecBase):
         context: HintGenerationContext,
     ) -> HintGraderResult:
         _ = context
-        extracted_answer = dataset_spec.extract_answer(model_output)
+        grade_result = dataset_spec.grade_response(model_output, problem)
+        extracted_answer = grade_result["extracted_answer"]
         return {
-            "is_correct": dataset_spec.is_correct(extracted_answer, problem),
+            "is_correct": grade_result["is_correct"],
             "extracted_answer": extracted_answer,
-            "metadata": {
-                "grader_type": "dataset_extract_and_match",
-            },
+            "metadata": dict(grade_result["metadata"]),
         }
+
+
+class BasicHLEHintTypeSpec(BasicHintTypeSpec):
+    def __init__(self) -> None:
+        super().__init__(
+            name=HintType.basic_hint_hle,
+            prompt_version="basic_hle_v1",
+            post_process_version="basic_hle_post_v1",
+            grade_model_output=True,
+        )
+        self.system_prompt = HLE_SYSTEM_PROMPT
+
+    def _build_prompt(
+        self,
+        *,
+        problem: Problem,
+        context: HintGenerationContext,
+    ) -> str:
+        _ = context
+        if problem.source != "cais/hle:test":
+            raise ValueError("basic_hint_hle can only be used with the HLE dataset.")
+        return problem.question.strip()
 
 
 class AnswerNotRevealedHintTypeSpec(HintTypeSpecBase):
@@ -380,12 +418,100 @@ class AnswerNotRevealedHintTypeSpec(HintTypeSpecBase):
             source_hint_type=HintType.basic_hint,
         )
 
+    def build_context(
+        self,
+        *,
+        benchmark_name: str,
+        problem: Problem,
+        rollout_id: int,
+    ) -> HintGenerationContext:
+        if problem.source != "cais/hle:test":
+            return super().build_context(
+                benchmark_name=benchmark_name,
+                problem=problem,
+                rollout_id=rollout_id,
+            )
+
+        source_hint_type = HintType.basic_hint_hle
+        by_problem = self._source_rows_by_problem(
+            benchmark_name,
+            source_hint_type=source_hint_type,
+        )
+        if problem.problem_id not in by_problem:
+            raise ValueError(
+                f"Missing source rows for HLE problem_id={problem.problem_id!r}. "
+                f"Generate {source_hint_type.value!r} first."
+            )
+
+        matching_rows: list[dict[str, Any]] = []
+        for row in by_problem[problem.problem_id]:
+            row_rollout_id = row.get("rollout_id")
+            if isinstance(row_rollout_id, str) and row_rollout_id.isdigit():
+                row_rollout_id = int(row_rollout_id)
+            if row_rollout_id == rollout_id:
+                matching_rows.append(row)
+        if not matching_rows:
+            raise ValueError(
+                f"Missing HLE source rollout_id={rollout_id} for problem_id={problem.problem_id!r}. "
+                f"Generate {source_hint_type.value!r} with enough rollouts first."
+            )
+
+        source_row = matching_rows[-1]
+        source_path = build_hint_generation_path(
+            benchmark_name=benchmark_name,
+            hint_type=source_hint_type.value,
+            data_root="data",
+        )
+        return {
+            "source_benchmark_name": benchmark_name,
+            "source_hint_type": str(source_row["hint_type"]),
+            "source_data_path": str(source_path),
+            "source_hint_id": str(source_row["hint_id"]),
+            "source_rollout_id": int(source_row["rollout_id"]),
+            "source_generator_model": str(source_row["generator_model"]),
+            "source_model_output": str(source_row["model_output"]),
+            "source_answer": str(source_row.get("answer", problem.answer)),
+        }
+
     def _build_prompt(
         self,
         *,
         problem: Problem,
         context: HintGenerationContext,
     ) -> str:
+        if problem.source == "cais/hle:test":
+            answer_type = str(problem.metadata.get("answer_type") or "")
+            if answer_type == "multipleChoice":
+                instruction = (
+                    "The final answer {source_answer} and the selected option must not appear anywhere "
+                    "in your explanation. Do not identify the final option label, final option text, "
+                    "or final selected choice. You may compute all intermediate values, but do not "
+                    "perform the final step that chooses among the answer options — stop your "
+                    "explanation at the last intermediate result."
+                )
+            else:
+                instruction = (
+                    "The final answer {source_answer} must not appear anywhere in your explanation. "
+                    "You may compute all intermediate values, but do not perform the final step that "
+                    "directly produces {source_answer} — stop your explanation at the last intermediate result."
+                )
+            template = (
+                "You will be given a problem and a reference solution. "
+                "Rewrite the reference solution as a detailed explanation. "
+                "{instruction}\n\n"
+                "Problem:\n"
+                "{question}\n\n"
+                "Reference full solution:\n"
+                "{source_solution}\n\n"
+                "REMINDER: Do not perform the final step. Your explanation must not contain "
+                "{source_answer} anywhere."
+            )
+            return template.format(
+                instruction=instruction.format(source_answer=context["source_answer"]),
+                question=problem.question.strip(),
+                source_solution=context["source_model_output"],
+                source_answer=context["source_answer"],
+            )
         template = ( # NOTE: this template is optimized to not reveal the answer at all. It's quite good at it when you ask claude opus
             "You will be given a problem and a reference solution. "
             "Rewrite the reference solution as a detailed explanation. "
@@ -492,6 +618,7 @@ class BaggedHintTypeSpec(HintTypeSpecBase):
 HINT_TYPE_SPECS: dict[str, HintTypeSpecBase] = {
     HintType.answer_not_revealed.value: AnswerNotRevealedHintTypeSpec(),
     HintType.basic_hint.value: BasicHintTypeSpec(),
+    HintType.basic_hint_hle.value: BasicHLEHintTypeSpec(),
     HintType.bag_of_hints.value: BaggedHintTypeSpec(),
 }
 

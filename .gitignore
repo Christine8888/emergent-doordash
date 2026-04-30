@@ -9,6 +9,9 @@ __pycache__/
 # suze
 inspect_logs/
 standalone/
+data/datasets/hle.jsonl
+data/datasets/hle_*.jsonl
+data/hle_images/
 
 # Distribution / packaging
 .Python

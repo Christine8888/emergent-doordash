@@ -42,12 +42,9 @@ if __name__ == "__main__":
     main()
 
 """
-python -m runs.generate_hints --benchmark aime2025_2026 --hint-type basic_hint --num-rollouts 10 --limit 60 --dry-run false 
 
+python -m runs.generate_hints --benchmark hle --hint-type basic_hint_hle --num-rollouts 1 --limit 10 --dry-run true
 
-python -m runs.generate_hints --benchmark aime2025_2026 --hint-type answer_not_revealed --num-rollouts 10 --limit 60 --dry-run false 
+python -m runs.generate_hints --benchmark hle --hint-type answer_not_revealed --num-rollouts 1 --limit 10 --dry-run true
 
-
-
-python -m runs.generate_hints --benchmark aime2025_2026 --hint-type bag_of_hints --num-rollouts 1 --limit 2 --dry-run false
 """
