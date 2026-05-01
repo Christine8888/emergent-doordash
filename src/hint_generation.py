@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 from src.datasets import get_dataset_spec
-from src.hint_types import get_hint_type_spec
+from src.hint_types import MissingSourceHintError, get_hint_type_spec
 from src.storage import append_jsonl, build_hint_generation_path, make_stable_id, read_jsonl
 from src.types import HintGenerationRecord
 
@@ -292,7 +292,6 @@ def query_anthropic_hint(
         thinking_mode = "adaptive"
         effort = thinking_effort
         request["thinking"] = {"type": thinking_mode}
-        request["extra_body"] = {"output_config": {"effort": effort}}
 
     with client.messages.stream(**request) as stream:
         for _ in stream.text_stream:
@@ -775,6 +774,8 @@ def generate_hints(
     missing_rollouts_by_problem: dict[str, list[int]] = {}
     would_write = 0
     skipped = 0
+    skipped_missing_source = 0
+    missing_source_examples: list[str] = []
 
     for problem in problems:
         existing_rollouts = existing_rollouts_by_problem.setdefault(problem.problem_id, set())
@@ -783,7 +784,6 @@ def generate_hints(
                 skipped += 1
                 continue
 
-            missing_rollouts_by_problem.setdefault(problem.problem_id, []).append(rollout_id)
             hint_id = make_stable_id(
                 problem.problem_id,
                 hint_type,
@@ -791,15 +791,24 @@ def generate_hints(
                 length=16,
             )
 
-            generation_context = hint_type_spec.build_context(
-                benchmark_name=benchmark_name,
-                problem=problem,
-                rollout_id=rollout_id,
-            )
+            try:
+                generation_context = hint_type_spec.build_context(
+                    benchmark_name=benchmark_name,
+                    problem=problem,
+                    rollout_id=rollout_id,
+                )
+            except MissingSourceHintError as exc:
+                skipped_missing_source += 1
+                if len(missing_source_examples) < 10:
+                    missing_source_examples.append(
+                        f"problem_id={problem.problem_id} rollout_id={rollout_id} reason={exc}"
+                    )
+                continue
             prompt = hint_type_spec.build_prompt(
                 problem=problem,
                 context=generation_context,
             )
+            missing_rollouts_by_problem.setdefault(problem.problem_id, []).append(rollout_id)
             prepared_tasks.append(
                 {
                     "problem": problem,
@@ -816,9 +825,12 @@ def generate_hints(
             f"[hint_generation] dry_run benchmark={benchmark_name} hint_type={hint_type} "
             f"num_problems={len(problems)} rollouts={num_rollouts} "
             f"thinking_enabled={thinking_enabled} thinking_effort={thinking_effort if thinking_enabled else 'n/a'} "
-            f"would_write={would_write} skipped={skipped} "
+            f"would_write={would_write} skipped={skipped} skipped_missing_source={skipped_missing_source} "
             f"output={out_path}"
         )
+        if skipped_missing_source:
+            for example in missing_source_examples:
+                _log(f"[hint_generation] dry_run skipped_missing_source {example}")
         if not missing_rollouts_by_problem:
             _log("[hint_generation] dry_run missing_rollouts none")
         else:
@@ -952,7 +964,8 @@ def generate_hints(
             f"num_problems={len(problems)} rollouts={num_rollouts} concurrency={concurrency} "
             f"thinking_enabled={thinking_enabled} thinking_effort={thinking_effort if thinking_enabled else 'n/a'} "
             f"accepted={written} rejected={failed_attempts_written} "
-            f"written={written} skipped={skipped} failed={failed} failed_attempts_logged={failed_attempts_written} "
+            f"written={written} skipped={skipped} skipped_missing_source={skipped_missing_source} "
+            f"failed={failed} failed_attempts_logged={failed_attempts_written} "
             f"output={out_path} failed_output={failed_out_path}"
         )
     return out_path

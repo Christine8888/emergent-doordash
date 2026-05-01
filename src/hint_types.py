@@ -49,6 +49,10 @@ class HintGenerationContext(TypedDict, total=False):
     source_answer: str
 
 
+class MissingSourceHintError(ValueError):
+    """Raised when a derived hint type is missing its source hint row."""
+
+
 class HintGraderResult(TypedDict):
     is_correct: bool
     extracted_answer: str | None
@@ -121,7 +125,7 @@ class HintTypeSpecBase(ABC):
         )
         source_path = Path(path)
         if not source_path.exists():
-            raise ValueError(
+            raise MissingSourceHintError(
                 f"Missing source hints for derived hint type {self.name.value!r}. "
                 f"Expected file: {source_path}. Generate {source_hint_type.value!r} first."
             )
@@ -159,7 +163,7 @@ class HintTypeSpecBase(ABC):
         source_hint_type = self.source_hint_type
         by_problem = self._source_rows_by_problem(benchmark_name)
         if problem.problem_id not in by_problem:
-            raise ValueError(
+            raise MissingSourceHintError(
                 f"Missing source rows for problem_id={problem.problem_id!r} "
                 f"in derived hint type {self.name.value!r}. "
                 f"Generate {self.source_hint_type.value!r} for this benchmark/problem first."
@@ -183,7 +187,7 @@ class HintTypeSpecBase(ABC):
                     or (isinstance(row.get("rollout_id"), str) and str(row.get("rollout_id")).isdigit())
                 }
             )
-            raise ValueError(
+            raise MissingSourceHintError(
                 f"Missing source rollout_id={rollout_id} for problem_id={problem.problem_id!r} "
                 f"in derived hint type {self.name.value!r}. "
                 f"Available source rollout_ids={available_rollout_ids}. "
@@ -438,7 +442,7 @@ class AnswerNotRevealedHintTypeSpec(HintTypeSpecBase):
             source_hint_type=source_hint_type,
         )
         if problem.problem_id not in by_problem:
-            raise ValueError(
+            raise MissingSourceHintError(
                 f"Missing source rows for HLE problem_id={problem.problem_id!r}. "
                 f"Generate {source_hint_type.value!r} first."
             )
@@ -451,7 +455,7 @@ class AnswerNotRevealedHintTypeSpec(HintTypeSpecBase):
             if row_rollout_id == rollout_id:
                 matching_rows.append(row)
         if not matching_rows:
-            raise ValueError(
+            raise MissingSourceHintError(
                 f"Missing HLE source rollout_id={rollout_id} for problem_id={problem.problem_id!r}. "
                 f"Generate {source_hint_type.value!r} with enough rollouts first."
             )

@@ -145,6 +145,35 @@ def _default_prompt(*, question: str, hint_text: str) -> str:
     return prompt
 
 
+def _hle_prompt(*, question: str, hint_text: str) -> str:
+    prompt = (
+        "You will be given a problem and a hint to the problem. Use the hint if helpful.\n\n"
+        f"Problem:\n{question.strip()}"
+    )
+    if hint_text.strip():
+        prompt += f"\n\nHint:\n{hint_text.strip()}"
+    prompt += "\n\nGive your final answer in the following format:\nAnswer: {your answer}"
+    return prompt
+
+
+def _build_hinted_prompt(*, benchmark_name: str, question: str, hint_text: str) -> str:
+    if benchmark_name == "hle":
+        return _hle_prompt(question=question, hint_text=hint_text)
+    return _default_prompt(question=question, hint_text=hint_text)
+
+
+def _hint_is_text_only_hle(hint: HintGenerationRecord) -> bool:
+    if hint.benchmark_name != "hle":
+        return True
+    problem_text_only = hint.metadata.get("problem_text_only")
+    if isinstance(problem_text_only, bool):
+        return problem_text_only
+    problem_metadata = hint.metadata.get("problem_metadata")
+    if isinstance(problem_metadata, dict) and isinstance(problem_metadata.get("text_only"), bool):
+        return bool(problem_metadata["text_only"])
+    return False
+
+
 def _inference_id(
     *,
     benchmark_name: str,
@@ -687,12 +716,18 @@ def _build_expanded_prompt_records_for_fraction(
 ) -> list[ExpandedHintedPromptRecord]:
     records: list[ExpandedHintedPromptRecord] = []
     for hint in hints:
+        if benchmark_name == "hle" and not _hint_is_text_only_hle(hint):
+            continue
         hint_text_used, fraction_meta = fraction_hint(
             hint_record=hint,
             fractioner_name=fractioner,
             hint_fraction=hint_fraction,
         )
-        prompt = _default_prompt(question=hint.question, hint_text=hint_text_used)
+        prompt = _build_hinted_prompt(
+            benchmark_name=benchmark_name,
+            question=hint.question,
+            hint_text=hint_text_used,
+        )
         prompt_id = _prompt_id(
             benchmark_name=benchmark_name,
             hint_type=hint_type,
@@ -752,6 +787,9 @@ def build_expanded_hinted_prompt_dataset(
 
     fraction_paths: dict[float, Path] = {}
     per_fraction_counts: dict[str, int] = {}
+    skipped_non_text_only = sum(
+        1 for hint in hints if benchmark_name == "hle" and not _hint_is_text_only_hle(hint)
+    )
     for hint_fraction in normalized_fractions:
         output_path = build_expanded_hinted_prompt_path(
             benchmark_name=benchmark_name,
@@ -792,6 +830,7 @@ def build_expanded_hinted_prompt_dataset(
                 f"{fraction:.6f}": str(path) for fraction, path in fraction_paths.items()
             },
             "per_fraction_counts": per_fraction_counts,
+            "skipped_non_text_only": skipped_non_text_only,
         },
     )
     return fraction_paths
@@ -1172,21 +1211,42 @@ async def _run_all_candidates(
                     )
                     stop_reason = _extract_stop_reason(response)
 
-                    extracted_answer = _extract_last_boxed_expression(model_output)
-                    problem = Problem(
-                        problem_id=hint.problem_id,
-                        question=hint.question,
-                        answer=hint.answer,
-                        source=str(hint.metadata.get("problem_source", "")),
-                    )
-                    is_correct = dataset_spec.is_correct(extracted_answer, problem)
-                    graders = [
-                        _build_success_grader(
-                            extracted_answer=extracted_answer,
-                            is_correct=is_correct,
-                            dataset_name=dataset_spec.name,
+                    if dataset_spec.name == "hle":
+                        extracted_answer = dataset_spec.extract_answer(model_output)
+                        problem_metadata = hint.metadata.get("problem_metadata")
+                        if not isinstance(problem_metadata, dict):
+                            problem_metadata = {}
+                        graders = [
+                            GraderResult(
+                                extractor_grader_type="hle_pending_grader",
+                                extracted_answer=extracted_answer,
+                                is_correct=None,
+                                metadata={
+                                    "dataset_spec": dataset_spec.name,
+                                    "answer_type": problem_metadata.get(
+                                        "answer_type",
+                                        hint.metadata.get("problem_answer_type"),
+                                    ),
+                                    "stage": "pending_hle_sidecar_grading",
+                                },
+                            )
+                        ]
+                    else:
+                        extracted_answer = _extract_last_boxed_expression(model_output)
+                        problem = Problem(
+                            problem_id=hint.problem_id,
+                            question=hint.question,
+                            answer=hint.answer,
+                            source=str(hint.metadata.get("problem_source", "")),
                         )
-                    ]
+                        is_correct = dataset_spec.is_correct(extracted_answer, problem)
+                        graders = [
+                            _build_success_grader(
+                                extracted_answer=extracted_answer,
+                                is_correct=is_correct,
+                                dataset_name=dataset_spec.name,
+                            )
+                        ]
                     break
                 except Exception as exc:
                     error_text = _format_exception_message(exc)
@@ -1375,7 +1435,11 @@ async def _run_all_candidates(
                             "attempts": attempts,
                             "max_retries": max_retries,
                             "retries_used": retries_used,
-                            "answer_extractor": "last_boxed_expression",
+                            "answer_extractor": (
+                                "hle_answer_line"
+                                if dataset_spec.name == "hle"
+                                else "last_boxed_expression"
+                            ),
                             "run_metadata": run_metadata,
                         },
                     )

@@ -42,7 +42,7 @@ if __name__ == "__main__":
 
 """
 
-python -m runs.generate_hints --benchmark hle --hint-type basic_hint_hle --num-rollouts 1 --limit 200 --dry-run false
+python -m runs.generate_hints --benchmark hle --hint-type    --num-rollouts 1 --limit 200 --dry-run false
 
 python -m runs.generate_hints --benchmark hle --hint-type basic_hint_hle --num-rollouts 1 --dry-run false --limit 2500
 
@@ -52,4 +52,7 @@ python -m runs.generate_hints --benchmark hle --hint-type basic_hint_hle --num-r
 
 python -m runs.generate_hints --benchmark hle --hint-type answer_not_revealed --num-rollouts 1 --limit 1 --dry-run false
 
+
+[00:01:28] [hint_generation] request benchmark=hle hint_type=answer_not_revealed problem_id=hle_00001 rollout_id=0 attempt=1 model=claude-sonnet-4-6 images=1
+[00:01:29] [hint_generation][WARN] query_error benchmark=hle problem_id=hle_00001 rollout_id=0 attempt=1 model=claude-sonnet-4-6 error=Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011CabRGDCag6NLQreUqrHeB'}
 """
