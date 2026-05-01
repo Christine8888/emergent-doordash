@@ -23,16 +23,16 @@ def main() -> None:
     generate_hints(
         benchmark_name=args.benchmark,
         hint_type=args.hint_type,
-        # first_model="claude-opus-4-7",
-        first_model="gpt-5.5-2026-04-23",
+        first_model="claude-sonnet-4-6",
+        # first_model="gpt-5.5-2026-04-23",
         first_model_attempts=1,
         num_rollouts=args.num_rollouts,
         limit=args.limit,
         max_tokens=8192,
         temperature=1.0,
         dry_run=args.dry_run == "true",
-        thinking_enabled="true",
-        thinking_effort="low",
+        thinking_enabled="false",
+        # thinking_effort="low",
         concurrency=40,
     )
 
@@ -50,6 +50,6 @@ python -m runs.generate_hints --benchmark hle --hint-type basic_hint_hle --num-r
 
 
 
-python -m runs.generate_hints --benchmark hle --hint-type answer_not_revealed --num-rollouts 1 --limit 10 --dry-run true
+python -m runs.generate_hints --benchmark hle --hint-type answer_not_revealed --num-rollouts 1 --limit 1 --dry-run false
 
 """

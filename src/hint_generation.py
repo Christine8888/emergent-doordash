@@ -292,7 +292,7 @@ def query_anthropic_hint(
         thinking_mode = "adaptive"
         effort = thinking_effort
         request["thinking"] = {"type": thinking_mode}
-        request["output_config"] = {"effort": effort}
+        request["extra_body"] = {"output_config": {"effort": effort}}
 
     with client.messages.stream(**request) as stream:
         for _ in stream.text_stream:
