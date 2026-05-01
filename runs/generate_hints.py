@@ -26,8 +26,6 @@ def main() -> None:
         # first_model="claude-opus-4-6",
         first_model="gpt-5.5-2026-04-23",
         first_model_attempts=1,
-        second_model="claude-opus-4-6",
-        second_model_attempts=0,
         num_rollouts=args.num_rollouts,
         limit=args.limit,
         max_tokens=8192,
@@ -44,7 +42,7 @@ if __name__ == "__main__":
 
 """
 
-python -m runs.generate_hints --benchmark hle --hint-type basic_hint_hle --num-rollouts 1 --limit 5 --dry-run false
+python -m runs.generate_hints --benchmark hle --hint-type basic_hint_hle --num-rollouts 1 --limit 100 --dry-run false
 
 
 

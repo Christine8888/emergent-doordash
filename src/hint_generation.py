@@ -386,8 +386,6 @@ def _generate_record_for_task(
     prompt: str,
     first_model: str,
     first_model_attempts: int,
-    second_model: str,
-    second_model_attempts: int,
     max_tokens: int,
     temperature: float,
     thinking_enabled: bool,
@@ -399,10 +397,7 @@ def _generate_record_for_task(
     successful_full_hint = None
     successful_grader_metadata: dict[str, Any] = {}
     failed_attempts: list[dict[str, Any]] = []
-    attempt_plan = [
-        (first_model, first_model_attempts),
-        (second_model, second_model_attempts),
-    ]
+    attempt_plan = [(first_model, first_model_attempts)]
     attempt_idx = 0
     context_metadata = hint_type_spec.context_metadata(generation_context)
     system_prompt = hint_type_spec.system_prompt
@@ -655,8 +650,6 @@ def _generate_record_for_task(
                 "grader_metadata": successful_grader_metadata,
                 "first_model": first_model,
                 "first_model_attempts": first_model_attempts,
-                "second_model": second_model,
-                "second_model_attempts": second_model_attempts,
                 "provider": successful_usage["provider"],
                 "total_attempts_used": attempt_idx,
                 "stop_reason": successful_usage["stop_reason"],
@@ -677,8 +670,6 @@ def generate_hints(
     hint_type: str,
     first_model: str,
     first_model_attempts: int,
-    second_model: str,
-    second_model_attempts: int,
     num_rollouts: int,
     limit: int,
     max_tokens: int,
@@ -695,7 +686,6 @@ def generate_hints(
     if thinking_effort not in {"low", "medium", "high", "max"}:
         raise ValueError("thinking_effort must be one of: low, medium, high, max")
     _provider_for_model_id(first_model)
-    _provider_for_model_id(second_model)
 
     dataset_spec = get_dataset_spec(benchmark_name)
     hint_type_spec = get_hint_type_spec(hint_type)
@@ -814,8 +804,6 @@ def generate_hints(
                     prompt=task["prompt"],
                     first_model=first_model,
                     first_model_attempts=first_model_attempts,
-                    second_model=second_model,
-                    second_model_attempts=second_model_attempts,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     thinking_enabled=thinking_enabled,
@@ -855,8 +843,6 @@ def generate_hints(
                         prompt=task["prompt"],
                         first_model=first_model,
                         first_model_attempts=first_model_attempts,
-                        second_model=second_model,
-                        second_model_attempts=second_model_attempts,
                         max_tokens=max_tokens,
                         temperature=temperature,
                         thinking_enabled=thinking_enabled,
