@@ -19,6 +19,7 @@ ANTHROPIC_MODELS: set[str] = {
 
 OPENAI_MODELS: set[str] = {
     "gpt-5.4",
+    "gpt-5.5-2026-04-23"
 }
 
 PromptContent = str | list[dict[str, Any]]
@@ -177,6 +178,61 @@ def _build_model_prompt_content(*, prompt: str, problem) -> tuple[PromptContent,
     return [{"type": "text", "text": prompt}, *image_parts], image_metadata
 
 
+def _problem_record_metadata(problem) -> dict[str, Any]:
+    metadata = dict(problem.metadata or {})
+    raw_example = metadata.get("raw_example")
+    return {
+        "problem_metadata": {
+            "id": metadata.get("id"),
+            "answer_type": metadata.get("answer_type"),
+            "text_only": metadata.get("text_only"),
+            "category": metadata.get("category"),
+            "raw_subject": metadata.get("raw_subject"),
+            "has_image": bool(str(metadata.get("image") or "").strip()),
+            "has_image_preview": bool(
+                isinstance(raw_example, dict) and raw_example.get("image_preview") is not None
+            ),
+            "has_rationale_image": bool(
+                isinstance(raw_example, dict) and raw_example.get("rationale_image") is not None
+            ),
+            "author_name": raw_example.get("author_name") if isinstance(raw_example, dict) else None,
+            "canary": raw_example.get("canary") if isinstance(raw_example, dict) else None,
+        }
+    }
+
+
+def _openai_prompt_content(prompt: PromptContent) -> str | list[dict[str, Any]]:
+    if isinstance(prompt, str):
+        return prompt
+
+    content: list[dict[str, Any]] = []
+    for part in prompt:
+        part_type = part.get("type")
+        if part_type == "text":
+            content.append({"type": "text", "text": str(part.get("text", ""))})
+            continue
+        if part_type == "image":
+            source = part.get("source")
+            if not isinstance(source, dict):
+                raise ValueError("Invalid image part: missing source.")
+            source_type = source.get("type")
+            media_type = source.get("media_type")
+            data = source.get("data")
+            if source_type != "base64" or not isinstance(media_type, str) or not isinstance(data, str):
+                raise ValueError("OpenAI image parts require base64 source data and media_type.")
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{media_type};base64,{data}",
+                    },
+                }
+            )
+            continue
+        raise ValueError(f"Unsupported prompt content part for OpenAI: {part_type!r}")
+    return content
+
+
 def query_anthropic_hint(
     prompt: PromptContent,
     model: str,
@@ -236,15 +292,12 @@ def query_openai_hint(
 ) -> dict[str, Any]:
     from openai import OpenAI
 
-    if not isinstance(prompt, str):
-        raise ValueError("OpenAI hint generation does not yet support HLE multimodal prompt content.")
-
     client = OpenAI(timeout=httpx.Timeout(7200, connect=30))
     effort = thinking_effort if thinking_enabled else "none"
     messages: list[dict[str, Any]] = []
     if system_prompt is not None:
         messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": prompt})
+    messages.append({"role": "user", "content": _openai_prompt_content(prompt)})
     completion = client.chat.completions.create(
         model=model,
         messages=messages,
@@ -594,6 +647,7 @@ def _generate_record_for_task(
                 "problem_source": problem.source,
                 "problem_answer_type": problem.metadata.get("answer_type"),
                 "problem_text_only": problem.metadata.get("text_only"),
+                **_problem_record_metadata(problem),
                 "temperature": temperature,
                 "system_prompt": system_prompt,
                 "prompt_image_metadata": prompt_image_metadata,

@@ -819,6 +819,12 @@ class HLESpec(DatasetSpecBase):
         match = re.fullmatch(r"(?i)(?:option|choice|answer)?\s*[\(\[]?([A-Z])[\)\].]?", value)
         if match is not None:
             return match.group(1).upper()
+        leading_label_match = re.match(
+            r"(?i)^\s*(?:option|choice|answer)?\s*[\(\[]?([A-Z])[\)\]]?\s*[\.:;-]\s+\S",
+            value,
+        )
+        if leading_label_match is not None:
+            return leading_label_match.group(1).upper()
         matches = re.findall(
             r"(?i)(?:answer|choice|option)\s*(?:is|:)?\s*[\(\[]?([A-Z])[\)\]]?",
             text,
