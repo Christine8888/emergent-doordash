@@ -756,6 +756,34 @@ class HLESpec(DatasetSpecBase):
     default_judge_model = "o3-2025-04-16"
 
     @staticmethod
+    def _sequential_problem_id(index: int) -> str:
+        return f"hle_{index:05d}"
+
+    def _with_sequential_problem_ids(self, problems: list[Problem]) -> tuple[list[Problem], bool]:
+        updated: list[Problem] = []
+        changed = False
+        for i, problem in enumerate(problems, start=1):
+            metadata = dict(problem.metadata)
+            original_hle_id = metadata.get("problem_id_hle") or metadata.get("id") or problem.problem_id
+            metadata["problem_id_hle"] = str(original_hle_id)
+            if "id" in metadata:
+                metadata.pop("id")
+                changed = True
+            new_problem_id = self._sequential_problem_id(i)
+            if problem.problem_id != new_problem_id:
+                changed = True
+            updated.append(
+                Problem(
+                    problem_id=new_problem_id,
+                    question=problem.question,
+                    answer=problem.answer,
+                    source=problem.source,
+                    metadata=metadata,
+                )
+            )
+        return (updated if changed else problems), changed
+
+    @staticmethod
     def _answer_to_text(answer: Any) -> str:
         if isinstance(answer, str):
             return answer
@@ -764,7 +792,12 @@ class HLESpec(DatasetSpecBase):
     def load_problems(self) -> list[Problem]:
         cache_path = self._dataset_cache_path()
         if cache_path.exists():
-            return self._load_problems_from_cache(cache_path)
+            problems, changed = self._with_sequential_problem_ids(
+                self._load_problems_from_cache(cache_path)
+            )
+            if changed:
+                self._save_problems_to_cache(cache_path, problems)
+            return problems
 
         from datasets import load_dataset
 
@@ -773,9 +806,9 @@ class HLESpec(DatasetSpecBase):
         for i, example in enumerate(dataset, start=1):
             row = {str(key): _json_safe_value(value) for key, value in dict(example).items()}
             image = str(row.get("image") or "").strip()
-            problem_id = str(row.get("id") or f"{self.name}_{i:05d}")
+            problem_id_hle = str(row.get("id") or "")
             metadata = {
-                "id": row.get("id"),
+                "problem_id_hle": problem_id_hle,
                 "answer_type": row.get("answer_type"),
                 "image": image,
                 "text_only": image == "",
@@ -785,7 +818,7 @@ class HLESpec(DatasetSpecBase):
             }
             problems.append(
                 Problem(
-                    problem_id=problem_id,
+                    problem_id=self._sequential_problem_id(i),
                     question=str(row.get("question") or "").strip(),
                     answer=self._answer_to_text(row.get("answer")),
                     source="cais/hle:test",
@@ -849,7 +882,7 @@ class HLESpec(DatasetSpecBase):
         import os
 
         from pydantic import BaseModel
-        from openai import OpenAI
+        from openai import LengthFinishReasonError, OpenAI, OpenAIError
 
         class ExtractedAnswer(BaseModel):
             extracted_final_answer: str
@@ -865,15 +898,41 @@ class HLESpec(DatasetSpecBase):
             response=response_text,
         )
         client = OpenAI()
-        completion = client.beta.chat.completions.parse(
-            model=judge_model,
-            max_completion_tokens=4096,
-            messages=[{"role": "user", "content": prompt}],
-            response_format=ExtractedAnswer,
-        )
+        request: dict[str, Any] = {
+            "model": judge_model,
+            "max_completion_tokens": 4096,
+            "messages": [{"role": "user", "content": prompt}],
+            "response_format": ExtractedAnswer,
+        }
+        if judge_model.startswith(("o", "gpt-5")):
+            request["reasoning_effort"] = os.environ.get("HLE_JUDGE_REASONING_EFFORT", "low")
+        try:
+            completion = client.beta.chat.completions.parse(**request)
+        except (LengthFinishReasonError, OpenAIError) as exc:
+            return {
+                "is_correct": False,
+                "extracted_answer": self.extract_answer(response_text),
+                "metadata": {
+                    "grader_type": "hle_official_style_llm_judge_error",
+                    "judge_model": judge_model,
+                    "answer_type": problem.metadata.get("answer_type"),
+                    "judge_error_type": type(exc).__name__,
+                    "judge_error": str(exc),
+                },
+            }
         content = completion.choices[0].message.parsed
         if content is None:
-            raise RuntimeError("HLE judge returned no parsed response.")
+            return {
+                "is_correct": False,
+                "extracted_answer": self.extract_answer(response_text),
+                "metadata": {
+                    "grader_type": "hle_official_style_llm_judge_error",
+                    "judge_model": judge_model,
+                    "answer_type": problem.metadata.get("answer_type"),
+                    "judge_error_type": "NoParsedResponse",
+                    "judge_error": "HLE judge returned no parsed response.",
+                },
+            }
         extracted = content.extracted_final_answer
         is_correct = content.correct == "yes"
         confidence = content.confidence

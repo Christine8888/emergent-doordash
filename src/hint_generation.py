@@ -101,6 +101,36 @@ def _parse_openai_message_text(content: Any) -> str:
     return str(content).strip() if content is not None else ""
 
 
+def _maybe_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def _get_attr_or_key(value: Any, name: str) -> Any:
+    if isinstance(value, dict):
+        return value.get(name)
+    return getattr(value, name, None)
+
+
+def _token_breakdown_metadata(usage: dict[str, Any]) -> dict[str, Any]:
+    output_tokens = _maybe_int(usage.get("output_token_count"))
+    reasoning_tokens = _maybe_int(usage.get("reasoning_token_count"))
+    thinking_tokens = _maybe_int(usage.get("thinking_token_count"))
+    visible_output_tokens: int | None = None
+    hidden_output_tokens = reasoning_tokens if reasoning_tokens is not None else thinking_tokens
+    if output_tokens is not None and hidden_output_tokens is not None:
+        visible_output_tokens = max(0, output_tokens - hidden_output_tokens)
+    return {
+        "reasoning_token_count": reasoning_tokens,
+        "thinking_token_count": thinking_tokens,
+        "visible_output_token_count": visible_output_tokens,
+    }
+
+
 def _extension_for_media_type(media_type: str) -> str:
     return {
         "image/jpeg": ".jpg",
@@ -181,9 +211,11 @@ def _build_model_prompt_content(*, prompt: str, problem) -> tuple[PromptContent,
 def _problem_record_metadata(problem) -> dict[str, Any]:
     metadata = dict(problem.metadata or {})
     raw_example = metadata.get("raw_example")
+    problem_id_hle = metadata.get("problem_id_hle") or metadata.get("id")
     return {
+        "problem_id_hle": problem_id_hle,
         "problem_metadata": {
-            "id": metadata.get("id"),
+            "problem_id_hle": problem_id_hle,
             "answer_type": metadata.get("answer_type"),
             "text_only": metadata.get("text_only"),
             "category": metadata.get("category"),
@@ -276,6 +308,8 @@ def query_anthropic_hint(
         "effort": effort,
         "input_token_count": int(response.usage.input_tokens),
         "output_token_count": int(response.usage.output_tokens),
+        "reasoning_token_count": None,
+        "thinking_token_count": _maybe_int(getattr(response.usage, "thinking_tokens", None)),
         "stop_reason": getattr(response, "stop_reason", None),
     }
 
@@ -308,6 +342,10 @@ def query_openai_hint(
     choice = completion.choices[0]
     content = getattr(choice.message, "content", None)
     usage = getattr(completion, "usage", None)
+    completion_token_details = _get_attr_or_key(usage, "completion_tokens_details")
+    reasoning_token_count = _maybe_int(
+        _get_attr_or_key(completion_token_details, "reasoning_tokens")
+    )
     return {
         "model_output": _parse_openai_message_text(content),
         "thinking": "",
@@ -315,8 +353,10 @@ def query_openai_hint(
         "thinking_enabled": thinking_enabled,
         "thinking_mode": "openai_reasoning_effort" if thinking_enabled else "disabled",
         "effort": effort,
-        "input_token_count": int(getattr(usage, "prompt_tokens", 0) or 0),
-        "output_token_count": int(getattr(usage, "completion_tokens", 0) or 0),
+        "input_token_count": int(_get_attr_or_key(usage, "prompt_tokens") or 0),
+        "output_token_count": int(_get_attr_or_key(usage, "completion_tokens") or 0),
+        "reasoning_token_count": reasoning_token_count,
+        "thinking_token_count": reasoning_token_count,
         "stop_reason": getattr(choice, "finish_reason", None),
     }
 
@@ -470,7 +510,10 @@ def _generate_record_for_task(
                 f"[hint_generation] response benchmark={benchmark_name} hint_type={hint_type} "
                 f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
                 f"model={attempt_model} input_tokens={usage['input_token_count']} "
-                f"output_tokens={usage['output_token_count']} stop_reason={usage['stop_reason']}"
+                f"output_tokens={usage['output_token_count']} "
+                f"reasoning_tokens={usage.get('reasoning_token_count')} "
+                f"thinking_tokens={usage.get('thinking_token_count')} "
+                f"stop_reason={usage['stop_reason']}"
             )
             if _is_max_token_stop(provider=usage["provider"], stop_reason=usage["stop_reason"]):
                 failed_attempts.append(
@@ -492,6 +535,7 @@ def _generate_record_for_task(
                         "provider": usage["provider"],
                         "input_token_count": usage["input_token_count"],
                         "output_token_count": usage["output_token_count"],
+                        **_token_breakdown_metadata(usage),
                         "stop_reason": usage["stop_reason"],
                         "thinking": usage["thinking"],
                         "thinking_enabled": usage["thinking_enabled"],
@@ -537,6 +581,7 @@ def _generate_record_for_task(
                         "provider": usage["provider"],
                         "input_token_count": usage["input_token_count"],
                         "output_token_count": usage["output_token_count"],
+                        **_token_breakdown_metadata(usage),
                         "stop_reason": usage["stop_reason"],
                         "thinking": usage["thinking"],
                         "thinking_enabled": usage["thinking_enabled"],
@@ -587,6 +632,7 @@ def _generate_record_for_task(
                         "provider": usage["provider"],
                         "input_token_count": usage["input_token_count"],
                         "output_token_count": usage["output_token_count"],
+                        **_token_breakdown_metadata(usage),
                         "stop_reason": usage["stop_reason"],
                         "thinking": usage["thinking"],
                         "thinking_enabled": usage["thinking_enabled"],
@@ -651,6 +697,7 @@ def _generate_record_for_task(
                 "first_model": first_model,
                 "first_model_attempts": first_model_attempts,
                 "provider": successful_usage["provider"],
+                **_token_breakdown_metadata(successful_usage),
                 "total_attempts_used": attempt_idx,
                 "stop_reason": successful_usage["stop_reason"],
                 "thinking": successful_usage["thinking"],
@@ -826,7 +873,7 @@ def generate_hints(
                 written += 1
         else:
             with ThreadPoolExecutor(max_workers=concurrency) as executor:
-                futures = [
+                future_to_task = {
                     executor.submit(
                         _generate_record_for_task,
                         benchmark_name=benchmark_name,
@@ -847,11 +894,43 @@ def generate_hints(
                         temperature=temperature,
                         thinking_enabled=thinking_enabled,
                         thinking_effort=thinking_effort,
-                    )
+                    ): task
                     for task in prepared_tasks
-                ]
-                for future in as_completed(futures):
-                    record, failed_attempts = future.result()
+                }
+                for future in as_completed(future_to_task):
+                    task = future_to_task[future]
+                    try:
+                        record, failed_attempts = future.result()
+                    except Exception as exc:
+                        problem = task["problem"]
+                        append_jsonl(
+                            failed_out_path,
+                            {
+                                "hint_id": task["hint_id"],
+                                "problem_id": problem.problem_id,
+                                "benchmark_name": benchmark_name,
+                                "hint_type": hint_type,
+                                "rollout_id": task["rollout_id"],
+                                "attempt": None,
+                                "model": first_model,
+                                "failure_type": "worker_exception",
+                                "failure_error": str(exc),
+                                "failure_error_type": type(exc).__name__,
+                                "question": problem.question,
+                                "answer": problem.answer,
+                                "prompt": task["prompt"],
+                                "system_prompt": hint_type_spec.system_prompt,
+                                "task_succeeded": False,
+                            },
+                        )
+                        failed_attempts_written += 1
+                        failed += 1
+                        _log(
+                            f"[hint_generation][WARN] worker_exception benchmark={benchmark_name} "
+                            f"problem_id={problem.problem_id} rollout_id={task['rollout_id']} "
+                            f"model={first_model} error={exc}"
+                        )
+                        continue
                     task_succeeded = record is not None
                     for failed_attempt in failed_attempts:
                         append_jsonl(
