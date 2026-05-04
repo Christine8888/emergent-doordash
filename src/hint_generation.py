@@ -14,6 +14,7 @@ from src.types import HintGenerationRecord
 
 ANTHROPIC_MODELS: set[str] = {
     "claude-opus-4-6",
+    "claude-opus-4-7",
     "claude-sonnet-4-6",
 }
 
@@ -737,6 +738,7 @@ def generate_hints(
     thinking_enabled: bool = True,
     thinking_effort: str = "medium",
     concurrency: int = 1,
+    hle_modality: str = "all",
 ) -> str:
     """Generate hint records and append them to a JSONL file."""
     if concurrency < 1:
@@ -744,11 +746,22 @@ def generate_hints(
     thinking_enabled = _coerce_bool(thinking_enabled)
     if thinking_effort not in {"low", "medium", "high", "max"}:
         raise ValueError("thinking_effort must be one of: low, medium, high, max")
+    if hle_modality not in {"all", "text-only", "with-images"}:
+        raise ValueError("hle_modality must be one of: all, text-only, with-images")
     _provider_for_model_id(first_model)
 
     dataset_spec = get_dataset_spec(benchmark_name)
     hint_type_spec = get_hint_type_spec(hint_type)
     all_problems = dataset_spec.load_problems()
+    if benchmark_name == "hle" and hle_modality != "all":
+        want_text_only = hle_modality == "text-only"
+        all_problems = [
+            problem
+            for problem in all_problems
+            if bool(problem.metadata.get("text_only")) == want_text_only
+        ]
+    elif hle_modality != "all":
+        raise ValueError("--hle-modality can only be used with --benchmark hle")
     if problem_ids:
         cleaned_problem_ids = [pid.strip() for pid in problem_ids if pid.strip()]
         by_id = {problem.problem_id: problem for problem in all_problems}
