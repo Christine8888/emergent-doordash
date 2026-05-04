@@ -35,6 +35,18 @@ def _is_max_token_stop(*, provider: str, stop_reason: Any) -> bool:
     return False
 
 
+def _coerce_bool(value: bool | str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "on"}:
+            return True
+        if lowered in {"false", "0", "no", "off"}:
+            return False
+    raise ValueError(f"Expected boolean value, got {value!r}")
+
+
 def _provider_for_model_id(model_id: str) -> str:
     model_name = model_id.strip()
     if model_name in ANTHROPIC_MODELS:
@@ -729,6 +741,7 @@ def generate_hints(
     """Generate hint records and append them to a JSONL file."""
     if concurrency < 1:
         raise ValueError("concurrency must be >= 1")
+    thinking_enabled = _coerce_bool(thinking_enabled)
     if thinking_effort not in {"low", "medium", "high", "max"}:
         raise ValueError("thinking_effort must be one of: low, medium, high, max")
     _provider_for_model_id(first_model)

@@ -31,7 +31,7 @@ def main() -> None:
         max_tokens=8192,
         temperature=1.0,
         dry_run=args.dry_run == "true",
-        thinking_enabled="false",
+        thinking_enabled=False,
         # thinking_effort="low",
         concurrency=40,
     )
@@ -50,7 +50,7 @@ python -m runs.generate_hints --benchmark hle --hint-type basic_hint_hle --num-r
 
 
 
-python -m runs.generate_hints --benchmark hle --hint-type answer_not_revealed --num-rollouts 1 --limit 1 --dry-run false
+python -m runs.generate_hints --benchmark hle --hint-type answer_not_revealed --num-rollouts 1 --limit 5 --dry-run false
 
 
 [00:01:28] [hint_generation] request benchmark=hle hint_type=answer_not_revealed problem_id=hle_00001 rollout_id=0 attempt=1 model=claude-sonnet-4-6 images=1
