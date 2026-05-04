@@ -12,8 +12,7 @@ from src.storage import build_hint_generation_path, read_jsonl
 HLE_SYSTEM_PROMPT = (
     "Your response should be in the following format:\n"
     "Explanation: {your explanation for your answer choice}\n"
-    "Answer: {your chosen answer}\n"
-    "Confidence: {your confidence score between 0% and 100% for your answer}"
+    "Answer: {your chosen answer}"
 )
 
 
