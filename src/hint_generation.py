@@ -1,10 +1,12 @@
 from __future__ import annotations
 import base64
 import httpx
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 import re
+import threading
 from typing import Any
 
 from src.datasets import get_dataset_spec
@@ -96,6 +98,75 @@ def _parse_anthropic_message_thinking(message) -> str:
     return "\n".join(thoughts).strip()
 
 
+def _append_output_block(blocks: list[dict[str, str]], block_type: str, text: str | None) -> None:
+    if not isinstance(text, str) or not text:
+        return
+    if blocks and blocks[-1].get("type") == block_type:
+        blocks[-1]["text"] = blocks[-1].get("text", "") + text
+        return
+    blocks.append({"type": block_type, "text": text})
+
+
+def _anthropic_message_output_blocks(message: Any) -> list[dict[str, str]]:
+    blocks: list[dict[str, str]] = []
+    for block in getattr(message, "content", []) or []:
+        block_type = getattr(block, "type", None)
+        if block_type == "text":
+            _append_output_block(blocks, "text", getattr(block, "text", None))
+        elif block_type == "thinking":
+            _append_output_block(blocks, "thinking", getattr(block, "thinking", None))
+        elif block_type == "redacted_thinking":
+            _append_output_block(blocks, "redacted_thinking", "[redacted thinking]")
+    return blocks
+
+
+def _join_output_blocks(blocks: list[dict[str, str]], block_type: str) -> str:
+    return "".join(
+        block.get("text", "")
+        for block in blocks
+        if block.get("type") == block_type and isinstance(block.get("text"), str)
+    ).strip()
+
+
+def _jsonable(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json")
+    if isinstance(value, dict):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, tuple):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return repr(value)
+
+
+def _dump_model_debug_response(
+    *,
+    provider: str,
+    model: str,
+    final_response: Any,
+    stream_events: list[Any],
+    output_blocks: list[dict[str, str]],
+) -> str:
+    debug_dir = Path("data") / "debug" / "model_responses"
+    debug_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    safe_model = model.replace("/", "_")
+    path = debug_dir / f"{timestamp}_{threading.get_ident()}_{provider}_{safe_model}.json"
+    payload = {
+        "provider": provider,
+        "model": model,
+        "final_response": _jsonable(final_response),
+        "stream_events": [_jsonable(event) for event in stream_events],
+        "parsed_output_blocks": output_blocks,
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False)
+    return str(path)
+
+
 def _parse_openai_message_text(content: Any) -> str:
     if isinstance(content, str):
         return content.strip()
@@ -133,14 +204,13 @@ def _token_breakdown_metadata(usage: dict[str, Any]) -> dict[str, Any]:
     output_tokens = _maybe_int(usage.get("output_token_count"))
     reasoning_tokens = _maybe_int(usage.get("reasoning_token_count"))
     thinking_tokens = _maybe_int(usage.get("thinking_token_count"))
-    visible_output_tokens: int | None = None
-    hidden_output_tokens = reasoning_tokens if reasoning_tokens is not None else thinking_tokens
-    if output_tokens is not None and hidden_output_tokens is not None:
-        visible_output_tokens = max(0, output_tokens - hidden_output_tokens)
+    reasoning_output_tokens = reasoning_tokens if reasoning_tokens is not None else thinking_tokens
+    normal_output_tokens = output_tokens
+    if output_tokens is not None and reasoning_output_tokens is not None:
+        normal_output_tokens = max(0, output_tokens - reasoning_output_tokens)
     return {
-        "reasoning_token_count": reasoning_tokens,
-        "thinking_token_count": thinking_tokens,
-        "visible_output_token_count": visible_output_tokens,
+        "normal_output_tokens": normal_output_tokens,
+        "reasoning_output_tokens": reasoning_output_tokens,
     }
 
 
@@ -287,6 +357,7 @@ def query_anthropic_hint(
     temperature: float,
     thinking_enabled: bool,
     thinking_effort: str,
+    save_debug_responses: bool,
 ) -> dict[str, Any]:
     import anthropic
 
@@ -304,25 +375,59 @@ def query_anthropic_hint(
     if thinking_enabled:
         thinking_mode = "adaptive"
         effort = thinking_effort
-        request["thinking"] = {"type": thinking_mode}
+        request["thinking"] = {"type": thinking_mode, "display": "summarized"}
 
+    streamed_output_blocks: list[dict[str, str]] = []
+    stream_events: list[Any] = []
     with client.messages.stream(**request) as stream:
-        for _ in stream.text_stream:
-            pass
+        for event in stream:
+            stream_events.append(event)
+            event_type = getattr(event, "type", None)
+            if event_type != "content_block_delta":
+                continue
+            delta = getattr(event, "delta", None)
+            delta_type = getattr(delta, "type", None)
+            if delta_type == "text_delta":
+                _append_output_block(streamed_output_blocks, "text", getattr(delta, "text", None))
+            elif delta_type == "thinking_delta":
+                _append_output_block(streamed_output_blocks, "thinking", getattr(delta, "thinking", None))
         response = stream.get_final_message()
 
+    final_output_blocks = _anthropic_message_output_blocks(response)
+    output_blocks = streamed_output_blocks or final_output_blocks
+    model_output = _join_output_blocks(output_blocks, "text")
+    thinking = _join_output_blocks(output_blocks, "thinking")
+    if not model_output:
+        model_output = _parse_anthropic_message_text(response)
+    if not thinking:
+        thinking = _parse_anthropic_message_thinking(response)
+
+    debug_dump_path = None
+    response_output_tokens = int(response.usage.output_tokens)
+    response_stop_reason = getattr(response, "stop_reason", None)
+    if save_debug_responses:
+        debug_dump_path = _dump_model_debug_response(
+            provider="anthropic",
+            model=model,
+            final_response=response,
+            stream_events=stream_events,
+            output_blocks=output_blocks,
+        )
+
     return {
-        "model_output": _parse_anthropic_message_text(response),
-        "thinking": _parse_anthropic_message_thinking(response),
+        "model_output": model_output,
+        "thinking": thinking,
+        "output_blocks": output_blocks,
+        "debug_dump_path": debug_dump_path,
         "provider": "anthropic",
         "thinking_enabled": thinking_enabled,
         "thinking_mode": thinking_mode,
         "effort": effort,
         "input_token_count": int(response.usage.input_tokens),
-        "output_token_count": int(response.usage.output_tokens),
+        "output_token_count": response_output_tokens,
         "reasoning_token_count": None,
         "thinking_token_count": _maybe_int(getattr(response.usage, "thinking_tokens", None)),
-        "stop_reason": getattr(response, "stop_reason", None),
+        "stop_reason": response_stop_reason,
     }
 
 
@@ -335,6 +440,7 @@ def query_openai_hint(
     temperature: float,
     thinking_enabled: bool,
     thinking_effort: str,
+    save_debug_responses: bool,
 ) -> dict[str, Any]:
     from openai import OpenAI
 
@@ -358,9 +464,21 @@ def query_openai_hint(
     reasoning_token_count = _maybe_int(
         _get_attr_or_key(completion_token_details, "reasoning_tokens")
     )
+    model_output = _parse_openai_message_text(content)
+    debug_dump_path = None
+    if save_debug_responses:
+        debug_dump_path = _dump_model_debug_response(
+            provider="openai",
+            model=model,
+            final_response=completion,
+            stream_events=[],
+            output_blocks=[{"type": "text", "text": model_output}] if model_output else [],
+        )
     return {
-        "model_output": _parse_openai_message_text(content),
+        "model_output": model_output,
         "thinking": "",
+        "output_blocks": [{"type": "text", "text": model_output}] if model_output else [],
+        "debug_dump_path": debug_dump_path,
         "provider": "openai",
         "thinking_enabled": thinking_enabled,
         "thinking_mode": "openai_reasoning_effort" if thinking_enabled else "disabled",
@@ -382,6 +500,7 @@ def query_model_hint(
     temperature: float,
     thinking_enabled: bool,
     thinking_effort: str,
+    save_debug_responses: bool,
 ) -> dict[str, Any]:
     provider = _provider_for_model_id(model)
     if provider == "anthropic":
@@ -393,6 +512,7 @@ def query_model_hint(
             temperature=temperature,
             thinking_enabled=thinking_enabled,
             thinking_effort=thinking_effort,
+            save_debug_responses=save_debug_responses,
         )
     if provider == "openai":
         return query_openai_hint(
@@ -403,6 +523,7 @@ def query_model_hint(
             temperature=temperature,
             thinking_enabled=thinking_enabled,
             thinking_effort=thinking_effort,
+            save_debug_responses=save_debug_responses,
         )
     raise RuntimeError(f"Unhandled provider={provider!r} for model={model!r}")
 
@@ -437,11 +558,11 @@ def _generate_record_for_task(
     generation_context,
     prompt: str,
     first_model: str,
-    first_model_attempts: int,
     max_tokens: int,
     temperature: float,
     thinking_enabled: bool,
     thinking_effort: str,
+    save_debug_responses: bool,
 ) -> tuple[HintGenerationRecord | None, list[dict[str, Any]]]:
     successful_usage = None
     successful_model = None
@@ -449,7 +570,7 @@ def _generate_record_for_task(
     successful_full_hint = None
     successful_grader_metadata: dict[str, Any] = {}
     failed_attempts: list[dict[str, Any]] = []
-    attempt_plan = [(first_model, first_model_attempts)]
+    attempt_plan = [(first_model, 1)]
     attempt_idx = 0
     context_metadata = hint_type_spec.context_metadata(generation_context)
     system_prompt = hint_type_spec.system_prompt
@@ -487,6 +608,7 @@ def _generate_record_for_task(
                     temperature=temperature,
                     thinking_enabled=thinking_enabled,
                     thinking_effort=thinking_effort,
+                    save_debug_responses=save_debug_responses,
                 )
             except Exception as exc:
                 failed_attempts.append(
@@ -522,9 +644,8 @@ def _generate_record_for_task(
                 f"[hint_generation] response benchmark={benchmark_name} hint_type={hint_type} "
                 f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
                 f"model={attempt_model} input_tokens={usage['input_token_count']} "
-                f"output_tokens={usage['output_token_count']} "
-                f"reasoning_tokens={usage.get('reasoning_token_count')} "
-                f"thinking_tokens={usage.get('thinking_token_count')} "
+                f"normal_output_tokens={_token_breakdown_metadata(usage)['normal_output_tokens']} "
+                f"reasoning_output_tokens={_token_breakdown_metadata(usage)['reasoning_output_tokens']} "
                 f"stop_reason={usage['stop_reason']}"
             )
             if _is_max_token_stop(provider=usage["provider"], stop_reason=usage["stop_reason"]):
@@ -550,6 +671,8 @@ def _generate_record_for_task(
                         **_token_breakdown_metadata(usage),
                         "stop_reason": usage["stop_reason"],
                         "thinking": usage["thinking"],
+                        "output_blocks": usage.get("output_blocks", []),
+                        "debug_dump_path": usage.get("debug_dump_path"),
                         "thinking_enabled": usage["thinking_enabled"],
                         "thinking_mode": usage["thinking_mode"],
                         "effort": usage["effort"],
@@ -557,11 +680,19 @@ def _generate_record_for_task(
                         **context_metadata,
                     }
                 )
+                debug_dump_log = (
+                    f" debug_dump={usage['debug_dump_path']}"
+                    if usage.get("debug_dump_path")
+                    else ""
+                )
                 _log(
                     f"[hint_generation][WARN] max_tokens_reached benchmark={benchmark_name} "
                     f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
-                    f"model={attempt_model} output_tokens={usage['output_token_count']} "
+                    f"model={attempt_model} "
+                    f"normal_output_tokens={_token_breakdown_metadata(usage)['normal_output_tokens']} "
+                    f"reasoning_output_tokens={_token_breakdown_metadata(usage)['reasoning_output_tokens']} "
                     f"stop_reason={usage['stop_reason']}"
+                    f"{debug_dump_log}"
                 )
                 continue
 
@@ -596,6 +727,8 @@ def _generate_record_for_task(
                         **_token_breakdown_metadata(usage),
                         "stop_reason": usage["stop_reason"],
                         "thinking": usage["thinking"],
+                        "output_blocks": usage.get("output_blocks", []),
+                        "debug_dump_path": usage.get("debug_dump_path"),
                         "thinking_enabled": usage["thinking_enabled"],
                         "thinking_mode": usage["thinking_mode"],
                         "effort": usage["effort"],
@@ -647,6 +780,8 @@ def _generate_record_for_task(
                         **_token_breakdown_metadata(usage),
                         "stop_reason": usage["stop_reason"],
                         "thinking": usage["thinking"],
+                        "output_blocks": usage.get("output_blocks", []),
+                        "debug_dump_path": usage.get("debug_dump_path"),
                         "thinking_enabled": usage["thinking_enabled"],
                         "thinking_mode": usage["thinking_mode"],
                         "effort": usage["effort"],
@@ -707,12 +842,13 @@ def _generate_record_for_task(
                 "extracted_answer": successful_extracted,
                 "grader_metadata": successful_grader_metadata,
                 "first_model": first_model,
-                "first_model_attempts": first_model_attempts,
                 "provider": successful_usage["provider"],
                 **_token_breakdown_metadata(successful_usage),
                 "total_attempts_used": attempt_idx,
                 "stop_reason": successful_usage["stop_reason"],
                 "thinking": successful_usage["thinking"],
+                "output_blocks": successful_usage.get("output_blocks", []),
+                "debug_dump_path": successful_usage.get("debug_dump_path"),
                 "thinking_enabled": successful_usage["thinking_enabled"],
                 "thinking_mode": successful_usage["thinking_mode"],
                 "effort": successful_usage["effort"],
@@ -728,7 +864,6 @@ def generate_hints(
     benchmark_name: str,
     hint_type: str,
     first_model: str,
-    first_model_attempts: int,
     num_rollouts: int,
     limit: int,
     max_tokens: int,
@@ -739,12 +874,14 @@ def generate_hints(
     thinking_effort: str = "medium",
     concurrency: int = 1,
     hle_modality: str = "all",
+    save_debug_responses: bool = False,
 ) -> str:
     """Generate hint records and append them to a JSONL file."""
     if concurrency < 1:
         raise ValueError("concurrency must be >= 1")
     thinking_enabled = _coerce_bool(thinking_enabled)
-    if thinking_effort not in {"low", "medium", "high", "max"}:
+    save_debug_responses = _coerce_bool(save_debug_responses)
+    if thinking_enabled and thinking_effort not in {"low", "medium", "high", "max"}:
         raise ValueError("thinking_effort must be one of: low, medium, high, max")
     if hle_modality not in {"all", "text-only", "with-images"}:
         raise ValueError("hle_modality must be one of: all, text-only, with-images")
@@ -852,6 +989,7 @@ def generate_hints(
             f"num_problems={len(problems)} rollouts={num_rollouts} "
             f"thinking_enabled={thinking_enabled} thinking_effort={thinking_effort if thinking_enabled else 'n/a'} "
             f"would_write={would_write} skipped={skipped} skipped_missing_source={skipped_missing_source} "
+            f"save_debug_responses={save_debug_responses} "
             f"output={out_path}"
         )
         if skipped_missing_source:
@@ -888,11 +1026,11 @@ def generate_hints(
                     generation_context=task["generation_context"],
                     prompt=task["prompt"],
                     first_model=first_model,
-                    first_model_attempts=first_model_attempts,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     thinking_enabled=thinking_enabled,
                     thinking_effort=thinking_effort,
+                    save_debug_responses=save_debug_responses,
                 )
                 task_succeeded = record is not None
                 for failed_attempt in failed_attempts:
@@ -927,11 +1065,11 @@ def generate_hints(
                         generation_context=task["generation_context"],
                         prompt=task["prompt"],
                         first_model=first_model,
-                        first_model_attempts=first_model_attempts,
                         max_tokens=max_tokens,
                         temperature=temperature,
                         thinking_enabled=thinking_enabled,
                         thinking_effort=thinking_effort,
+                        save_debug_responses=save_debug_responses,
                     ): task
                     for task in prepared_tasks
                 }
@@ -989,6 +1127,7 @@ def generate_hints(
             f"[hint_generation] done benchmark={benchmark_name} hint_type={hint_type} "
             f"num_problems={len(problems)} rollouts={num_rollouts} concurrency={concurrency} "
             f"thinking_enabled={thinking_enabled} thinking_effort={thinking_effort if thinking_enabled else 'n/a'} "
+            f"save_debug_responses={save_debug_responses} "
             f"accepted={written} rejected={failed_attempts_written} "
             f"written={written} skipped={skipped} skipped_missing_source={skipped_missing_source} "
             f"failed={failed} failed_attempts_logged={failed_attempts_written} "

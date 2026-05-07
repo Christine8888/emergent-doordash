@@ -9,10 +9,25 @@ import re
 from src.datasets import DatasetSpecBase, Problem
 from src.storage import build_hint_generation_path, read_jsonl
 
-HLE_SYSTEM_PROMPT = (
-    "Your response should be in the following format:\n"
-    "Explanation: {your explanation for your answer choice}\n"
-    "Answer: {your chosen answer}"
+AIME_BASIC_PROMPT = ( # https://github.com/eth-sri/matharena/blob/main/configs/competitions/aime/aime_2026.yaml
+    "Put your final answer within \\boxed{{}}. \nThe answer is an integer between 0 and 999 inclusive. \n" # TODO update this for any datasets that do not have this!
+    "{question}"
+)
+# HLE_BASIC_PROMPT = (
+#     "Give a detailed explanation of your answer and show how you got to the answer. \n"
+#     "Put your final answer after 'Answer:'.\n"
+#     "{question}"
+# )
+# HLE_BASIC_PROMPT = (
+#     "First, provide a detailed explanation of your reasoning step-by-step. \n"
+#     "Then, put your final answer on a new line starting with 'Answer:'.\n"
+#     "{question}"
+# )
+HLE_BASIC_PROMPT = (
+    "Explain how you get to the final answer and consider all options. \n"
+    # "Provide a detailed explanation of your reasoning step-by-step. \n"
+    "Put your final answer on a new line starting with 'Answer:'.\n"
+    "{question}"
 )
 
 
@@ -350,10 +365,8 @@ class BasicHintTypeSpec(HintTypeSpecBase):
             "The answer is an integer between 0 and 999 inclusive.\n" # TODO update this for any datasets that do not have this!
             "Provide the answer in <answer></answer> tags.\n"
         )
-        template_v3 = ( # https://github.com/eth-sri/matharena/blob/main/configs/competitions/aime/aime_2026.yaml
-            "Put your final answer within \\boxed{{}}. \nThe answer is an integer between 0 and 999 inclusive. \n" # TODO update this for any datasets that do not have this!
-            "{question}"
-        )
+        
+        template_v3 = AIME_BASIC_PROMPT
         return template_v3.format(question=problem.question)
 
     def _post_process(
@@ -391,7 +404,6 @@ class BasicHLEHintTypeSpec(BasicHintTypeSpec):
             post_process_version="basic_hle_post_v1",
             grade_model_output=True,
         )
-        self.system_prompt = HLE_SYSTEM_PROMPT
 
     def _build_prompt(
         self,
@@ -402,7 +414,7 @@ class BasicHLEHintTypeSpec(BasicHintTypeSpec):
         _ = context
         if problem.source != "cais/hle:test":
             raise ValueError("basic_hint_hle can only be used with the HLE dataset.")
-        return problem.question.strip()
+        return HLE_BASIC_PROMPT.format(question=problem.question.strip())
 
 
 class AnswerNotRevealedHintTypeSpec(HintTypeSpecBase):

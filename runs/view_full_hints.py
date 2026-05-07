@@ -44,6 +44,42 @@ def _discover_hint_types(benchmark_name: str) -> list[str]:
     return sorted(path.stem for path in hint_dir.glob("*.jsonl"))
 
 
+def _clean_output_blocks(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    blocks: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        block_type = item.get("type")
+        text = item.get("text")
+        if not isinstance(block_type, str) or not isinstance(text, str) or not text:
+            continue
+        blocks.append({"type": block_type, "text": text})
+    return blocks
+
+
+def _output_blocks_for_hint_row(hint_row: Any, meta: dict[str, Any]) -> list[dict[str, str]]:
+    blocks = _clean_output_blocks(meta.get("output_blocks"))
+    if not blocks:
+        blocks = _clean_output_blocks(hint_row.get("output_blocks"))
+    if blocks:
+        return blocks
+
+    # Older rows only have flattened fields, so the true interleaving is unavailable.
+    fallback_blocks: list[dict[str, str]] = []
+    thinking = meta.get("thinking")
+    if not isinstance(thinking, str):
+        thinking = hint_row.get("thinking")
+    if isinstance(thinking, str) and thinking:
+        fallback_blocks.append({"type": "thinking", "text": thinking})
+
+    model_output = hint_row.get("model_output")
+    if isinstance(model_output, str) and model_output:
+        fallback_blocks.append({"type": "text", "text": model_output})
+    return fallback_blocks
+
+
 @st.cache_data(show_spinner=False)
 def load_dataset_df(path_str: str) -> pd.DataFrame:
     path = Path(path_str)
@@ -307,7 +343,11 @@ def main() -> None:
                 meta = hint_row.get("metadata", {})
                 if not isinstance(meta, dict):
                     meta = {}
-                compact_meta = {k: v for k, v in meta.items() if k != "prompt"}
+                compact_meta = {
+                    k: v
+                    for k, v in meta.items()
+                    if k not in {"prompt", "thinking", "output_blocks"}
+                }
                 st.markdown("**Hint Metadata**")
                 st.json(
                     {
@@ -324,6 +364,22 @@ def main() -> None:
 
                 st.markdown("**Full Hint**")
                 st.code(str(hint_row.get("full_hint", "")), language="text")
+
+                output_blocks = _output_blocks_for_hint_row(hint_row, meta)
+                if output_blocks:
+                    with st.expander("Model Output Blocks", expanded=False):
+                        for block_idx, block in enumerate(output_blocks, start=1):
+                            block_type = block["type"]
+                            if block_type == "text":
+                                label = "Model text"
+                            elif block_type == "thinking":
+                                label = "Thinking"
+                            elif block_type == "redacted_thinking":
+                                label = "Redacted thinking"
+                            else:
+                                label = block_type
+                            st.markdown(f"**{block_idx}. {label}**")
+                            st.code(block["text"], language="text")
 
                 prompt_text = meta.get("prompt") if isinstance(meta, dict) else None
                 if isinstance(prompt_text, str) and prompt_text.strip():
