@@ -798,7 +798,7 @@ python -m runs.generate_hinted \
     --benchmark hle \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --model google/gemma-3-12b-it \
+    --model Qwen/Qwen3.5-9B \
     --executor submitit \
     --cluster miso \
     --max-connections 360 \
@@ -809,8 +809,8 @@ NLP
 python -m runs.generate_hinted \
     --benchmark hle \
     --hint-type answer_not_revealed \
-    --fractioner mask_word \
-    --model Qwen/Qwen2.5-3B-Instruct \
+    --fractioner truncate_word \
+    --model Qwen/Qwen2.5-1.5B-Instruct \
     --executor submitit \
     --cluster sphinx \
     --max-connections 48 \

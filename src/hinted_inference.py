@@ -1251,11 +1251,14 @@ async def _run_all_candidates(
                     break
                 except Exception as exc:
                     error_text = _format_exception_message(exc)
+                    raw_allowed_max_tokens = _extract_allowed_max_tokens_from_error(error_text)
                     error_context_limit = _extract_context_limit_from_error(error_text)
-                    if error_context_limit is not None and prompt_token_count is not None:
+                    if (
+                        raw_allowed_max_tokens is None
+                        and error_context_limit is not None
+                        and prompt_token_count is not None
+                    ):
                         raw_allowed_max_tokens = max(1, error_context_limit - prompt_token_count)
-                    else:
-                        raw_allowed_max_tokens = _extract_allowed_max_tokens_from_error(error_text)
                     allowed_max_tokens = (
                         _apply_max_token_safety_margin(raw_allowed_max_tokens)
                         if raw_allowed_max_tokens is not None

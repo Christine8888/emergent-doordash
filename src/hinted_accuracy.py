@@ -715,6 +715,19 @@ def collect_complete_hle_grade_stats(
                 f"fraction={hint_fraction} error={error}"
             )
             continue
+        missing_grade_count = int(stats.get("rows_counted_false_missing_grade", 0))
+        malformed_expanded_count = int(stats.get("rows_without_known_label", 0))
+        if missing_grade_count > 0 or malformed_expanded_count > 0:
+            reasons: list[str] = []
+            if missing_grade_count > 0:
+                reasons.append(f"rows_counted_false_missing_grade={missing_grade_count}")
+            if malformed_expanded_count > 0:
+                reasons.append(f"rows_without_known_label={malformed_expanded_count}")
+            warnings.append(
+                f"incomplete HLE rows model={model} fractioner={fractioner} "
+                f"fraction={hint_fraction} error={'; '.join(reasons)}"
+            )
+            continue
         rows.append(
             {
                 "model": safe_component(model.strip().split("/")[-1]),
