@@ -25,6 +25,8 @@ OPENAI_MODELS: set[str] = {
     "gpt-5.5-2026-04-23"
 }
 
+MIN_SUCCESS_OUTPUT_TOKENS = 100
+
 PromptContent = str | list[dict[str, Any]]
 
 
@@ -687,6 +689,47 @@ def _generate_record_for_task(
                 f"{_token_usage_log_fields(usage)} "
                 f"stop_reason={usage['stop_reason']}"
             )
+            output_token_count = _maybe_int(usage.get("output_token_count"))
+            if output_token_count is not None and output_token_count < MIN_SUCCESS_OUTPUT_TOKENS:
+                failed_attempts.append(
+                    {
+                        "hint_id": hint_id,
+                        "problem_id": problem.problem_id,
+                        "benchmark_name": benchmark_name,
+                        "hint_type": hint_type,
+                        "rollout_id": rollout_id,
+                        "attempt": attempt_idx,
+                        "model": attempt_model,
+                        "failure_type": "too_few_output_tokens",
+                        "question": problem.question,
+                        "answer": problem.answer,
+                        "prompt": prompt,
+                        "system_prompt": system_prompt,
+                        "prompt_image_metadata": prompt_image_metadata,
+                        "model_output": usage["model_output"],
+                        "provider": usage["provider"],
+                        "input_token_count": usage["input_token_count"],
+                        "output_token_count": usage["output_token_count"],
+                        **_token_breakdown_metadata(usage),
+                        "stop_reason": usage["stop_reason"],
+                        "thinking": usage["thinking"],
+                        "output_blocks": usage.get("output_blocks", []),
+                        "debug_dump_path": usage.get("debug_dump_path"),
+                        "thinking_enabled": usage["thinking_enabled"],
+                        "thinking_mode": usage["thinking_mode"],
+                        "effort": usage["effort"],
+                        "min_output_tokens": MIN_SUCCESS_OUTPUT_TOKENS,
+                        **context_metadata,
+                    }
+                )
+                _log(
+                    f"[hint_generation][WARN] too_few_output_tokens benchmark={benchmark_name} "
+                    f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
+                    f"model={attempt_model} output_tokens={output_token_count} "
+                    f"min_output_tokens={MIN_SUCCESS_OUTPUT_TOKENS}"
+                )
+                continue
+
             if _is_max_token_stop(provider=usage["provider"], stop_reason=usage["stop_reason"]):
                 failed_attempts.append(
                     {
