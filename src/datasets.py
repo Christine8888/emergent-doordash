@@ -86,6 +86,8 @@ class DatasetSpecBase(ABC):
 
 _ANSWER_TAG_RE = re.compile(r"<answer>(.*?)</answer>", re.IGNORECASE | re.DOTALL)
 _CHOICE_LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+HLE_JUDGE_MODEL = "o3-mini-2025-01-31"
+HLE_JUDGE_REASONING_EFFORT = "low"
 
 HLE_JUDGE_PROMPT = """Judge whether the following [response] to [question] is correct or not based on the precise and unambiguous [correct_answer] below.
 
@@ -751,8 +753,6 @@ class CRUXEvalSpec(DatasetSpecBase):
 
 class HLESpec(DatasetSpecBase):
     name = "hle"
-    # default_judge_model = "o3-2025-04-16"
-    default_judge_model = "o3-mini-2025-01-31"
 
     @staticmethod
     def _sequential_problem_id(index: int) -> str:
@@ -878,8 +878,6 @@ class HLESpec(DatasetSpecBase):
         return payload if isinstance(payload, dict) else None
 
     def _judge_exact_match_response(self, response_text: str, problem: Problem) -> dict[str, Any]:
-        import os
-
         from pydantic import BaseModel
         from openai import LengthFinishReasonError, OpenAI, OpenAIError
 
@@ -889,7 +887,6 @@ class HLESpec(DatasetSpecBase):
             correct: Literal["yes", "no"]
             strict: Literal[True] = True
 
-        judge_model = os.environ.get("HLE_JUDGE_MODEL", self.default_judge_model)
         prompt = HLE_JUDGE_PROMPT.format(
             question=problem.question,
             correct_answer=problem.answer,
@@ -897,13 +894,12 @@ class HLESpec(DatasetSpecBase):
         )
         client = OpenAI()
         request: dict[str, Any] = {
-            "model": judge_model,
+            "model": HLE_JUDGE_MODEL,
             "max_completion_tokens": 4096,
             "messages": [{"role": "user", "content": prompt}],
             "response_format": ExtractedAnswer,
+            "reasoning_effort": HLE_JUDGE_REASONING_EFFORT,
         }
-        if judge_model.startswith(("o", "gpt-5")):
-            request["reasoning_effort"] = os.environ.get("HLE_JUDGE_REASONING_EFFORT", "low")
         try:
             completion = client.beta.chat.completions.parse(**request)
         except (LengthFinishReasonError, OpenAIError) as exc:
@@ -912,7 +908,8 @@ class HLESpec(DatasetSpecBase):
                 "extracted_answer": self.extract_answer(response_text),
                 "metadata": {
                     "grader_type": "hle_official_style_llm_judge_error",
-                    "judge_model": judge_model,
+                    "judge_model": HLE_JUDGE_MODEL,
+                    "judge_reasoning_effort": HLE_JUDGE_REASONING_EFFORT,
                     "answer_type": problem.metadata.get("answer_type"),
                     "judge_error_type": type(exc).__name__,
                     "judge_error": str(exc),
@@ -925,7 +922,8 @@ class HLESpec(DatasetSpecBase):
                 "extracted_answer": self.extract_answer(response_text),
                 "metadata": {
                     "grader_type": "hle_official_style_llm_judge_error",
-                    "judge_model": judge_model,
+                    "judge_model": HLE_JUDGE_MODEL,
+                    "judge_reasoning_effort": HLE_JUDGE_REASONING_EFFORT,
                     "answer_type": problem.metadata.get("answer_type"),
                     "judge_error_type": "NoParsedResponse",
                     "judge_error": "HLE judge returned no parsed response.",
@@ -938,7 +936,8 @@ class HLESpec(DatasetSpecBase):
             "extracted_answer": extracted,
             "metadata": {
                 "grader_type": "hle_official_style_llm_judge",
-                "judge_model": judge_model,
+                "judge_model": HLE_JUDGE_MODEL,
+                "judge_reasoning_effort": HLE_JUDGE_REASONING_EFFORT,
                 "answer_type": problem.metadata.get("answer_type"),
                 "reasoning": content.reasoning,
             },

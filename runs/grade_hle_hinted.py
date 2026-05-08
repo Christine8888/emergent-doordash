@@ -60,3 +60,12 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+"""
+python -m runs.grade_hle_hinted \
+    --model Qwen/Qwen2.5-1.5B-Instruct \
+    --hint-type answer_not_revealed \
+    --fractioner mask_word \
+    --grader-concurrency 8
+"""

@@ -795,7 +795,7 @@ python -m runs.generate_hinted \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --model google/gemma-4-26B-A4B-it \
+    --model Qwen/Qwen2.5-14B-Instruct \
     --executor submitit \
     --cluster miso \
     --max-connections 360 \
@@ -804,10 +804,10 @@ python -m runs.generate_hinted \
 
 NLP
 python -m runs.generate_hinted \
-    --benchmark aime2025_2026 \
+    --benchmark hle \
     --hint-type answer_not_revealed \
-    --fractioner truncate_word \
-    --model google/gemma-4-E4B-it \
+    --fractioner mask_word \
+    --model Qwen/Qwen2.5-1.5B-Instruct \
     --executor submitit \
     --cluster sphinx \
     --max-connections 48 \

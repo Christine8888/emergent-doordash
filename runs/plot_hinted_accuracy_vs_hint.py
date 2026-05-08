@@ -824,6 +824,8 @@ if __name__ == "__main__":
     # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner mask_word --clean
     # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --clean
     # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner truncate_word --clean
+
+    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark hle --hint-type answer_not_revealed --fractioner mask_word --clean --model Qwen/Qwen2.5-1.5B-Instruct
    
 
     main()

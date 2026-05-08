@@ -585,6 +585,26 @@ def _existing_rollouts_by_problem(path: str | Path) -> dict[str, set[int]]:
     return existing
 
 
+def _resolve_start_index(problems: list[Any], benchmark_name: str, start_id: int) -> int:
+    if start_id < 0:
+        raise ValueError("start_id must be >= 0")
+
+    explicit_problem_id = f"hle_{start_id:05d}" if benchmark_name == "hle" else None
+    for idx, problem in enumerate(problems):
+        if explicit_problem_id is not None and problem.problem_id == explicit_problem_id:
+            return idx
+        suffix_match = re.search(r"(\d+)$", problem.problem_id)
+        if suffix_match and int(suffix_match.group(1)) == start_id:
+            return idx
+
+    if explicit_problem_id is not None:
+        raise ValueError(
+            f"Could not find start_id={start_id} (expected problem_id={explicit_problem_id!r}) "
+            f"in benchmark={benchmark_name!r}."
+        )
+    raise ValueError(f"Could not find start_id={start_id} in benchmark={benchmark_name!r}.")
+
+
 def _generate_record_for_task(
     *,
     benchmark_name: str,
@@ -950,6 +970,7 @@ def generate_hints(
     max_tokens: int,
     temperature: float,
     dry_run: bool,
+    start_id: int | None = None,
     problem_ids: list[str] | None = None,
     thinking_enabled: bool = True,
     thinking_effort: str = "medium",
@@ -999,6 +1020,9 @@ def generate_hints(
             ordered_problem_ids.append(pid)
         problems = [by_id[pid] for pid in ordered_problem_ids]
     else:
+        if start_id is not None:
+            start_idx = _resolve_start_index(all_problems, benchmark_name, start_id)
+            all_problems = all_problems[start_idx:]
         problems = all_problems[:limit]
     prompt_version = hint_type_spec.prompt_version
     post_process_version = hint_type_spec.post_process_version

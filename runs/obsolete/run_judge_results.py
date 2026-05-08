@@ -12,6 +12,8 @@ from tqdm.asyncio import tqdm_asyncio
 from datasets import load_dataset
 
 client = AsyncOpenAI(timeout=300.0, max_retries=1)
+HLE_JUDGE_MODEL = "o3-mini-2025-01-31"
+HLE_JUDGE_REASONING_EFFORT = "low"
 
 JUDGE_PROMPT = """Judge whether the following [response] to [question] is correct or not based on the precise and unambiguous [correct_answer] below.
 
@@ -44,12 +46,13 @@ async def extract_answer(question, correct_answer, response):
     prompt = JUDGE_PROMPT.format(question=question, correct_answer=correct_answer, response=response)
     try:
         response = await client.beta.chat.completions.parse(
-                model=args.judge,
+                model=HLE_JUDGE_MODEL,
                 max_completion_tokens=4096, # overkill for judge
                 messages=[
                     {"role": "user", "content": prompt}
                 ],
-                response_format=ExtractedAnswer, 
+                response_format=ExtractedAnswer,
+                reasoning_effort=HLE_JUDGE_REASONING_EFFORT,
             ) 
         content = response.choices[0].message.parsed
         return { 
@@ -195,6 +198,5 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, help="HLE HF Dataset")
     parser.add_argument("--predictions", type=str, help="Model Predictions")
     parser.add_argument("--num_workers", type=int, default=100, help="Async semaphore size. This depends on your rate limit.")
-    parser.add_argument("--judge", type=str, default="o3-mini-2025-01-31", help="Judge model") # prev: "gpt-4o-2024-08-06"
     args = parser.parse_args()
     main(args)

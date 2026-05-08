@@ -24,6 +24,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-rollouts", type=int, required=True)
     parser.add_argument("--limit", type=int, required=True)
     parser.add_argument(
+        "--start-id",
+        type=int,
+        default=None,
+        help=(
+            "Start processing at this numeric dataset id (e.g. 2000 starts from hle_02000 "
+            "for --benchmark hle)."
+        ),
+    )
+    parser.add_argument(
         "--problem-id",
         action="append",
         default=None,
@@ -51,6 +60,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    if args.start_id is not None and args.problem_id:
+        parser.error("--start-id cannot be used together with --problem-id")
     thinking_enabled = args.thinking_effort is not None
     generate_hints(
         benchmark_name=args.benchmark,
@@ -58,13 +69,14 @@ def main() -> None:
         first_model=args.model,
         num_rollouts=args.num_rollouts,
         limit=args.limit,
+        start_id=args.start_id,
         problem_ids=args.problem_id,
-        max_tokens=16384, # TODO 32768 maybe?
+        max_tokens=16384, 
         temperature=1.0,
         dry_run=args.dry_run,
         thinking_enabled=thinking_enabled,
         thinking_effort=args.thinking_effort,
-        concurrency=40,
+        concurrency=25,
         hle_modality=args.hle_modality,
         save_debug_responses=args.save_debug_responses,
     )
@@ -75,12 +87,12 @@ if __name__ == "__main__":
 
 """
 
-python -m runs.generate_hints --hle-modality text-only --benchmark hle --hint-type basic_hint_hle --num-rollouts 1 --limit 3 --model gpt-5.5-2026-04-23 --thinking-effort medium 
+python -m runs.generate_hints --hle-modality text-only --benchmark hle --hint-type basic_hint_hle --num-rollouts 1 --start 400 --limit 200 --model gpt-5.5-2026-04-23 --thinking-effort medium 
 
 
 
 
 
-python -m runs.generate_hints --hle-modality text-only --benchmark hle --hint-type answer_not_revealed --num-rollouts 2 --limit 15 --model claude-opus-4-7 --thinking-effort medium 
+python -m runs.generate_hints --hle-modality text-only --benchmark hle --hint-type answer_not_revealed --num-rollouts 1 --limit 1000 --model claude-opus-4-7 --thinking-effort medium 
 
 """

@@ -61,10 +61,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # python -m runs.push_hint_file --benchmark aime2025_2026 --hint-type basic_hint 
-    # python -m runs.push_hint_file --benchmark aime2025_2026 --hint-type basic_hint --apply
+    # python -m runs.push_hint_file --benchmark hle --hint-type basic_hint_hle
+    # python -m runs.push_hint_file --benchmark hle --hint-type basic_hint_hle --apply
 
-    # python -m runs.push_hint_file --benchmark aime2025_2026 --hint-type answer_not_revealed 
-    # python -m runs.push_hint_file --benchmark aime2025_2026 --hint-type answer_not_revealed --apply
+    # python -m runs.push_hint_file --benchmark hle --hint-type answer_not_revealed 
+    # python -m runs.push_hint_file --benchmark hle --hint-type answer_not_revealed --apply
 
     main()
