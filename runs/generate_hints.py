@@ -59,7 +59,7 @@ def main() -> None:
         num_rollouts=args.num_rollouts,
         limit=args.limit,
         problem_ids=args.problem_id,
-        max_tokens=16384, # TODO
+        max_tokens=16384, # TODO 32768 maybe?
         temperature=1.0,
         dry_run=args.dry_run,
         thinking_enabled=thinking_enabled,
@@ -75,14 +75,14 @@ if __name__ == "__main__":
 
 """
 
-python -m runs.generate_hints --hle-modality text-only --benchmark hle --hint-type basic_hint_hle --num-rollouts 1 --limit 5 --model gpt-5.5-2026-04-23 --thinking_effort low
+python -m runs.generate_hints --hle-modality text-only --benchmark hle --hint-type basic_hint_hle --num-rollouts 1 --limit 3 --model gpt-5.5-2026-04-23 --thinking-effort medium 
 
 
 
 
 
 
-python -m runs.generate_hints --hle-modality text-only --benchmark hle --hint-type answer_not_revealed --num-rollouts 1 --limit 5 --model claude-sonnet-4-6
+python -m runs.generate_hints --hle-modality text-only --benchmark hle --hint-type answer_not_revealed --num-rollouts 1 --limit 10 --model claude-sonnet-4-6
 
 
 """

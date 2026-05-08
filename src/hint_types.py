@@ -494,44 +494,44 @@ class AnswerNotRevealedHintTypeSpec(HintTypeSpecBase):
         problem: Problem,
         context: HintGenerationContext,
     ) -> str:
-        if problem.source == "cais/hle:test":
-            answer_type = str(problem.metadata.get("answer_type") or "")
-            if answer_type == "multipleChoice":
-                instruction = (
-                    "The final answer {source_answer} and the selected option must not appear anywhere "
-                    "in your explanation. Do not identify the final option label, final option text, "
-                    "or final selected choice. You may compute all intermediate values, but do not "
-                    "perform the final step that chooses among the answer options — stop your "
-                    "explanation at the last intermediate result."
-                )
-            else:
-                instruction = (
-                    "The final answer {source_answer} must not appear anywhere in your explanation. "
-                    "You may compute all intermediate values, but do not perform the final step that "
-                    "directly produces {source_answer} — stop your explanation at the last intermediate result."
-                )
-            template = (
-                "You will be given a problem and a reference solution. "
-                "Rewrite the reference solution as a detailed explanation. "
-                "{instruction}\n\n"
-                "Problem:\n"
-                "{question}\n\n"
-                "Reference full solution:\n"
-                "{source_solution}\n\n"
-                "REMINDER: Do not perform the final step. Your explanation must not contain "
-                "{source_answer} anywhere."
-            )
-            return template.format(
-                instruction=instruction.format(source_answer=context["source_answer"]),
-                question=problem.question.strip(),
-                source_solution=context["source_model_output"],
-                source_answer=context["source_answer"],
-            )
+        # if problem.source == "cais/hle:test":
+        #     answer_type = str(problem.metadata.get("answer_type") or "")
+        #     if answer_type == "multipleChoice":
+        #         instruction = (
+        #             "The final answer {source_answer} and the selected option must not appear anywhere "
+        #             "in your explanation. Do not identify the final option label, final option text, "
+        #             "or final selected choice. You may compute all intermediate values, but do not "
+        #             "perform the final step that chooses among the answer options — stop your "
+        #             "explanation at the last intermediate result."
+        #         )
+        #     else:
+        #         instruction = (
+        #             "The final answer {source_answer} must not appear anywhere in your explanation. "
+        #             "You may compute all intermediate values, but do not perform the final step that "
+        #             "directly produces {source_answer} — stop your explanation at the last intermediate result."
+        #         )
+        #     template = (
+        #         "You will be given a problem and a reference solution. "
+        #         "Rewrite the reference solution as a detailed explanation. "
+        #         "{instruction}\n\n"
+        #         "Problem:\n"
+        #         "{question}\n\n"
+        #         "Reference full solution:\n"
+        #         "{source_solution}\n\n"
+        #         "REMINDER: Do not perform the final step. Your explanation must not contain "
+        #         "{source_answer} anywhere."
+        #     )
+        #     return template.format(
+        #         instruction=instruction.format(source_answer=context["source_answer"]),
+        #         question=problem.question.strip(),
+        #         source_solution=context["source_model_output"],
+        #         source_answer=context["source_answer"],
+        #     )
         template = ( # NOTE: this template is optimized to not reveal the answer at all. It's quite good at it when you ask claude opus
             "You will be given a problem and a reference solution. "
-            "Rewrite the reference solution as a detailed explanation. "
+            "Rewrite the reference solution as a detailed explanation, but do not add or calculate any information that is not in there reference solution. "
             "The final answer {source_answer} must not appear anywhere in your explanation. "
-            "You may compute all intermediate values, but do not perform the final step that directly produces {source_answer} — "
+            "You may show all intermediate steps, but do not perform the final step that directly produces {source_answer} — "
             "stop your explanation at the last intermediate result.\n\n"
             "Problem:\n"
             "{question}\n\n"
