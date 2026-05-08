@@ -348,36 +348,6 @@ def _plot(
         fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.3 * n_rows))
         axes = axes_obj.flatten() if hasattr(axes_obj, "flatten") else [axes_obj]
 
-    all_y_values = [
-        float(row["ci_low"])
-        for row in results
-        if isinstance(row, dict) and "ci_low" in row
-    ] + [
-        float(row["ci_high"])
-        for row in results
-        if isinstance(row, dict) and "ci_high" in row
-    ] + [
-        float(row["ci_low"])
-        for row in external_results
-        if isinstance(row, dict) and "ci_low" in row
-    ] + [
-        float(row["ci_high"])
-        for row in external_results
-        if isinstance(row, dict) and "ci_high" in row
-    ]
-    if all_y_values:
-        y_min = min(all_y_values)
-        y_max = max(all_y_values)
-    else:
-        y_min, y_max = 0.0, 1.0
-    y_padding = 0.03
-    y_min_plot = max(0.0, y_min - y_padding)
-    y_max_plot = min(1.0, y_max + y_padding)
-    if y_max_plot - y_min_plot < 0.08:
-        y_mid = 0.5 * (y_min_plot + y_max_plot)
-        y_min_plot = max(0.0, y_mid - 0.04)
-        y_max_plot = min(1.0, y_mid + 0.04)
-
     for idx, model in enumerate(models):
         ax = axes[idx]
         model_rows = [row for row in results if row["model"] == model]
@@ -488,7 +458,7 @@ def _plot(
         ax.set_ylabel("Accuracy")
         ax.grid(True, alpha=0.3)
         ax.set_xlim(-0.05, 1.05)
-        ax.set_ylim(y_min_plot, y_max_plot)
+        ax.set_ylim(0.0, 1.0)
         ax.legend(fontsize=7)
 
     for idx in range(n_models, len(axes)):
@@ -515,6 +485,45 @@ def _build_fit_map(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str
         if fit is not None:
             fit_map[key] = fit
     return fit_map
+
+
+def _filter_to_models_with_complete_fractions(
+    rows: list[dict[str, Any]],
+    external_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    expected_fraction_set = {float(f"{value:.6f}") for value in EXPECTED_FRACTIONS}
+    combined_rows = [*rows, *external_rows]
+
+    fractions_by_model_fractioner: dict[tuple[str, str], set[float]] = {}
+    for row in combined_rows:
+        key = (str(row["model"]), str(row["fractioner"]))
+        fractions_by_model_fractioner.setdefault(key, set()).add(
+            float(f"{float(row['hint_fraction']):.6f}")
+        )
+
+    complete_models: set[str] = set()
+    incomplete_models: set[str] = set()
+    fractioners_by_model: dict[str, set[str]] = {}
+    for model, fractioner in fractions_by_model_fractioner:
+        fractioners_by_model.setdefault(model, set()).add(fractioner)
+
+    for model, model_fractioners in fractioners_by_model.items():
+        is_complete_model = True
+        for fractioner in model_fractioners:
+            observed = fractions_by_model_fractioner.get((model, fractioner), set())
+            if observed != expected_fraction_set:
+                is_complete_model = False
+                break
+        if is_complete_model:
+            complete_models.add(model)
+        else:
+            incomplete_models.add(model)
+
+    filtered_rows = [row for row in rows if str(row["model"]) in complete_models]
+    filtered_external_rows = [
+        row for row in external_rows if str(row["model"]) in complete_models
+    ]
+    return filtered_rows, filtered_external_rows, sorted(incomplete_models)
 
 
 def _collect_rows_for_models(
@@ -684,9 +693,21 @@ def main() -> None:
         models_to_plot=models_to_plot,
         fractioner=args.fractioner,
     )
+    rows, external_rows, dropped_models = _filter_to_models_with_complete_fractions(
+        rows,
+        external_rows,
+    )
+    if dropped_models:
+        print(
+            "[plot_hinted_accuracy_vs_hint] skipping models with incomplete hint fractions: "
+            f"{dropped_models}"
+        )
 
     if not rows and not external_rows:
-        raise ValueError("No usable rows collected. Check benchmark/model/hint_type/fractioner.")
+        raise ValueError(
+            "No usable fully-complete model rows collected. "
+            "Check benchmark/model/hint_type/fractioner."
+        )
 
     rows_sorted = sorted(
         rows,
@@ -793,9 +814,18 @@ def main() -> None:
                 fractioner=args.fractioner,
                 problem_id_predicate=split_predicate,
             )
+            split_rows, split_external_rows, split_dropped_models = (
+                _filter_to_models_with_complete_fractions(split_rows, split_external_rows)
+            )
+            if split_dropped_models:
+                print(
+                    "[plot_hinted_accuracy_vs_hint] skipping split models with incomplete "
+                    f"hint fractions split={split_name} models={split_dropped_models}"
+                )
             if not split_rows and not split_external_rows:
                 print(
-                    "[plot_hinted_accuracy_vs_hint][WARN] skipping split plot with no data "
+                    "[plot_hinted_accuracy_vs_hint][WARN] skipping split plot with no fully "
+                    "complete model data "
                     f"split={split_name}"
                 )
                 continue
@@ -837,7 +867,7 @@ if __name__ == "__main__":
     # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --clean
     # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner truncate_word --clean
 
-    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark hle --hint-type answer_not_revealed --fractioner mask_word --clean --model Qwen2.5-1.5B-Instruct
+    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark hle --hint-type answer_not_revealed --fractioner mask_word --clean
    
 
     main()
