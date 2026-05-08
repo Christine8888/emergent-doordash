@@ -527,12 +527,25 @@ class AnswerNotRevealedHintTypeSpec(HintTypeSpecBase):
         #         source_solution=context["source_model_output"],
         #         source_answer=context["source_answer"],
         #     )
-        template = ( # NOTE: this template is optimized to not reveal the answer at all. It's quite good at it when you ask claude opus
-            "You will be given a problem and a reference solution. "
-            "Rewrite the reference solution as a detailed explanation, but do not add or calculate any information that is not in there reference solution. "
-            "The final answer {source_answer} must not appear anywhere in your explanation. "
-            "You may show all intermediate steps, but do not perform the final step that directly produces {source_answer} — "
-            "stop your explanation at the last intermediate result.\n\n"
+        # template = ( # NOTE: this template is optimized to not reveal the answer at all. It's quite good at it when you ask claude opus
+        #     "You will be given a problem and a reference solution. \n"
+        #     "Rewrite the reference solution as a detailed explanation, but do not add any new information that is not already in reference solution: you are a faithful rewriter, not a solver. \n"
+        #     "The final answer {source_answer} must not appear anywhere in your explanation. \n"
+        #     "You may show all intermediate steps, but do not perform the final step that directly produces {source_answer} — "
+        #     "stop your explanation at the last intermediate result.\n\n"
+        #     "Problem:\n"
+        #     "{question}\n\n"
+        #     "Reference full solution:\n"
+        #     "{source_solution}\n\n"
+        #     "REMINDER: Do not perform the final step. Your explanation must not contain {source_answer} anywhere."
+        # )
+        template = (
+            "You will be given a problem and a reference solution.\n"
+            "Rewrite the reference solution as a clear explanation. You are a faithful rewriter, not a solver\n"
+            "Do not add any facts, equations, identities, examples, or derivation steps that are not explicitly present in the reference solution.\n"
+            "If the reference solution skips a calculation, do not fill it in.\n\n"
+            "The final answer {source_answer} must not appear anywhere in your explanation.\n"
+            "Do not perform the final step that produces {source_answer}; stop immediately before that step.\n\n"
             "Problem:\n"
             "{question}\n\n"
             "Reference full solution:\n"
