@@ -107,6 +107,18 @@ correct: Answer 'yes' if extracted_final_answer matches the [correct_answer] giv
 """
 
 
+def _load_project_env() -> None:
+    try:
+        from dotenv import load_dotenv
+    except Exception:
+        return
+    project_root = Path(__file__).resolve().parents[1]
+    load_dotenv(project_root / ".env")
+
+
+_load_project_env()
+
+
 def _extract_tagged_answer(response_text: str) -> str | None:
     match = _ANSWER_TAG_RE.search(response_text)
     if match is None:
@@ -892,15 +904,15 @@ class HLESpec(DatasetSpecBase):
             correct_answer=problem.answer,
             response=response_text,
         )
-        client = OpenAI()
-        request: dict[str, Any] = {
-            "model": HLE_JUDGE_MODEL,
-            "max_completion_tokens": 4096,
-            "messages": [{"role": "user", "content": prompt}],
-            "response_format": ExtractedAnswer,
-            "reasoning_effort": HLE_JUDGE_REASONING_EFFORT,
-        }
         try:
+            client = OpenAI()
+            request: dict[str, Any] = {
+                "model": HLE_JUDGE_MODEL,
+                "max_completion_tokens": 4096,
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": ExtractedAnswer,
+                "reasoning_effort": HLE_JUDGE_REASONING_EFFORT,
+            }
             completion = client.beta.chat.completions.parse(**request)
         except (LengthFinishReasonError, OpenAIError) as exc:
             return {

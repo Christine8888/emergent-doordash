@@ -11,7 +11,6 @@ from openai import AsyncOpenAI
 from tqdm.asyncio import tqdm_asyncio
 from datasets import load_dataset
 
-client = AsyncOpenAI(timeout=300.0, max_retries=1)
 HLE_JUDGE_MODEL = "o3-mini-2025-01-31"
 HLE_JUDGE_REASONING_EFFORT = "low"
 
@@ -41,7 +40,21 @@ class ExtractedAnswer(BaseModel):
     confidence: int
     strict: Literal[True] # 100% reliability
 
-    
+
+def load_env() -> None:
+    try:
+        from dotenv import load_dotenv
+    except Exception:
+        return
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    load_dotenv(os.path.join(project_root, ".env"))
+
+
+load_env()
+
+client = AsyncOpenAI(timeout=300.0, max_retries=1)
+
+
 async def extract_answer(question, correct_answer, response):
     prompt = JUDGE_PROMPT.format(question=question, correct_answer=correct_answer, response=response)
     try:

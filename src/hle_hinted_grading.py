@@ -9,7 +9,14 @@ from pathlib import Path
 from typing import Any
 
 from src.datasets import Problem, get_dataset_spec
-from src.storage import append_jsonl, build_hinted_grade_path, build_hinted_inference_path, make_stable_id, read_jsonl
+from src.storage import (
+    append_jsonl,
+    build_hinted_grade_path,
+    build_hinted_inference_path,
+    make_stable_id,
+    read_jsonl,
+    write_jsonl,
+)
 from src.types import HintedInferenceRecord
 
 
@@ -202,12 +209,45 @@ def _grade_record(
     }
 
 
-def _read_existing_grade_ids(path: Path) -> set[str]:
+def _grade_needs_regrade(row: dict[str, Any]) -> bool:
+    metadata = row.get("metadata")
+    return (
+        row.get("grader_type") == "hle_llm_judge_error"
+        or row.get("is_correct") is None
+        or (isinstance(metadata, dict) and metadata.get("needs_regrade") is True)
+    )
+
+
+def _read_existing_completed_grade_ids(path: Path) -> set[str]:
     existing: set[str] = set()
     for row in read_jsonl(path, model_cls=None):
         if isinstance(row, dict) and isinstance(row.get("inference_id"), str):
-            existing.add(row["inference_id"])
+            if not _grade_needs_regrade(row):
+                existing.add(row["inference_id"])
     return existing
+
+
+def _remove_regrade_rows(path: Path, current_inference_ids: set[str]) -> int:
+    if not path.exists() or not current_inference_ids:
+        return 0
+
+    rows = [row for row in read_jsonl(path, model_cls=None) if isinstance(row, dict)]
+    kept: list[dict[str, Any]] = []
+    removed = 0
+    for row in rows:
+        inference_id = row.get("inference_id")
+        if (
+            isinstance(inference_id, str)
+            and inference_id in current_inference_ids
+            and _grade_needs_regrade(row)
+        ):
+            removed += 1
+            continue
+        kept.append(row)
+
+    if removed:
+        write_jsonl(path, kept)
+    return removed
 
 
 def grade_hle_hinted_outputs(
@@ -228,6 +268,7 @@ def grade_hle_hinted_outputs(
     total_written = 0
     total_skipped_existing = 0
     total_llm_judge_errors = 0
+    total_removed_regrade_rows = 0
     by_grader_type: dict[str, int] = {}
 
     for hint_fraction in sorted(set(float(f"{value:.6f}") for value in hint_fractions)):
@@ -252,7 +293,7 @@ def grade_hle_hinted_outputs(
             for row in read_jsonl(inference_path, model_cls=HintedInferenceRecord)
             if isinstance(row, HintedInferenceRecord) and not row.is_error
         ]
-        existing_inference_ids = _read_existing_grade_ids(grade_path)
+        existing_inference_ids = _read_existing_completed_grade_ids(grade_path)
         pending = [row for row in rows if row.inference_id not in existing_inference_ids]
         total_skipped_existing += len(rows) - len(pending)
         if limit is not None:
@@ -269,6 +310,16 @@ def grade_hle_hinted_outputs(
             if limit is not None and total_pending >= limit:
                 break
             continue
+
+        pending_inference_ids = {row.inference_id for row in pending}
+        removed_regrade_rows = _remove_regrade_rows(grade_path, pending_inference_ids)
+        total_removed_regrade_rows += removed_regrade_rows
+        if removed_regrade_rows:
+            print(
+                f"[hle_hinted_grading] removed_regrade_rows={removed_regrade_rows} "
+                f"grade_path={grade_path}",
+                flush=True,
+            )
 
         with ThreadPoolExecutor(max_workers=grader_concurrency) as executor:
             dataset_spec = get_dataset_spec("hle")
@@ -288,6 +339,7 @@ def grade_hle_hinted_outputs(
         "pending": total_pending,
         "written": total_written,
         "skipped_existing": total_skipped_existing,
+        "removed_regrade_rows": total_removed_regrade_rows,
         "hle_llm_judge_error": total_llm_judge_errors,
         "by_grader_type": by_grader_type,
     }
