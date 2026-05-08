@@ -17,7 +17,10 @@ from src.model_config import (
     models_excluded_from_selection,
 )
 from src.storage import build_hint_generation_path, build_hinted_inference_path, read_jsonl
-from src.token_budget import MAX_TOKEN_CLAMP_SAFETY_MARGIN
+from src.token_budget import (
+    MAX_TOKEN_CLAMP_SAFETY_MARGIN,
+    count_prompt_tokens_with_tokenizer,
+)
 from src.types import ExpandedHintedPromptRecord, HintGenerationRecord, HintedInferenceRecord
 from src.vllm_server import DEFAULT_HEALTH_TIMEOUT_SECONDS, VLLMServer, VLLMServerConfig
 
@@ -91,6 +94,10 @@ def _run_single_model_job(
     context_limit_override: int | None,
     token_pricing_per_million: dict[str, float] | None,
 ) -> dict[str, Any]:
+    effective_context_limit_override = context_limit_override
+    if backend == "local-vllm" and effective_context_limit_override is None:
+        effective_context_limit_override = MAX_NUM_BATCHED_TOKENS
+
     if build_only:
         summaries = run_hinted_inference(
             benchmark_name=benchmark,
@@ -112,7 +119,7 @@ def _run_single_model_job(
             vllm_metrics_url=None,
             backend=backend,
             build_only=True,
-            context_limit_override=context_limit_override,
+            context_limit_override=effective_context_limit_override,
             token_pricing_per_million=token_pricing_per_million,
             run_metadata=run_metadata,
         )
@@ -152,7 +159,7 @@ def _run_single_model_job(
                     vllm_metrics_url=f"http://localhost:{server.port}/metrics",
                     backend=backend,
                     build_only=False,
-                    context_limit_override=context_limit_override,
+                    context_limit_override=effective_context_limit_override,
                     token_pricing_per_million=token_pricing_per_million,
                     run_metadata=run_metadata,
                 )
@@ -177,7 +184,7 @@ def _run_single_model_job(
                 vllm_metrics_url=None,
                 backend=backend,
                 build_only=False,
-                context_limit_override=context_limit_override,
+                context_limit_override=effective_context_limit_override,
                 token_pricing_per_million=token_pricing_per_million,
                 run_metadata=run_metadata,
             )
@@ -278,15 +285,11 @@ def _load_tokenizer(model_name: str) -> Any:
 
 def _count_prompt_tokens(tokenizer: Any, prompt: str) -> int:
     messages = [{"role": "user", "content": prompt}]
-    apply_chat_template = getattr(tokenizer, "apply_chat_template", None)
-    if callable(apply_chat_template):
-        token_ids = apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=True,
-        )
-        return len(token_ids)
-    return len(tokenizer.encode(prompt, add_special_tokens=True))
+    return count_prompt_tokens_with_tokenizer(
+        tokenizer,
+        messages=messages,
+        prompt_text=prompt,
+    )
 
 
 def _estimate_together_cost_for_model(
@@ -792,10 +795,10 @@ if __name__ == "__main__":
 
 MISO
 python -m runs.generate_hinted \
-    --benchmark aime2025_2026 \
+    --benchmark hle \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --model Qwen/Qwen2.5-14B-Instruct \
+    --model google/gemma-3-12b-it \
     --executor submitit \
     --cluster miso \
     --max-connections 360 \
@@ -807,7 +810,7 @@ python -m runs.generate_hinted \
     --benchmark hle \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --model Qwen/Qwen2.5-1.5B-Instruct \
+    --model Qwen/Qwen2.5-3B-Instruct \
     --executor submitit \
     --cluster sphinx \
     --max-connections 48 \

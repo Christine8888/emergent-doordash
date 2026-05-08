@@ -38,6 +38,10 @@ def _safe_component(text: str) -> str:
     return cleaned or "unknown"
 
 
+def _model_storage_component(model: str) -> str:
+    return _safe_component(model.strip().split("/")[-1])
+
+
 def _extract_problem_index(problem_id: str) -> int | None:
     match = re.search(r"_(\d+)$", problem_id.strip())
     if match is None:
@@ -644,8 +648,12 @@ def main() -> None:
                 "When passing specific models, do not include 'all'. "
                 f"Requested: {requested_models}"
             )
+        resolved_requested_models = [
+            request if request in models_available else _model_storage_component(request)
+            for request in requested_models
+        ]
         excluded_requested_models = models_excluded_from_selection(
-            requested_models,
+            resolved_requested_models,
             args.fractioner,
         )
         if excluded_requested_models:
@@ -653,13 +661,17 @@ def main() -> None:
                 f"Requested model(s) excluded for fractioner={args.fractioner!r}: "
                 f"{excluded_requested_models}"
             )
-        missing_models = sorted(set(requested_models) - set(models_available))
+        missing_models = [
+            request
+            for request, resolved in zip(requested_models, resolved_requested_models, strict=True)
+            if resolved not in models_available
+        ]
         if missing_models:
             raise ValueError(
                 f"Requested model(s) not found: {missing_models}. "
                 f"Available: {models_available}"
             )
-        models_to_plot = sorted(set(requested_models))
+        models_to_plot = sorted(set(resolved_requested_models))
     if not models_to_plot:
         raise ValueError(
             "All selected models were excluded by model_config. "
@@ -825,7 +837,7 @@ if __name__ == "__main__":
     # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --clean
     # python -m runs.plot_hinted_accuracy_vs_hint --benchmark aime2025_2026 --hint-type answer_not_revealed --fractioner truncate_word --clean
 
-    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark hle --hint-type answer_not_revealed --fractioner mask_word --clean --model Qwen/Qwen2.5-1.5B-Instruct
+    # python -m runs.plot_hinted_accuracy_vs_hint --benchmark hle --hint-type answer_not_revealed --fractioner mask_word --clean --model Qwen2.5-1.5B-Instruct
    
 
     main()

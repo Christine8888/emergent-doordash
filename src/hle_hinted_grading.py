@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from fractions import Fraction
+import json
 import math
 import re
 from pathlib import Path
@@ -10,7 +11,6 @@ from typing import Any
 
 from src.datasets import Problem, get_dataset_spec
 from src.storage import (
-    append_jsonl,
     build_hinted_grade_path,
     build_hinted_inference_path,
     make_stable_id,
@@ -24,8 +24,21 @@ def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _now_hhmm() -> str:
+    return datetime.now().strftime("%H:%M")
+
+
+def _log(message: str) -> None:
+    print(f"[{_now_hhmm()}] {message}", flush=True)
+
+
 def _fraction_text(value: float) -> str:
     return f"{value:.6f}"
+
+
+def _safe_component(text: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", str(text).strip())
+    return cleaned or "unknown"
 
 
 def _strip_latex_wrappers(text: str) -> str:
@@ -250,6 +263,48 @@ def _remove_regrade_rows(path: Path, current_inference_ids: set[str]) -> int:
     return removed
 
 
+def discover_hle_hinted_models(
+    *,
+    hint_type: str,
+    fractioner: str,
+    hint_fractions: list[float],
+    data_root: str | Path = "data",
+) -> list[str]:
+    """Discover model storage names that have matching HLE hinted inference files."""
+    root = Path(data_root) / "hinted_inference" / "hle"
+    if not root.exists():
+        return []
+
+    requested_fraction_texts = {_fraction_text(value) for value in hint_fractions}
+    hint_fractioner = f"{_safe_component(hint_type)}__{_safe_component(fractioner)}"
+    discovered_models: list[str] = []
+
+    for model_dir in sorted(root.iterdir()):
+        if not model_dir.is_dir():
+            continue
+        inference_dir = model_dir / hint_fractioner
+        if not inference_dir.exists() or not inference_dir.is_dir():
+            continue
+
+        has_matching_fraction = False
+        for file_path in inference_dir.glob("fraction_*.jsonl"):
+            fraction_text = file_path.stem.removeprefix("fraction_")
+            if not fraction_text:
+                continue
+            try:
+                normalized_fraction_text = _fraction_text(float(fraction_text))
+            except ValueError:
+                continue
+            if normalized_fraction_text in requested_fraction_texts:
+                has_matching_fraction = True
+                break
+
+        if has_matching_fraction:
+            discovered_models.append(model_dir.name)
+
+    return discovered_models
+
+
 def grade_hle_hinted_outputs(
     *,
     model: str,
@@ -270,6 +325,7 @@ def grade_hle_hinted_outputs(
     total_llm_judge_errors = 0
     total_removed_regrade_rows = 0
     by_grader_type: dict[str, int] = {}
+    dataset_spec = get_dataset_spec("hle")
 
     for hint_fraction in sorted(set(float(f"{value:.6f}") for value in hint_fractions)):
         inference_path = build_hinted_inference_path(
@@ -300,11 +356,10 @@ def grade_hle_hinted_outputs(
             remaining_limit = max(0, limit - total_pending)
             pending = pending[:remaining_limit]
         total_pending += len(pending)
-        print(
+        _log(
             f"[hle_hinted_grading] fraction={hint_fraction} rows={len(rows)} "
             f"pending={len(pending)} skipped_existing={len(rows) - len(pending)} "
-            f"inference_path={inference_path} grade_path={grade_path}",
-            flush=True,
+            f"inference_path={inference_path} grade_path={grade_path}"
         )
         if dry_run or not pending:
             if limit is not None and total_pending >= limit:
@@ -315,23 +370,24 @@ def grade_hle_hinted_outputs(
         removed_regrade_rows = _remove_regrade_rows(grade_path, pending_inference_ids)
         total_removed_regrade_rows += removed_regrade_rows
         if removed_regrade_rows:
-            print(
+            _log(
                 f"[hle_hinted_grading] removed_regrade_rows={removed_regrade_rows} "
-                f"grade_path={grade_path}",
-                flush=True,
+                f"grade_path={grade_path}"
             )
 
         with ThreadPoolExecutor(max_workers=grader_concurrency) as executor:
-            dataset_spec = get_dataset_spec("hle")
             futures = [executor.submit(_grade_one, row, dataset_spec) for row in pending]
-            for future in as_completed(futures):
-                grade = future.result()
-                append_jsonl(grade_path, grade)
-                total_written += 1
-                grader_type = str(grade.get("grader_type", "unknown"))
-                by_grader_type[grader_type] = by_grader_type.get(grader_type, 0) + 1
-                if grader_type == "hle_llm_judge_error":
-                    total_llm_judge_errors += 1
+            grade_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(grade_path, "a", encoding="utf-8") as out_f:
+                for future in as_completed(futures):
+                    grade = future.result()
+                    out_f.write(json.dumps(grade, ensure_ascii=False))
+                    out_f.write("\n")
+                    total_written += 1
+                    grader_type = str(grade.get("grader_type", "unknown"))
+                    by_grader_type[grader_type] = by_grader_type.get(grader_type, 0) + 1
+                    if grader_type == "hle_llm_judge_error":
+                        total_llm_judge_errors += 1
         if limit is not None and total_pending >= limit:
             break
 
@@ -343,12 +399,9 @@ def grade_hle_hinted_outputs(
         "hle_llm_judge_error": total_llm_judge_errors,
         "by_grader_type": by_grader_type,
     }
-    print(f"[hle_hinted_grading] summary={summary}", flush=True)
+    _log(f"[hle_hinted_grading] summary={summary}")
     if total_llm_judge_errors:
-        print(
-            f"[hle_hinted_grading][WARN] hle_llm_judge_error count={total_llm_judge_errors}",
-            flush=True,
-        )
+        _log(f"[hle_hinted_grading][WARN] hle_llm_judge_error count={total_llm_judge_errors}")
     else:
-        print("[hle_hinted_grading] hle_llm_judge_error count=0", flush=True)
+        _log("[hle_hinted_grading] hle_llm_judge_error count=0")
     return summary

@@ -8,6 +8,7 @@ from typing import Any, Callable
 import numpy as np
 
 from src.model_config import filter_models_for_fractioner
+from src.storage import make_stable_id
 
 
 DATA_ROOT = Path("data")
@@ -24,6 +25,30 @@ ProblemIdPredicate = Callable[[str], bool]
 def safe_component(text: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", text.strip())
     return cleaned or "unknown"
+
+
+def model_storage_component(model: str) -> str:
+    return safe_component(model.strip().split("/")[-1])
+
+
+def hinted_inference_id(
+    *,
+    benchmark: str,
+    model: str,
+    hint_type: str,
+    fractioner: str,
+    hint_fraction: float,
+    hint_id: str,
+) -> str:
+    return make_stable_id(
+        benchmark,
+        model_storage_component(model),
+        hint_type,
+        fractioner,
+        f"{hint_fraction:.6f}",
+        hint_id,
+        length=24,
+    )
 
 
 def iter_jsonl(path: Path):
@@ -182,6 +207,10 @@ def extract_is_correct(row: dict[str, Any]) -> bool | None:
     direct_correct = row.get("correct")
     if isinstance(direct_correct, bool):
         return direct_correct
+
+    sidecar_correct = row.get("is_correct")
+    if isinstance(sidecar_correct, bool):
+        return sidecar_correct
 
     graders = row.get("graders")
     if not isinstance(graders, list):
@@ -345,6 +374,9 @@ def discover_models_for_benchmark(
     benchmark_dir = data_root / "hinted_inference" / safe_component(benchmark)
     if benchmark_dir.exists():
         models.update(path.name for path in benchmark_dir.iterdir() if path.is_dir())
+    grade_benchmark_dir = data_root / "hinted_grades" / safe_component(benchmark)
+    if grade_benchmark_dir.exists():
+        models.update(path.name for path in grade_benchmark_dir.iterdir() if path.is_dir())
     return filter_models_for_fractioner(sorted(models), fractioner)
 
 
@@ -356,21 +388,24 @@ def discover_fractioners(
     data_root: Path = DATA_ROOT,
 ) -> list[str]:
     benchmark_name = safe_component(benchmark)
-    model_name = safe_component(model)
+    model_name = safe_component(model.strip().split("/")[-1])
     hint_prefix = f"{safe_component(hint_type)}__"
-    model_dir = data_root / "hinted_inference" / benchmark_name / model_name
-    if not model_dir.exists():
-        return []
     fractioners: list[str] = []
-    for path in model_dir.iterdir():
-        if not path.is_dir():
+    for model_dir in (
+        data_root / "hinted_inference" / benchmark_name / model_name,
+        data_root / "hinted_grades" / benchmark_name / model_name,
+    ):
+        if not model_dir.exists():
             continue
-        if not path.name.startswith(hint_prefix):
-            continue
-        parts = path.name.split("__", 1)
-        if len(parts) != 2 or not parts[1]:
-            continue
-        fractioners.append(parts[1])
+        for path in model_dir.iterdir():
+            if not path.is_dir():
+                continue
+            if not path.name.startswith(hint_prefix):
+                continue
+            parts = path.name.split("__", 1)
+            if len(parts) != 2 or not parts[1]:
+                continue
+            fractioners.append(parts[1])
     return sorted(set(fractioners))
 
 
@@ -398,6 +433,304 @@ def discover_fraction_files(
     return sorted(out, key=lambda pair: pair[0])
 
 
+def discover_hle_grade_fraction_files(
+    *,
+    model: str,
+    hint_type: str,
+    fractioner: str,
+    data_root: Path = DATA_ROOT,
+) -> list[tuple[float, Path]]:
+    model_name = safe_component(model.strip().split("/")[-1])
+    hint_fractioner = f"{safe_component(hint_type)}__{safe_component(fractioner)}"
+    combo_dir = data_root / "hinted_grades" / "hle" / model_name / hint_fractioner
+    if not combo_dir.exists():
+        return []
+    out: list[tuple[float, Path]] = []
+    for path in combo_dir.glob("fraction_*.jsonl"):
+        try:
+            fraction = parse_fraction_from_filename(path.name)
+        except ValueError:
+            continue
+        out.append((fraction, path))
+    return sorted(out, key=lambda pair: pair[0])
+
+
+def discover_hle_expanded_fraction_files(
+    *,
+    hint_type: str,
+    fractioner: str,
+    data_root: Path = DATA_ROOT,
+) -> list[tuple[float, Path]]:
+    combo_dir = (
+        data_root
+        / "expanded_hinted_prompts"
+        / "hle"
+        / safe_component(hint_type)
+        / safe_component(fractioner)
+    )
+    if not combo_dir.exists():
+        return []
+    out: list[tuple[float, Path]] = []
+    for path in combo_dir.glob("fraction_*.jsonl"):
+        try:
+            fraction = parse_fraction_from_filename(path.name)
+        except ValueError:
+            continue
+        out.append((fraction, path))
+    return sorted(out, key=lambda pair: pair[0])
+
+
+def hle_grade_fraction_path(
+    *,
+    model: str,
+    hint_type: str,
+    fractioner: str,
+    hint_fraction: float,
+    data_root: Path = DATA_ROOT,
+) -> Path:
+    model_name = model_storage_component(model)
+    hint_fractioner = f"{safe_component(hint_type)}__{safe_component(fractioner)}"
+    fraction_text = f"{hint_fraction:.4f}".rstrip("0").rstrip(".") or "0"
+    return data_root / "hinted_grades" / "hle" / model_name / hint_fractioner / f"fraction_{fraction_text}.jsonl"
+
+
+def hle_inference_fraction_path(
+    *,
+    model: str,
+    hint_type: str,
+    fractioner: str,
+    hint_fraction: float,
+    data_root: Path = DATA_ROOT,
+) -> Path:
+    model_name = model_storage_component(model)
+    hint_fractioner = f"{safe_component(hint_type)}__{safe_component(fractioner)}"
+    fraction_text = f"{hint_fraction:.4f}".rstrip("0").rstrip(".") or "0"
+    return data_root / "hinted_inference" / "hle" / model_name / hint_fractioner / f"fraction_{fraction_text}.jsonl"
+
+
+def _read_hle_grade_map(path: Path) -> tuple[dict[str, bool], str | None]:
+    if not path.exists():
+        return {}, f"missing grade file {path}"
+
+    grades: dict[str, bool] = {}
+    seen_inference_ids: set[str] = set()
+    duplicate_inference_ids = 0
+    try:
+        for row in iter_jsonl(path):
+            if not isinstance(row, dict):
+                return {}, "non-dict grade row"
+            inference_id = row.get("inference_id")
+            if not isinstance(inference_id, str) or not inference_id:
+                return {}, "missing inference_id in grade row"
+            is_correct = extract_is_correct(row)
+            if is_correct is None:
+                return {}, f"missing/invalid correct label for inference_id={inference_id}"
+            if row.get("grader_type") == "hle_llm_judge_error":
+                return {}, f"judge error for inference_id={inference_id}"
+            metadata = row.get("metadata")
+            if isinstance(metadata, dict) and metadata.get("needs_regrade") is True:
+                return {}, f"needs_regrade for inference_id={inference_id}"
+
+            if inference_id in seen_inference_ids:
+                duplicate_inference_ids += 1
+            seen_inference_ids.add(inference_id)
+            grades[inference_id] = is_correct
+    except Exception as exc:
+        return {}, f"failed to read {path}: {exc}"
+
+    if duplicate_inference_ids:
+        return {}, f"duplicate_inference_ids={duplicate_inference_ids}"
+    return grades, None
+
+
+def _read_successful_hle_inference_ids(path: Path) -> tuple[set[str], str | None]:
+    if not path.exists():
+        return set(), f"missing inference file {path}"
+
+    inference_ids: set[str] = set()
+    try:
+        for row in iter_jsonl(path):
+            if not isinstance(row, dict):
+                return set(), "non-dict inference row"
+            if row.get("is_error") is True:
+                continue
+            inference_id = row.get("inference_id")
+            if not isinstance(inference_id, str) or not inference_id:
+                return set(), "missing inference_id in inference row"
+            inference_ids.add(inference_id)
+    except Exception as exc:
+        return set(), f"failed to read {path}: {exc}"
+    return inference_ids, None
+
+
+def collect_hle_stats_for_fraction(
+    *,
+    model: str,
+    hint_type: str,
+    fractioner: str,
+    hint_fraction: float,
+    expanded_path: Path,
+    grade_path: Path,
+    inference_path: Path,
+    rng: np.random.Generator,
+    problem_id_predicate: ProblemIdPredicate | None = None,
+) -> tuple[dict[str, float | int] | None, str | None]:
+    grades_by_inference_id, grade_error = _read_hle_grade_map(grade_path)
+    if grade_error is not None:
+        return None, grade_error
+
+    successful_inference_ids, inference_error = _read_successful_hle_inference_ids(inference_path)
+    if inference_error is not None:
+        successful_inference_ids = set()
+
+    sample_to_scores: dict[str, list[float]] = {}
+    rows_total = 0
+    rows_with_known_label = 0
+    rows_without_known_label = 0
+    rows_counted_false_missing_grade = 0
+
+    try:
+        for row in iter_jsonl(expanded_path):
+            if not isinstance(row, dict):
+                rows_without_known_label += 1
+                continue
+            problem_id = str(row.get("problem_id", "")).strip()
+            hint_id = str(row.get("hint_id", "")).strip()
+            if not problem_id or not hint_id:
+                rows_without_known_label += 1
+                continue
+            if problem_id_predicate is not None and not problem_id_predicate(problem_id):
+                continue
+
+            rows_total += 1
+            inference_id = hinted_inference_id(
+                benchmark="hle",
+                model=model,
+                hint_type=hint_type,
+                fractioner=fractioner,
+                hint_fraction=hint_fraction,
+                hint_id=hint_id,
+            )
+            is_correct = grades_by_inference_id.get(inference_id)
+            if is_correct is None:
+                rows_counted_false_missing_grade += 1
+                score = 0.0
+            else:
+                score = 1.0 if is_correct else 0.0
+            rows_with_known_label += 1
+            sample_to_scores.setdefault(problem_id, []).append(score)
+    except Exception as exc:
+        return None, f"failed to read {expanded_path}: {exc}"
+
+    sample_to_arrays = {
+        sample_id: np.asarray(values, dtype=float)
+        for sample_id, values in sample_to_scores.items()
+        if len(values) > 0
+    }
+    if not sample_to_arrays:
+        return None, "no HLE candidate scores available"
+
+    point_accuracy, ci_low, ci_high = bootstrap_accuracy(sample_to_scores=sample_to_arrays, rng=rng)
+    n_rollouts = int(sum(arr.size for arr in sample_to_arrays.values()))
+
+    return {
+        "accuracy": point_accuracy,
+        "ci_low": ci_low,
+        "ci_high": ci_high,
+        "n_samples": int(len(sample_to_arrays)),
+        "n_rollouts": n_rollouts,
+        "rows_total": int(rows_total),
+        "rows_with_known_label": int(rows_with_known_label),
+        "rows_without_known_label": int(rows_without_known_label),
+        "rows_counted_false_missing_grade": int(rows_counted_false_missing_grade),
+        "successful_inference_rows_missing_grade": int(
+            len(successful_inference_ids - set(grades_by_inference_id))
+        ),
+        "grade_rows_total": int(len(grades_by_inference_id)),
+        "successful_inference_rows_total": int(len(successful_inference_ids)),
+    }, None
+
+
+def collect_complete_hle_grade_stats(
+    *,
+    model: str,
+    hint_type: str,
+    fractioner: str,
+    expected_fractions: list[float] | None = None,
+    data_root: Path = DATA_ROOT,
+    random_seed: int = RANDOM_SEED,
+    problem_id_predicate: ProblemIdPredicate | None = None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    expected = EXPECTED_FRACTIONS if expected_fractions is None else expected_fractions
+    expected_fraction_set = {float(f"{value:.6f}") for value in expected}
+    rng = np.random.default_rng(random_seed)
+
+    fraction_files = discover_hle_expanded_fraction_files(
+        hint_type=hint_type,
+        fractioner=fractioner,
+        data_root=data_root,
+    )
+    if not fraction_files:
+        return [], [f"no HLE expanded prompt files for fractioner={fractioner}"]
+
+    by_fraction = {float(f"{frac:.6f}"): path for frac, path in fraction_files}
+    missing = sorted(expected_fraction_set - set(by_fraction.keys()))
+    if missing:
+        return [], [
+            f"missing_hle_expanded_fractions={missing}"
+        ]
+
+    rows: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for hint_fraction in expected:
+        expanded_path = by_fraction[float(f"{hint_fraction:.6f}")]
+        grade_path = hle_grade_fraction_path(
+            model=model,
+            hint_type=hint_type,
+            fractioner=fractioner,
+            hint_fraction=hint_fraction,
+            data_root=data_root,
+        )
+        inference_path = hle_inference_fraction_path(
+            model=model,
+            hint_type=hint_type,
+            fractioner=fractioner,
+            hint_fraction=hint_fraction,
+            data_root=data_root,
+        )
+        stats, error = collect_hle_stats_for_fraction(
+            model=model,
+            hint_type=hint_type,
+            fractioner=fractioner,
+            hint_fraction=hint_fraction,
+            expanded_path=expanded_path,
+            grade_path=grade_path,
+            inference_path=inference_path,
+            rng=rng,
+            problem_id_predicate=problem_id_predicate,
+        )
+        if stats is None:
+            warnings.append(
+                f"unusable HLE rows model={model} fractioner={fractioner} "
+                f"fraction={hint_fraction} error={error}"
+            )
+            continue
+        rows.append(
+            {
+                "model": safe_component(model.strip().split("/")[-1]),
+                "fractioner": fractioner,
+                "hint_fraction": float(hint_fraction),
+                **stats,
+                "path": str(grade_path),
+                "expanded_path": str(expanded_path),
+                "inference_path": str(inference_path),
+                "score_source": "hinted_grades_with_missing_generations_false",
+            }
+        )
+
+    return rows, warnings
+
+
 def collect_complete_fraction_stats(
     *,
     benchmark: str,
@@ -409,6 +742,17 @@ def collect_complete_fraction_stats(
     random_seed: int = RANDOM_SEED,
     problem_id_predicate: ProblemIdPredicate | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
+    if benchmark == "hle":
+        return collect_complete_hle_grade_stats(
+            model=model,
+            hint_type=hint_type,
+            fractioner=fractioner,
+            expected_fractions=expected_fractions,
+            data_root=data_root,
+            random_seed=random_seed,
+            problem_id_predicate=problem_id_predicate,
+        )
+
     expected = EXPECTED_FRACTIONS if expected_fractions is None else expected_fractions
     expected_fraction_set = {float(f"{value:.6f}") for value in expected}
     rng = np.random.default_rng(random_seed)

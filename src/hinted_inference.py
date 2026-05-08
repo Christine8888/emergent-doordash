@@ -34,6 +34,7 @@ from src.token_budget import (
     apply_max_token_safety_margin as _apply_max_token_safety_margin,
     count_prompt_tokens_with_tokenizer as _count_prompt_tokens_with_tokenizer,
     extract_allowed_max_tokens_from_error as _extract_allowed_max_tokens_from_error,
+    extract_context_limit_from_error as _extract_context_limit_from_error,
     format_exception_message as _format_exception_message,
     normalize_context_limit as _normalize_context_limit,
 )
@@ -1250,7 +1251,11 @@ async def _run_all_candidates(
                     break
                 except Exception as exc:
                     error_text = _format_exception_message(exc)
-                    raw_allowed_max_tokens = _extract_allowed_max_tokens_from_error(error_text)
+                    error_context_limit = _extract_context_limit_from_error(error_text)
+                    if error_context_limit is not None and prompt_token_count is not None:
+                        raw_allowed_max_tokens = max(1, error_context_limit - prompt_token_count)
+                    else:
+                        raw_allowed_max_tokens = _extract_allowed_max_tokens_from_error(error_text)
                     allowed_max_tokens = (
                         _apply_max_token_safety_margin(raw_allowed_max_tokens)
                         if raw_allowed_max_tokens is not None

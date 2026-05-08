@@ -54,6 +54,14 @@ def _selected_hint_types(hint_type: str) -> list[str]:
     return [hint_type]
 
 
+def _is_complete(row: ModelHintProgress) -> bool:
+    return (
+        row.total > 0
+        and row.remaining == 0
+        and row.fractions_complete >= row.fractions_total
+    )
+
+
 def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
@@ -76,6 +84,13 @@ def main() -> None:
             )
 
     print_progress_report(rows, show_complete=False)
+    complete_model_names = sorted({row.model for row in rows if _is_complete(row)})
+    print("\ncomplete models:", flush=True)
+    if complete_model_names:
+        for model_name in complete_model_names:
+            print(f"  {model_name}", flush=True)
+    else:
+        print("  (none)", flush=True)
 
 
 if __name__ == "__main__":
@@ -84,5 +99,8 @@ if __name__ == "__main__":
 """
 python -m runs.print_hinted_progress --benchmark aime2025_2026 --fractioner mask_word --hint-type answer_not_revealed
 python -m runs.print_hinted_progress --benchmark aime2025_2026 --fractioner truncate_word --hint-type answer_not_revealed
+
+
+python -m runs.print_hinted_progress --benchmark hle --fractioner mask_word --hint-type answer_not_revealed
 
 """
