@@ -550,7 +550,7 @@ class AnswerNotRevealedHintTypeSpec(HintTypeSpecBase):
             "{question}\n\n"
             "Reference full solution:\n"
             "{source_solution}\n\n"
-            "REMINDER: Do not perform the final step. Your explanation must not contain {source_answer} anywhere."
+            "REMINDER: Do not add unstated steps. Output only the rewritten explanation. Your explanation must not contain {source_answer} anywhere. "
         )
         return template.format(
             question=problem.question,

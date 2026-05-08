@@ -100,7 +100,11 @@ def _thinking_bucket(row: dict[str, Any]) -> str | None:
 
     reasoning_tokens = _maybe_float(_field_from_row_or_metadata(row, "reasoning_token_count"))
     thinking_tokens = _maybe_float(_field_from_row_or_metadata(row, "thinking_token_count"))
-    if reasoning_tokens is None and thinking_tokens is None:
+    thinking_text = _field_from_row_or_metadata(row, "thinking")
+    thinking_observed = _as_bool(_field_from_row_or_metadata(row, "thinking_observed")) or (
+        isinstance(thinking_text, str) and bool(thinking_text.strip())
+    )
+    if reasoning_tokens is None and thinking_tokens is None and not thinking_observed:
         return None
 
     effort = _field_from_row_or_metadata(row, "effort")

@@ -80,6 +80,22 @@ def _output_blocks_for_hint_row(hint_row: Any, meta: dict[str, Any]) -> list[dic
     return fallback_blocks
 
 
+def _thinking_summary_for_hint_row(hint_row: Any, meta: dict[str, Any]) -> str:
+    thinking = meta.get("thinking")
+    if not isinstance(thinking, str):
+        thinking = hint_row.get("thinking")
+    if isinstance(thinking, str) and thinking.strip():
+        return thinking.strip()
+
+    blocks = _output_blocks_for_hint_row(hint_row, meta)
+    summaries = [
+        block["text"].strip()
+        for block in blocks
+        if block.get("type") == "thinking" and isinstance(block.get("text"), str) and block["text"].strip()
+    ]
+    return "\n".join(summaries).strip()
+
+
 @st.cache_data(show_spinner=False)
 def load_dataset_df(path_str: str) -> pd.DataFrame:
     path = Path(path_str)
@@ -366,6 +382,11 @@ def main() -> None:
                 st.code(str(hint_row.get("full_hint", "")), language="text")
 
                 output_blocks = _output_blocks_for_hint_row(hint_row, meta)
+                thinking_summary = _thinking_summary_for_hint_row(hint_row, meta)
+                if thinking_summary:
+                    st.markdown("**Thinking Summary**")
+                    st.code(thinking_summary, language="text")
+
                 if output_blocks:
                     with st.expander("Model Output Blocks", expanded=False):
                         for block_idx, block in enumerate(output_blocks, start=1):

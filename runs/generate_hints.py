@@ -81,8 +81,6 @@ python -m runs.generate_hints --hle-modality text-only --benchmark hle --hint-ty
 
 
 
-
-python -m runs.generate_hints --hle-modality text-only --benchmark hle --hint-type answer_not_revealed --num-rollouts 1 --limit 10 --model claude-opus-4-7
-
+python -m runs.generate_hints --hle-modality text-only --benchmark hle --hint-type answer_not_revealed --num-rollouts 2 --limit 10 --model claude-opus-4-7 --thinking-effort medium 
 
 """

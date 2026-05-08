@@ -205,13 +205,52 @@ def _token_breakdown_metadata(usage: dict[str, Any]) -> dict[str, Any]:
     reasoning_tokens = _maybe_int(usage.get("reasoning_token_count"))
     thinking_tokens = _maybe_int(usage.get("thinking_token_count"))
     reasoning_output_tokens = reasoning_tokens if reasoning_tokens is not None else thinking_tokens
-    normal_output_tokens = output_tokens
+    thinking_text = usage.get("thinking")
+    thinking_observed = isinstance(thinking_text, str) and bool(thinking_text.strip())
+    if not thinking_observed:
+        for block in usage.get("output_blocks", []) or []:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") in {"thinking", "redacted_thinking"}:
+                thinking_observed = True
+                break
+
+    normal_output_tokens = None if thinking_observed and reasoning_output_tokens is None else output_tokens
     if output_tokens is not None and reasoning_output_tokens is not None:
         normal_output_tokens = max(0, output_tokens - reasoning_output_tokens)
-    return {
+    metadata = {
+        "reasoning_token_count": reasoning_tokens,
+        "thinking_token_count": thinking_tokens,
         "normal_output_tokens": normal_output_tokens,
         "reasoning_output_tokens": reasoning_output_tokens,
+        "thinking_observed": thinking_observed,
     }
+    if thinking_observed and reasoning_output_tokens is None:
+        metadata["token_breakdown_note"] = (
+            "Thinking was observed, but this provider response did not include a separate "
+            "reasoning/thinking token count; output_token_count is the total billed output."
+        )
+    return metadata
+
+
+def _thinking_summary_available(usage: dict[str, Any]) -> bool:
+    thinking = usage.get("thinking")
+    if isinstance(thinking, str) and thinking.strip():
+        return True
+    for block in usage.get("output_blocks", []) or []:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") != "thinking":
+            continue
+        text = block.get("text")
+        if isinstance(text, str) and text.strip():
+            return True
+    return False
+
+
+def _token_usage_log_fields(usage: dict[str, Any]) -> str:
+    thinking = "true" if _thinking_summary_available(usage) else "false"
+    return f"output_tokens={usage.get('output_token_count')} thinking={thinking}"
 
 
 def _extension_for_media_type(media_type: str) -> str:
@@ -376,6 +415,7 @@ def query_anthropic_hint(
         thinking_mode = "adaptive"
         effort = thinking_effort
         request["thinking"] = {"type": thinking_mode, "display": "summarized"}
+        request["extra_body"] = {"output_config": {"effort": effort}}
 
     streamed_output_blocks: list[dict[str, str]] = []
     stream_events: list[Any] = []
@@ -644,8 +684,7 @@ def _generate_record_for_task(
                 f"[hint_generation] response benchmark={benchmark_name} hint_type={hint_type} "
                 f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
                 f"model={attempt_model} input_tokens={usage['input_token_count']} "
-                f"normal_output_tokens={_token_breakdown_metadata(usage)['normal_output_tokens']} "
-                f"reasoning_output_tokens={_token_breakdown_metadata(usage)['reasoning_output_tokens']} "
+                f"{_token_usage_log_fields(usage)} "
                 f"stop_reason={usage['stop_reason']}"
             )
             if _is_max_token_stop(provider=usage["provider"], stop_reason=usage["stop_reason"]):
@@ -689,8 +728,7 @@ def _generate_record_for_task(
                     f"[hint_generation][WARN] max_tokens_reached benchmark={benchmark_name} "
                     f"problem_id={problem.problem_id} rollout_id={rollout_id} attempt={attempt_idx} "
                     f"model={attempt_model} "
-                    f"normal_output_tokens={_token_breakdown_metadata(usage)['normal_output_tokens']} "
-                    f"reasoning_output_tokens={_token_breakdown_metadata(usage)['reasoning_output_tokens']} "
+                    f"{_token_usage_log_fields(usage)} "
                     f"stop_reason={usage['stop_reason']}"
                     f"{debug_dump_log}"
                 )
