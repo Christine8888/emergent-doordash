@@ -19,6 +19,13 @@ LUKE_SUPPORTED_FRACTIONERS = {"mask_word", "truncate_word"}
 EXPECTED_FRACTIONS = [i / 10 for i in range(11)]
 N_BOOTSTRAP = 5000
 RANDOM_SEED = 0
+INCOMPLETE_OVERRIDE_MIN_FRACTION_COVERAGE = 0.90
+MODEL_INCOMPLETE_OVERRIDES = frozenset(
+    {
+        "Llama-2-7b-chat-hf",
+        "Llama-2-13b-chat-hf",
+    }
+)
 ProblemIdPredicate = Callable[[str], bool]
 
 
@@ -29,6 +36,35 @@ def safe_component(text: str) -> str:
 
 def model_storage_component(model: str) -> str:
     return safe_component(model.strip().split("/")[-1])
+
+
+def is_model_incomplete_override(model: str) -> bool:
+    return (
+        model in MODEL_INCOMPLETE_OVERRIDES
+        or model_storage_component(model) in MODEL_INCOMPLETE_OVERRIDES
+    )
+
+
+def fraction_file_component(hint_fraction: float) -> str:
+    return f"{hint_fraction:.4f}".rstrip("0").rstrip(".") or "0"
+
+
+def expanded_prompt_fraction_path(
+    *,
+    benchmark: str,
+    hint_type: str,
+    fractioner: str,
+    hint_fraction: float,
+    data_root: Path = DATA_ROOT,
+) -> Path:
+    return (
+        data_root
+        / "expanded_hinted_prompts"
+        / safe_component(benchmark)
+        / safe_component(hint_type)
+        / safe_component(fractioner)
+        / f"fraction_{fraction_file_component(hint_fraction)}.jsonl"
+    )
 
 
 def hinted_inference_id(
@@ -302,6 +338,141 @@ def collect_stats_for_fraction(
         "rows_with_known_label": int(rows_with_known_label),
         "rows_without_known_label": int(rows_without_known_label),
     }
+
+
+def _count_expanded_prompt_rows(
+    *,
+    benchmark: str,
+    hint_type: str,
+    fractioner: str,
+    hint_fraction: float,
+    data_root: Path,
+    problem_id_predicate: ProblemIdPredicate | None,
+) -> tuple[int | None, str | None]:
+    path = expanded_prompt_fraction_path(
+        benchmark=benchmark,
+        hint_type=hint_type,
+        fractioner=fractioner,
+        hint_fraction=hint_fraction,
+        data_root=data_root,
+    )
+    if not path.exists():
+        return None, f"missing expanded prompt file {path}"
+
+    count = 0
+    try:
+        for row in iter_jsonl(path):
+            if not isinstance(row, dict):
+                continue
+            problem_id = str(row.get("problem_id", "")).strip()
+            if problem_id_predicate is not None and not problem_id_predicate(problem_id):
+                continue
+            count += 1
+    except Exception as exc:
+        return None, f"failed to read expanded prompt file {path}: {exc}"
+    if count <= 0:
+        return None, f"no expanded prompt rows in {path}"
+    return count, None
+
+
+def _has_minimum_labeled_coverage(
+    *,
+    stats: dict[str, float | int],
+    expected_rows: int,
+) -> bool:
+    rows_with_known_label = int(stats.get("rows_with_known_label", 0))
+    return rows_with_known_label >= INCOMPLETE_OVERRIDE_MIN_FRACTION_COVERAGE * expected_rows
+
+
+def _collect_incomplete_override_fraction_stats(
+    *,
+    benchmark: str,
+    model: str,
+    hint_type: str,
+    fractioner: str,
+    expected_fractions: list[float],
+    data_root: Path,
+    rng: np.random.Generator,
+    problem_id_predicate: ProblemIdPredicate | None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    fraction_files = discover_fraction_files(
+        benchmark=benchmark,
+        model=model,
+        hint_type=hint_type,
+        fractioner=fractioner,
+        data_root=data_root,
+    )
+    if not fraction_files:
+        return [], [f"no files for model={model} fractioner={fractioner}"]
+
+    by_fraction = {float(f"{frac:.6f}"): path for frac, path in fraction_files}
+    rows: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    failed_reasons: list[str] = []
+
+    for hint_fraction in expected_fractions:
+        fraction_key = float(f"{hint_fraction:.6f}")
+        path = by_fraction.get(fraction_key)
+        if path is None:
+            failed_reasons.append(f"{hint_fraction:.1f}:missing_fraction_file")
+            continue
+
+        stats = collect_stats_for_fraction(
+            path=path,
+            rng=rng,
+            problem_id_predicate=problem_id_predicate,
+        )
+        if stats is None:
+            failed_reasons.append(f"{hint_fraction:.1f}:no_labeled_rows")
+            continue
+
+        expected_rows, expected_error = _count_expanded_prompt_rows(
+            benchmark=benchmark,
+            hint_type=hint_type,
+            fractioner=fractioner,
+            hint_fraction=hint_fraction,
+            data_root=data_root,
+            problem_id_predicate=problem_id_predicate,
+        )
+        if expected_rows is None:
+            failed_reasons.append(f"{hint_fraction:.1f}:{expected_error}")
+            continue
+
+        rows_with_known_label = int(stats.get("rows_with_known_label", 0))
+        coverage = rows_with_known_label / float(expected_rows)
+        if not _has_minimum_labeled_coverage(stats=stats, expected_rows=expected_rows):
+            failed_reasons.append(
+                f"{hint_fraction:.1f}:coverage={coverage:.3f}<"
+                f"{INCOMPLETE_OVERRIDE_MIN_FRACTION_COVERAGE:.2f} "
+                f"labeled={rows_with_known_label}/{expected_rows}"
+            )
+            continue
+
+        if coverage < 1.0:
+            warnings.append(
+                f"incomplete override model={model} fractioner={fractioner} "
+                f"fraction={hint_fraction:.1f} coverage={coverage:.3f} "
+                f"labeled={rows_with_known_label}/{expected_rows}"
+            )
+        rows.append(
+            {
+                "model": model,
+                "fractioner": fractioner,
+                "hint_fraction": float(hint_fraction),
+                **stats,
+                "expected_rows": int(expected_rows),
+                "labeled_coverage": float(coverage),
+                "path": str(path),
+                "score_source": "local_labeled_rows_incomplete_override",
+            }
+        )
+
+    if failed_reasons:
+        return [], [
+            f"incomplete override rejected model={model} fractioner={fractioner} "
+            f"reasons={failed_reasons}"
+        ]
+    return rows, warnings
 
 
 def load_luke_results_with_ci_for_combo(
@@ -651,6 +822,153 @@ def collect_hle_stats_for_fraction(
     }, None
 
 
+def collect_hle_labeled_grade_stats_for_fraction(
+    *,
+    path: Path,
+    rng: np.random.Generator,
+    problem_id_predicate: ProblemIdPredicate | None = None,
+) -> dict[str, float | int] | None:
+    sample_to_scores: dict[str, list[float]] = {}
+    rows_total = 0
+    rows_with_known_label = 0
+    rows_without_known_label = 0
+
+    if not path.exists():
+        return None
+
+    for row in iter_jsonl(path):
+        rows_total += 1
+        if not isinstance(row, dict):
+            rows_without_known_label += 1
+            continue
+        if row.get("grader_type") == "hle_llm_judge_error":
+            rows_without_known_label += 1
+            continue
+        metadata = row.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("needs_regrade") is True:
+            rows_without_known_label += 1
+            continue
+
+        problem_id = str(row.get("problem_id", "")).strip()
+        if not problem_id:
+            rows_without_known_label += 1
+            continue
+        if problem_id_predicate is not None and not problem_id_predicate(problem_id):
+            continue
+
+        is_correct = extract_is_correct(row)
+        if is_correct is None:
+            rows_without_known_label += 1
+            continue
+
+        rows_with_known_label += 1
+        sample_to_scores.setdefault(problem_id, []).append(1.0 if is_correct else 0.0)
+
+    sample_to_arrays = {
+        sample_id: np.asarray(values, dtype=float)
+        for sample_id, values in sample_to_scores.items()
+        if len(values) > 0
+    }
+    if not sample_to_arrays:
+        return None
+
+    point_accuracy, ci_low, ci_high = bootstrap_accuracy(
+        sample_to_scores=sample_to_arrays,
+        rng=rng,
+    )
+    n_rollouts = int(sum(arr.size for arr in sample_to_arrays.values()))
+    return {
+        "accuracy": point_accuracy,
+        "ci_low": ci_low,
+        "ci_high": ci_high,
+        "n_samples": int(len(sample_to_arrays)),
+        "n_rollouts": n_rollouts,
+        "rows_total": int(rows_total),
+        "rows_with_known_label": int(rows_with_known_label),
+        "rows_without_known_label": int(rows_without_known_label),
+    }
+
+
+def collect_incomplete_override_hle_grade_stats(
+    *,
+    model: str,
+    hint_type: str,
+    fractioner: str,
+    expected_fractions: list[float],
+    data_root: Path,
+    rng: np.random.Generator,
+    problem_id_predicate: ProblemIdPredicate | None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    rows: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    failed_reasons: list[str] = []
+
+    for hint_fraction in expected_fractions:
+        grade_path = hle_grade_fraction_path(
+            model=model,
+            hint_type=hint_type,
+            fractioner=fractioner,
+            hint_fraction=hint_fraction,
+            data_root=data_root,
+        )
+        stats = collect_hle_labeled_grade_stats_for_fraction(
+            path=grade_path,
+            rng=rng,
+            problem_id_predicate=problem_id_predicate,
+        )
+        if stats is None:
+            failed_reasons.append(f"{hint_fraction:.1f}:no_labeled_grade_rows")
+            continue
+
+        expected_rows, expected_error = _count_expanded_prompt_rows(
+            benchmark="hle",
+            hint_type=hint_type,
+            fractioner=fractioner,
+            hint_fraction=hint_fraction,
+            data_root=data_root,
+            problem_id_predicate=problem_id_predicate,
+        )
+        if expected_rows is None:
+            failed_reasons.append(f"{hint_fraction:.1f}:{expected_error}")
+            continue
+
+        rows_with_known_label = int(stats.get("rows_with_known_label", 0))
+        coverage = rows_with_known_label / float(expected_rows)
+        if not _has_minimum_labeled_coverage(stats=stats, expected_rows=expected_rows):
+            failed_reasons.append(
+                f"{hint_fraction:.1f}:coverage={coverage:.3f}<"
+                f"{INCOMPLETE_OVERRIDE_MIN_FRACTION_COVERAGE:.2f} "
+                f"labeled={rows_with_known_label}/{expected_rows}"
+            )
+            continue
+
+        if coverage < 1.0:
+            warnings.append(
+                f"incomplete HLE override model={model} fractioner={fractioner} "
+                f"fraction={hint_fraction:.1f} coverage={coverage:.3f} "
+                f"labeled={rows_with_known_label}/{expected_rows}"
+            )
+        rows.append(
+            {
+                "model": model_storage_component(model),
+                "fractioner": fractioner,
+                "hint_fraction": float(hint_fraction),
+                **stats,
+                "expected_rows": int(expected_rows),
+                "labeled_coverage": float(coverage),
+                "path": str(grade_path),
+                "score_source": "hle_labeled_grades_incomplete_override",
+            }
+        )
+
+    if failed_reasons:
+        return [], [
+            f"incomplete HLE override rejected model={model} fractioner={fractioner} "
+            f"reasons={failed_reasons}"
+        ]
+    return rows, warnings
+
+
 def collect_complete_hle_grade_stats(
     *,
     model: str,
@@ -664,6 +982,17 @@ def collect_complete_hle_grade_stats(
     expected = EXPECTED_FRACTIONS if expected_fractions is None else expected_fractions
     expected_fraction_set = {float(f"{value:.6f}") for value in expected}
     rng = np.random.default_rng(random_seed)
+
+    if is_model_incomplete_override(model):
+        return collect_incomplete_override_hle_grade_stats(
+            model=model,
+            hint_type=hint_type,
+            fractioner=fractioner,
+            expected_fractions=expected,
+            data_root=data_root,
+            rng=rng,
+            problem_id_predicate=problem_id_predicate,
+        )
 
     fraction_files = discover_hle_expanded_fraction_files(
         hint_type=hint_type,
@@ -769,6 +1098,18 @@ def collect_complete_fraction_stats(
     expected = EXPECTED_FRACTIONS if expected_fractions is None else expected_fractions
     expected_fraction_set = {float(f"{value:.6f}") for value in expected}
     rng = np.random.default_rng(random_seed)
+
+    if is_model_incomplete_override(model):
+        return _collect_incomplete_override_fraction_stats(
+            benchmark=benchmark,
+            model=model,
+            hint_type=hint_type,
+            fractioner=fractioner,
+            expected_fractions=expected,
+            data_root=data_root,
+            rng=rng,
+            problem_id_predicate=problem_id_predicate,
+        )
 
     fraction_files = discover_fraction_files(
         benchmark=benchmark,

@@ -88,6 +88,7 @@ _ANSWER_TAG_RE = re.compile(r"<answer>(.*?)</answer>", re.IGNORECASE | re.DOTALL
 _CHOICE_LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 HLE_JUDGE_MODEL = "o3-mini-2025-01-31"
 HLE_JUDGE_REASONING_EFFORT = "low"
+HLE_JUDGE_MAX_COMPLETION_TOKENS = 4096
 
 HLE_JUDGE_PROMPT = """Judge whether the following [response] to [question] is correct or not based on the precise and unambiguous [correct_answer] below.
 
@@ -105,6 +106,67 @@ reasoning: Explain why the extracted_final_answer is correct or incorrect based 
 
 correct: Answer 'yes' if extracted_final_answer matches the [correct_answer] given above, or is within a small margin of error for numerical problems. Answer 'no' otherwise, i.e. if there if there is any inconsistency, ambiguity, non-equivalency, or if the extracted answer is incorrect.
 """
+
+
+def build_hle_judge_prompt(*, question: str, correct_answer: str, response: str) -> str:
+    return HLE_JUDGE_PROMPT.format(
+        question=question,
+        correct_answer=correct_answer,
+        response=response,
+    )
+
+
+def _get_attr_or_key(obj: Any, key: str) -> Any:
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return getattr(obj, key, None)
+
+
+def _maybe_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def hle_judge_usage_metadata(usage: Any) -> dict[str, Any]:
+    """Extract stable token usage metadata from an OpenAI chat completion usage object."""
+    prompt_tokens = _maybe_int(_get_attr_or_key(usage, "prompt_tokens"))
+    completion_tokens = _maybe_int(_get_attr_or_key(usage, "completion_tokens"))
+    total_tokens = _maybe_int(_get_attr_or_key(usage, "total_tokens"))
+
+    prompt_details = _get_attr_or_key(usage, "prompt_tokens_details")
+    completion_details = _get_attr_or_key(usage, "completion_tokens_details")
+
+    cached_tokens = _maybe_int(_get_attr_or_key(prompt_details, "cached_tokens"))
+    reasoning_tokens = _maybe_int(_get_attr_or_key(completion_details, "reasoning_tokens"))
+    accepted_prediction_tokens = _maybe_int(
+        _get_attr_or_key(completion_details, "accepted_prediction_tokens")
+    )
+    rejected_prediction_tokens = _maybe_int(
+        _get_attr_or_key(completion_details, "rejected_prediction_tokens")
+    )
+
+    metadata: dict[str, Any] = {}
+    if prompt_tokens is not None:
+        metadata["judge_input_token_count"] = prompt_tokens
+    if completion_tokens is not None:
+        metadata["judge_output_token_count"] = completion_tokens
+    if total_tokens is not None:
+        metadata["judge_total_token_count"] = total_tokens
+    if cached_tokens is not None:
+        metadata["judge_cached_input_token_count"] = cached_tokens
+    if reasoning_tokens is not None:
+        metadata["judge_reasoning_output_token_count"] = reasoning_tokens
+    if accepted_prediction_tokens is not None:
+        metadata["judge_accepted_prediction_token_count"] = accepted_prediction_tokens
+    if rejected_prediction_tokens is not None:
+        metadata["judge_rejected_prediction_token_count"] = rejected_prediction_tokens
+    return metadata
 
 
 def _load_project_env() -> None:
@@ -899,7 +961,7 @@ class HLESpec(DatasetSpecBase):
             correct: Literal["yes", "no"]
             strict: Literal[True] = True
 
-        prompt = HLE_JUDGE_PROMPT.format(
+        prompt = build_hle_judge_prompt(
             question=problem.question,
             correct_answer=problem.answer,
             response=response_text,
@@ -908,7 +970,7 @@ class HLESpec(DatasetSpecBase):
             client = OpenAI()
             request: dict[str, Any] = {
                 "model": HLE_JUDGE_MODEL,
-                "max_completion_tokens": 4096,
+                "max_completion_tokens": HLE_JUDGE_MAX_COMPLETION_TOKENS,
                 "messages": [{"role": "user", "content": prompt}],
                 "response_format": ExtractedAnswer,
                 "reasoning_effort": HLE_JUDGE_REASONING_EFFORT,
@@ -922,6 +984,8 @@ class HLESpec(DatasetSpecBase):
                     "grader_type": "hle_official_style_llm_judge_error",
                     "judge_model": HLE_JUDGE_MODEL,
                     "judge_reasoning_effort": HLE_JUDGE_REASONING_EFFORT,
+                    "judge_max_completion_tokens": HLE_JUDGE_MAX_COMPLETION_TOKENS,
+                    "judge_prompt": prompt,
                     "answer_type": problem.metadata.get("answer_type"),
                     "judge_error_type": type(exc).__name__,
                     "judge_error": str(exc),
@@ -936,6 +1000,9 @@ class HLESpec(DatasetSpecBase):
                     "grader_type": "hle_official_style_llm_judge_error",
                     "judge_model": HLE_JUDGE_MODEL,
                     "judge_reasoning_effort": HLE_JUDGE_REASONING_EFFORT,
+                    "judge_max_completion_tokens": HLE_JUDGE_MAX_COMPLETION_TOKENS,
+                    "judge_prompt": prompt,
+                    **hle_judge_usage_metadata(getattr(completion, "usage", None)),
                     "answer_type": problem.metadata.get("answer_type"),
                     "judge_error_type": "NoParsedResponse",
                     "judge_error": "HLE judge returned no parsed response.",
@@ -950,6 +1017,9 @@ class HLESpec(DatasetSpecBase):
                 "grader_type": "hle_official_style_llm_judge",
                 "judge_model": HLE_JUDGE_MODEL,
                 "judge_reasoning_effort": HLE_JUDGE_REASONING_EFFORT,
+                "judge_max_completion_tokens": HLE_JUDGE_MAX_COMPLETION_TOKENS,
+                "judge_prompt": prompt,
+                **hle_judge_usage_metadata(getattr(completion, "usage", None)),
                 "answer_type": problem.metadata.get("answer_type"),
                 "reasoning": content.reasoning,
             },

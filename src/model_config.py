@@ -181,11 +181,12 @@ MASK_WORD_EXCLUDED_MODELS: set[str] = {
     "Qwen/Qwen3.5-0.8B",
     "Qwen/Qwen3.5-2B",
     "Qwen/Qwen3.5-4B",
-    # "Qwen/Qwen3.5-9B",
+    "Qwen/Qwen3.5-9B",
     "Qwen/Qwen3.5-27B",
     "Qwen/Qwen3.5-35B-A3B",
     "Qwen/Qwen3.5-122B-A10B",
     "Qwen/Qwen3.5-397B-A17B",
+    "meta-llama/Llama-2-70b-chat-hf", # never loads
 }
 TRUNCATE_WORD_EXCLUDED_MODELS: set[str] = {
     # never use qwen 3.5 models
@@ -197,6 +198,7 @@ TRUNCATE_WORD_EXCLUDED_MODELS: set[str] = {
     "Qwen/Qwen3.5-35B-A3B",
     "Qwen/Qwen3.5-122B-A10B",
     "Qwen/Qwen3.5-397B-A17B",
+    "meta-llama/Llama-2-70b-chat-hf", # never loads
 }
 
 FRACTIONER_EXCLUDED_MODELS: dict[str, set[str]] = {

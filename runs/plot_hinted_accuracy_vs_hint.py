@@ -18,6 +18,12 @@ from src.hinted_accuracy import (
     load_luke_results_with_ci_for_combo,
 )
 from src.model_config import (
+    GEMMA_MODELS,
+    LLAMA_MODELS,
+    OPENAI_MODELS,
+    QWEN25_MODELS,
+    QWEN3_MODELS,
+    QWEN35_MODELS,
     filter_models_for_fractioner,
     is_model_excluded_for_fractioner,
     models_excluded_from_selection,
@@ -40,6 +46,48 @@ def _safe_component(text: str) -> str:
 
 def _model_storage_component(model: str) -> str:
     return _safe_component(model.strip().split("/")[-1])
+
+
+def _build_model_family_map() -> dict[str, str]:
+    family_specs = [
+        ("qwen3", QWEN3_MODELS),
+        ("qwen2.5", QWEN25_MODELS),
+        ("qwen3.5", QWEN35_MODELS),
+        ("llama", LLAMA_MODELS),
+        ("gemma", GEMMA_MODELS),
+        ("openai", OPENAI_MODELS),
+    ]
+    mapping: dict[str, str] = {}
+    for family_name, model_specs in family_specs:
+        for spec in model_specs:
+            full_name = str(spec.path)
+            short_name = full_name.split("/")[-1]
+            mapping[full_name] = family_name
+            mapping[short_name] = family_name
+    return mapping
+
+
+MODEL_FAMILY_MAP = _build_model_family_map()
+
+
+def _model_family(model: str) -> str:
+    family = MODEL_FAMILY_MAP.get(model)
+    if family is not None:
+        return family
+    model_lower = model.lower()
+    if "qwen3.5" in model_lower:
+        return "qwen3.5"
+    if "qwen2.5" in model_lower:
+        return "qwen2.5"
+    if "qwen3" in model_lower:
+        return "qwen3"
+    if "llama" in model_lower:
+        return "llama"
+    if "gemma" in model_lower:
+        return "gemma"
+    if "gpt-oss" in model_lower or "openai" in model_lower:
+        return "openai"
+    return "other"
 
 
 def _extract_problem_index(problem_id: str) -> int | None:
@@ -320,148 +368,196 @@ def _plot(
     output_png,
     show_values: bool,
     title: str,
+    panel_mode: str,
+    legend_outside: bool = False,
 ) -> None:
-    models = sorted({row["model"] for row in results} | {row["model"] for row in external_results})
-    n_models = len(models)
-    fractioners_all = sorted(
-        {str(row["fractioner"]) for row in results} | {str(row["fractioner"]) for row in external_results}
+    if panel_mode not in {"model", "family", "all"}:
+        raise ValueError(f"Unsupported panel_mode={panel_mode!r}; expected one of model/family/all.")
+
+    panel_by_family = panel_mode == "family"
+    panel_all = panel_mode == "all"
+    model_to_panel: dict[str, str] = {}
+    for row in [*results, *external_results]:
+        model_name = str(row["model"])
+        if panel_all:
+            model_to_panel[model_name] = "all_models"
+        else:
+            model_to_panel[model_name] = _model_family(model_name) if panel_by_family else model_name
+
+    panels = sorted(set(model_to_panel.values()))
+    n_panels = len(panels)
+    panel_to_models: dict[str, list[str]] = {}
+    for panel in panels:
+        panel_to_models[panel] = sorted(
+            model for model, current_panel in model_to_panel.items() if current_panel == panel
+        )
+
+    series_keys = sorted(
+        {
+            ("local", str(row["model"]), str(row["fractioner"]))
+            for row in results
+        }
+        | {
+            ("external", str(row["model"]), str(row["fractioner"]))
+            for row in external_results
+        }
     )
-    if fractioners_all:
-        cmap = plt.cm.get_cmap("tab20", len(fractioners_all))
-        fractioner_color_map = {
-            fractioner: cmap(index) for index, fractioner in enumerate(fractioners_all)
+    if series_keys:
+        cmap = plt.cm.get_cmap("tab20", len(series_keys))
+        series_color_map = {
+            series_key: cmap(index) for index, series_key in enumerate(series_keys)
         }
     else:
-        fractioner_color_map: dict[str, Any] = {}
+        series_color_map: dict[tuple[str, str, str], Any] = {}
 
-    if n_models == 1:
-        fig, ax = plt.subplots(figsize=(7, 4.5))
+    if n_panels == 1:
+        fig_width = 10.5 if legend_outside else 7
+        fig, ax = plt.subplots(figsize=(fig_width, 4.8))
         axes = [ax]
-    elif n_models == 4:
+    elif n_panels == 4:
         n_cols = 2
         n_rows = 2
         fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.3 * n_rows))
         axes = axes_obj.flatten() if hasattr(axes_obj, "flatten") else [axes_obj]
     else:
         n_cols = 5
-        n_rows = (n_models + n_cols - 1) // n_cols
+        n_rows = (n_panels + n_cols - 1) // n_cols
         fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.3 * n_rows))
         axes = axes_obj.flatten() if hasattr(axes_obj, "flatten") else [axes_obj]
 
-    for idx, model in enumerate(models):
+    for idx, panel in enumerate(panels):
         ax = axes[idx]
-        model_rows = [row for row in results if row["model"] == model]
-        external_model_rows = [row for row in external_results if row["model"] == model]
-        fractioners = sorted({str(row["fractioner"]) for row in model_rows})
-        for fractioner in fractioners:
-            color = fractioner_color_map.get(fractioner, "#1f77b4")
-            series_rows = sorted(
-                [row for row in model_rows if row["fractioner"] == fractioner],
-                key=lambda row: float(row["hint_fraction"]),
-            )
-            x = np.asarray([float(row["hint_fraction"]) for row in series_rows], dtype=float)
-            y = np.asarray([float(row["accuracy"]) for row in series_rows], dtype=float)
-            low = np.asarray([float(row["ci_low"]) for row in series_rows], dtype=float)
-            high = np.asarray([float(row["ci_high"]) for row in series_rows], dtype=float)
-            yerr = np.vstack([y - low, high - y])
+        panel_models = panel_to_models.get(panel, [])
 
-            ax.errorbar(
-                x,
-                y,
-                yerr=yerr,
-                fmt="o",
-                alpha=0.9,
-                markersize=3.8,
-                capsize=2.0,
-                elinewidth=1.0,
-                capthick=1.0,
-                color=color,
-                label=fractioner,
-            )
-            if show_values:
-                for x_i, y_i in zip(x, y):
-                    ax.annotate(
-                        f"{y_i:.2f}",
-                        (float(x_i), float(y_i)),
-                        xytext=(4, 4),
-                        textcoords="offset points",
-                        fontsize=6,
-                        color=color,
-                        alpha=0.9,
-                    )
-
-            fit_key = (str(model), str(fractioner))
-            fit = fit_map.get(fit_key)
-            if fit is not None:
-                x_fit = np.linspace(0.0, 1.0, 200, dtype=float)
-                y_fit = _sigmoid_curve(
-                    x_fit,
-                    float(fit["sigmoid_lower"]),
-                    float(fit["sigmoid_slope"]),
-                    float(fit["sigmoid_bias"]),
+        for model in panel_models:
+            model_rows = [row for row in results if str(row["model"]) == model]
+            fractioners = sorted({str(row["fractioner"]) for row in model_rows})
+            for fractioner in fractioners:
+                color = series_color_map.get(("local", str(model), str(fractioner)), "#1f77b4")
+                series_rows = sorted(
+                    [row for row in model_rows if row["fractioner"] == fractioner],
+                    key=lambda row: float(row["hint_fraction"]),
                 )
-                ax.plot(x_fit, y_fit, "-", color=color, linewidth=1.25, alpha=0.85)
+                x = np.asarray([float(row["hint_fraction"]) for row in series_rows], dtype=float)
+                y = np.asarray([float(row["accuracy"]) for row in series_rows], dtype=float)
+                low = np.asarray([float(row["ci_low"]) for row in series_rows], dtype=float)
+                high = np.asarray([float(row["ci_high"]) for row in series_rows], dtype=float)
+                yerr = np.vstack([y - low, high - y])
 
-        external_fractioners = sorted({str(row["fractioner"]) for row in external_model_rows})
-        for fractioner in external_fractioners:
-            series_rows = sorted(
-                [row for row in external_model_rows if row["fractioner"] == fractioner],
-                key=lambda row: float(row["hint_fraction"]),
-            )
-            x = np.asarray([float(row["hint_fraction"]) for row in series_rows], dtype=float)
-            y = np.asarray([float(row["accuracy"]) for row in series_rows], dtype=float)
-            low = np.asarray([float(row["ci_low"]) for row in series_rows], dtype=float)
-            high = np.asarray([float(row["ci_high"]) for row in series_rows], dtype=float)
-            yerr = np.vstack([y - low, high - y])
-
-            overlay_color = fractioner_color_map.get(fractioner, "#111111")
-            ax.errorbar(
-                x,
-                y,
-                yerr=yerr,
-                fmt="s",
-                alpha=0.95,
-                markersize=3.8,
-                capsize=2.0,
-                elinewidth=1.0,
-                capthick=1.0,
-                color=overlay_color,
-                linestyle="none",
-                linewidth=1.0,
-                label=f"{fractioner}_luke",
-            )
-            if show_values:
-                for x_i, y_i in zip(x, y):
-                    ax.annotate(
-                        f"{y_i:.2f}",
-                        (float(x_i), float(y_i)),
-                        xytext=(4, -9),
-                        textcoords="offset points",
-                        fontsize=6,
-                        color=overlay_color,
-                        alpha=0.9,
-                    )
-
-            fit_key = (str(model), str(fractioner))
-            fit = external_fit_map.get(fit_key)
-            if fit is not None:
-                x_fit = np.linspace(0.0, 1.0, 200, dtype=float)
-                y_fit = _sigmoid_curve(
-                    x_fit,
-                    float(fit["sigmoid_lower"]),
-                    float(fit["sigmoid_slope"]),
-                    float(fit["sigmoid_bias"]),
+                model_label = str(model).split("/")[-1]
+                ax.errorbar(
+                    x,
+                    y,
+                    yerr=yerr,
+                    fmt="o",
+                    alpha=0.9,
+                    markersize=3.8,
+                    capsize=2.0,
+                    elinewidth=1.0,
+                    capthick=1.0,
+                    color=color,
+                    label=(
+                        f"{model_label}::{fractioner}"
+                        if panel_by_family or panel_all
+                        else f"{fractioner}"
+                    ),
                 )
-                ax.plot(x_fit, y_fit, "--", color=overlay_color, linewidth=1.25, alpha=0.9)
-        ax.set_title(model, fontsize=9)
+                if show_values:
+                    for x_i, y_i in zip(x, y):
+                        ax.annotate(
+                            f"{y_i:.2f}",
+                            (float(x_i), float(y_i)),
+                            xytext=(4, 4),
+                            textcoords="offset points",
+                            fontsize=6,
+                            color=color,
+                            alpha=0.9,
+                        )
+
+                fit_key = (str(model), str(fractioner))
+                fit = fit_map.get(fit_key)
+                if fit is not None:
+                    x_fit = np.linspace(0.0, 1.0, 200, dtype=float)
+                    y_fit = _sigmoid_curve(
+                        x_fit,
+                        float(fit["sigmoid_lower"]),
+                        float(fit["sigmoid_slope"]),
+                        float(fit["sigmoid_bias"]),
+                    )
+                    ax.plot(x_fit, y_fit, "-", color=color, linewidth=1.25, alpha=0.85)
+
+            external_model_rows = [row for row in external_results if str(row["model"]) == model]
+            external_fractioners = sorted({str(row["fractioner"]) for row in external_model_rows})
+            for fractioner in external_fractioners:
+                series_rows = sorted(
+                    [row for row in external_model_rows if row["fractioner"] == fractioner],
+                    key=lambda row: float(row["hint_fraction"]),
+                )
+                x = np.asarray([float(row["hint_fraction"]) for row in series_rows], dtype=float)
+                y = np.asarray([float(row["accuracy"]) for row in series_rows], dtype=float)
+                low = np.asarray([float(row["ci_low"]) for row in series_rows], dtype=float)
+                high = np.asarray([float(row["ci_high"]) for row in series_rows], dtype=float)
+                yerr = np.vstack([y - low, high - y])
+
+                overlay_color = series_color_map.get(
+                    ("external", str(model), str(fractioner)),
+                    "#111111",
+                )
+                model_label = str(model).split("/")[-1]
+                ax.errorbar(
+                    x,
+                    y,
+                    yerr=yerr,
+                    fmt="s",
+                    alpha=0.95,
+                    markersize=3.8,
+                    capsize=2.0,
+                    elinewidth=1.0,
+                    capthick=1.0,
+                    color=overlay_color,
+                    linestyle="none",
+                    linewidth=1.0,
+                    label=(
+                        f"{model_label}::{fractioner}_luke"
+                        if panel_by_family or panel_all
+                        else f"{fractioner}_luke"
+                    ),
+                )
+                if show_values:
+                    for x_i, y_i in zip(x, y):
+                        ax.annotate(
+                            f"{y_i:.2f}",
+                            (float(x_i), float(y_i)),
+                            xytext=(4, -9),
+                            textcoords="offset points",
+                            fontsize=6,
+                            color=overlay_color,
+                            alpha=0.9,
+                        )
+
+                fit_key = (str(model), str(fractioner))
+                fit = external_fit_map.get(fit_key)
+                if fit is not None:
+                    x_fit = np.linspace(0.0, 1.0, 200, dtype=float)
+                    y_fit = _sigmoid_curve(
+                        x_fit,
+                        float(fit["sigmoid_lower"]),
+                        float(fit["sigmoid_slope"]),
+                        float(fit["sigmoid_bias"]),
+                    )
+                    ax.plot(x_fit, y_fit, "--", color=overlay_color, linewidth=1.25, alpha=0.9)
+        ax.set_title(panel, fontsize=9)
         ax.set_xlabel("Hint Fraction")
         ax.set_ylabel("Accuracy")
         ax.grid(True, alpha=0.3)
         ax.set_xlim(-0.05, 1.05)
         ax.set_ylim(0.0, 1.0)
-        ax.legend(fontsize=7)
+        if legend_outside:
+            ax.legend(fontsize=7, loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0)
+        else:
+            ax.legend(fontsize=7)
 
-    for idx in range(n_models, len(axes)):
+    for idx in range(n_panels, len(axes)):
         axes[idx].set_visible(False)
 
     fig.suptitle(title, fontsize=12)
@@ -734,6 +830,8 @@ def main() -> None:
     summary_json_path = PLOTS_ROOT / f"{stem}__summary_percent.json"
     accuracy_table_csv_path = PLOTS_ROOT / f"{stem}__accuracy_table.csv"
     png_path = PLOTS_ROOT / f"{stem}__bootstrap.png"
+    family_png_path = PLOTS_ROOT / f"{stem}__bootstrap_by_family.png"
+    all_png_path = PLOTS_ROOT / f"{stem}__bootstrap_all_models.png"
 
     means_payload: dict[str, dict[str, dict[str, float]]] = {}
     summary_payload: dict[str, dict[str, dict[str, dict[str, float]]]] = {}
@@ -795,12 +893,46 @@ def main() -> None:
             f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
             f"[{'clean' if args.clean else 'full'}]"
         ),
+        panel_mode="model",
+    )
+    _plot(
+        plot_rows,
+        fit_map=plot_fit_map,
+        external_results=plot_external_rows,
+        external_fit_map=plot_external_fit_map,
+        output_png=family_png_path,
+        show_values=args.show_values,
+        title=(
+            f"Hinted Accuracy vs Hint Fraction (by family)\n"
+            f"benchmark={args.benchmark} hint_type={args.hint_type} "
+            f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
+            f"[{'clean' if args.clean else 'full'}]"
+        ),
+        panel_mode="family",
+    )
+    _plot(
+        plot_rows,
+        fit_map=plot_fit_map,
+        external_results=plot_external_rows,
+        external_fit_map=plot_external_fit_map,
+        output_png=all_png_path,
+        show_values=args.show_values,
+        title=(
+            f"Hinted Accuracy vs Hint Fraction (all models)\n"
+            f"benchmark={args.benchmark} hint_type={args.hint_type} "
+            f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
+            f"[{'clean' if args.clean else 'full'}]"
+        ),
+        panel_mode="all",
+        legend_outside=True,
     )
 
     print(f"[plot_hinted_accuracy_vs_hint] wrote_means_json= {means_json_path}")
     print(f"[plot_hinted_accuracy_vs_hint] wrote_summary_json= {summary_json_path}")
     print(f"[plot_hinted_accuracy_vs_hint] wrote_accuracy_table_csv= {accuracy_table_csv_path}")
     print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {png_path}")
+    print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {family_png_path}")
+    print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {all_png_path}")
 
     if args.include_split_plots:
         for split_name, split_predicate in _split_plot_specs(
@@ -845,6 +977,8 @@ def main() -> None:
                 split_plot_external_fit_map = {}
 
             split_png_path = PLOTS_ROOT / f"{stem}__{split_name}__bootstrap.png"
+            split_family_png_path = PLOTS_ROOT / f"{stem}__{split_name}__bootstrap_by_family.png"
+            split_all_png_path = PLOTS_ROOT / f"{stem}__{split_name}__bootstrap_all_models.png"
             _plot(
                 split_plot_rows,
                 fit_map=split_plot_fit_map,
@@ -858,8 +992,42 @@ def main() -> None:
                     f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
                     f"[{'clean' if args.clean else 'full'}]"
                 ),
+                panel_mode="model",
+            )
+            _plot(
+                split_plot_rows,
+                fit_map=split_plot_fit_map,
+                external_results=split_plot_external_rows,
+                external_fit_map=split_plot_external_fit_map,
+                output_png=split_family_png_path,
+                show_values=args.show_values,
+                title=(
+                    f"Hinted Accuracy vs Hint Fraction ({split_name}, by family)\n"
+                    f"benchmark={args.benchmark} hint_type={args.hint_type} "
+                    f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
+                    f"[{'clean' if args.clean else 'full'}]"
+                ),
+                panel_mode="family",
+            )
+            _plot(
+                split_plot_rows,
+                fit_map=split_plot_fit_map,
+                external_results=split_plot_external_rows,
+                external_fit_map=split_plot_external_fit_map,
+                output_png=split_all_png_path,
+                show_values=args.show_values,
+                title=(
+                    f"Hinted Accuracy vs Hint Fraction ({split_name}, all models)\n"
+                    f"benchmark={args.benchmark} hint_type={args.hint_type} "
+                    f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
+                    f"[{'clean' if args.clean else 'full'}]"
+                ),
+                panel_mode="all",
+                legend_outside=True,
             )
             print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {split_png_path}")
+            print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {split_family_png_path}")
+            print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {split_all_png_path}")
 
 
 if __name__ == "__main__":

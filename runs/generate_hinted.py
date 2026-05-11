@@ -795,10 +795,10 @@ if __name__ == "__main__":
 
 MISO
 python -m runs.generate_hinted \
-    --benchmark hle \
+    --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --model Qwen/Qwen3.5-9B \
+    --model meta-llama/Llama-2-70b-chat-hf \
     --executor submitit \
     --cluster miso \
     --max-connections 360 \
