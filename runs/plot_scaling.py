@@ -70,6 +70,8 @@ class ScalingRunConfig:
     preferred_models: list[str] | None = None
     restrict_models_to_x_axes: bool = False
     joint_lower_asymptote: float = DEFAULT_JOINT_LOWER_ASYMPTOTE
+    n_train_min: int | None = None
+    n_train_max: int | None = None
     pca_summary_lines_fn: Callable[[XAxisSpec], list[str] | None] | None = None
 
 
@@ -97,6 +99,18 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--eci-file", type=str, default=None)
     parser.add_argument("--num-holdout-models", type=int, default=0)
+    parser.add_argument(
+        "--n-train-min",
+        type=int,
+        default=None,
+        help="Optional inclusive minimum n_train for joint h0/model-sweep plots.",
+    )
+    parser.add_argument(
+        "--n-train-max",
+        type=int,
+        default=None,
+        help="Optional inclusive maximum n_train for joint h0/model-sweep plots.",
+    )
     parser.add_argument("--facet-by", type=str, default="none", choices=["none", "family"])
     return parser.parse_args()
 
@@ -463,7 +477,7 @@ def _write_joint_x_axis_comparison_artifacts(
         )
         top4_model_sweep_df = _select_top_k_x_axes_by_model_sweep_delta(
             comparison_df=model_sweep_comparison_df,
-            top_k=4,
+            top_k=3,
         )
         if not top4_model_sweep_df.empty:
             plot_paths["model_sweep_top4_delta_x_axes"] = str(
@@ -722,6 +736,8 @@ def run_scaling(config: ScalingRunConfig) -> ScalingRunResult:
                 include_cross=bool(config.include_cross),
                 lower_asymptote=float(config.joint_lower_asymptote),
                 num_holdout_models=int(config.num_holdout_models),
+                n_train_min=config.n_train_min,
+                n_train_max=config.n_train_max,
             )
             joint_metrics[selected_x_axis.name] = joint_result
             print(f"{config.log_prefix} joint_scaling_output_dir[{selected_x_axis.name}]={joint_output_dir}")
@@ -757,6 +773,8 @@ def main() -> None:
             eci_file=None if args.eci_file is None else Path(args.eci_file),
             hint_fractions=list(DEFAULT_HINTED_PC_HINT_FRACTIONS),
             num_holdout_models=int(args.num_holdout_models),
+            n_train_min=args.n_train_min,
+            n_train_max=args.n_train_max,
             include_cross=True,
             print_pca_report=True,
             run_joint_for_all_x_axes=True,
@@ -786,7 +804,9 @@ python -m runs.plot_scaling \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
     --num-holdout-models 0 \
-    --x-axis-methods hinted_acc_h03_logit
+    --x-axis-methods hinted_acc_h03_logit \
+    --n-train-min 2 \
+    --n-train-max 10
 
 python -m runs.plot_scaling \
     --benchmark aime2025_2026 \

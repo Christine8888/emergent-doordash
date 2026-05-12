@@ -9,6 +9,18 @@ import numpy as np
 import pandas as pd
 
 
+TITLE_FONT_SIZE = 22
+PANEL_TITLE_FONT_SIZE = 18
+AXIS_LABEL_FONT_SIZE = 16
+TICK_LABEL_FONT_SIZE = 14
+LEGEND_FONT_SIZE = 14
+MODEL_TICK_FONT_SIZE = 12
+
+
+def _style_axis_text(ax: plt.Axes) -> None:
+    ax.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
+
+
 def format_title_text(lines: list[str], *, width: int = 72) -> str:
     wrapped_lines: list[str] = []
     for line in lines:
@@ -52,8 +64,11 @@ def plot_pca_component_weights(
     ax.set_xticklabels(benchmarks, rotation=45, ha="right")
     ax.set_yticks(np.arange(n_components))
     ax.set_yticklabels([f"PC-{i}" for i in range(1, n_components + 1)])
-    ax.set_title("Principal component weights")
-    fig.colorbar(image, ax=ax, shrink=0.9, label="weight")
+    ax.set_title("Principal component weights", fontsize=TITLE_FONT_SIZE)
+    ax.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
+    colorbar = fig.colorbar(image, ax=ax, shrink=0.9, label="weight")
+    colorbar.ax.tick_params(labelsize=TICK_LABEL_FONT_SIZE)
+    colorbar.set_label("weight", fontsize=AXIS_LABEL_FONT_SIZE)
     fig.tight_layout()
     save_figure(fig, output_path)
 
@@ -70,9 +85,10 @@ def plot_pca_explained_variance(
     fig, ax = plt.subplots(figsize=(8, 4.5))
     ax.bar(x, y, color="#4C78A8")
     ax.set_xticks(x)
-    ax.set_xlabel("Principal component")
-    ax.set_ylabel("Explained variance ratio")
-    ax.set_title("Explained variance by component")
+    ax.set_xlabel("Principal component", fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel("Explained variance ratio", fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_title("Explained variance by component", fontsize=TITLE_FONT_SIZE)
+    _style_axis_text(ax)
     ax.grid(True, axis="y", alpha=0.3)
     fig.tight_layout()
     save_figure(fig, output_path)
@@ -163,9 +179,10 @@ def _add_model_name_axis(
         ],
         rotation=60,
         ha="left",
-        fontsize=8,
+        fontsize=MODEL_TICK_FONT_SIZE,
     )
-    top_ax.set_xlabel(label, fontsize=11)
+    top_ax.set_xlabel(label, fontsize=AXIS_LABEL_FONT_SIZE)
+    top_ax.tick_params(axis="x", labelsize=MODEL_TICK_FONT_SIZE)
 
 
 def plot_accuracy_vs_x_by_hint(
@@ -211,8 +228,8 @@ def plot_accuracy_vs_x_by_hint(
         x_key=x_key,
         label="Model",
     )
-    ax.set_xlabel(x_label, fontsize=12)
-    ax.set_ylabel("Accuracy", fontsize=12)
+    ax.set_xlabel(x_label, fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel("Accuracy", fontsize=AXIS_LABEL_FONT_SIZE)
     title_lines = [
         f"Accuracy vs {x_label} by Hint Fraction",
         f"benchmark={benchmark} hint_type={hint_type} fractioner={fractioner}",
@@ -220,10 +237,11 @@ def plot_accuracy_vs_x_by_hint(
     ]
     if x_equation:
         title_lines.append(x_equation)
-    ax.set_title(format_title_text(title_lines), fontsize=13)
+    ax.set_title(format_title_text(title_lines), fontsize=TITLE_FONT_SIZE)
+    _style_axis_text(ax)
     ax.grid(True, alpha=0.3)
     ax.set_ylim(-0.05, 1.05)
-    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
+    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=LEGEND_FONT_SIZE)
 
     output_path = output_dir / f"accuracy_vs_{x_method}_by_hint.png"
     fig.tight_layout()
@@ -294,9 +312,10 @@ def plot_accuracy_vs_x_by_hint_by_family(
             x_key=x_key,
             label="Model",
         )
-        ax.set_title(family_name, fontsize=12)
-        ax.set_xlabel(x_label, fontsize=11)
-        ax.set_ylabel("Accuracy", fontsize=11)
+        ax.set_title(family_name, fontsize=PANEL_TITLE_FONT_SIZE)
+        ax.set_xlabel(x_label, fontsize=AXIS_LABEL_FONT_SIZE)
+        ax.set_ylabel("Accuracy", fontsize=AXIS_LABEL_FONT_SIZE)
+        _style_axis_text(ax)
         ax.grid(True, alpha=0.3)
         ax.set_ylim(-0.05, 1.05)
 
@@ -322,12 +341,12 @@ def plot_accuracy_vs_x_by_hint_by_family(
     ]
     if x_equation:
         title_lines.append(x_equation)
-    fig.suptitle(format_title_text(title_lines), fontsize=14)
+    fig.suptitle(format_title_text(title_lines), fontsize=TITLE_FONT_SIZE)
     fig.legend(
         handles=legend_handles,
         bbox_to_anchor=(1.02, 1),
         loc="upper left",
-        fontsize=9,
+        fontsize=LEGEND_FONT_SIZE,
     )
     fig.tight_layout(rect=(0, 0, 0.9, 0.95))
 
@@ -396,9 +415,10 @@ def plot_accuracy_vs_x_by_hint_subplots_with_error_bars(
             x_fit, y_fit = fit
             ax.plot(x_fit, y_fit, "-", color="#ff7f0e", alpha=0.8, linewidth=2)
 
-        ax.set_xlabel(x_label, fontsize=11)
-        ax.set_ylabel("Accuracy", fontsize=11)
-        ax.set_title(f"hint_fraction={hint_fraction:.2f}", fontsize=12)
+        ax.set_xlabel(x_label, fontsize=AXIS_LABEL_FONT_SIZE)
+        ax.set_ylabel("Accuracy", fontsize=AXIS_LABEL_FONT_SIZE)
+        ax.set_title(f"hint_fraction={hint_fraction:.2f}", fontsize=PANEL_TITLE_FONT_SIZE)
+        _style_axis_text(ax)
         ax.grid(True, alpha=0.3)
         ax.set_ylim(-0.05, 1.05)
     for idx in range(n_panels, nrows * ncols):
@@ -411,7 +431,7 @@ def plot_accuracy_vs_x_by_hint_subplots_with_error_bars(
     ]
     if x_equation:
         title_lines.append(x_equation)
-    fig.suptitle(format_title_text(title_lines), fontsize=14)
+    fig.suptitle(format_title_text(title_lines), fontsize=TITLE_FONT_SIZE)
     output_path = output_dir / f"accuracy_vs_{x_method}_by_hint_subplots_with_error_bars.png"
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     save_figure(fig, output_path)
@@ -464,10 +484,11 @@ def plot_joint_accuracy_vs_x_by_hint(
         y_fit = [joint_predict_fn(float(x_value), float(hint_fraction)) for x_value in x_range]
         ax.plot(x_range, y_fit, "-", color=color, alpha=0.5, linewidth=2)
 
-    ax.set_xlabel(x_label, fontsize=12)
-    ax.set_ylabel("accuracy", fontsize=12)
-    ax.set_title(format_title_text([label, joint_equation]), fontsize=14)
-    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=10)
+    ax.set_xlabel(x_label, fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_ylabel("accuracy", fontsize=AXIS_LABEL_FONT_SIZE)
+    ax.set_title(format_title_text([label, joint_equation]), fontsize=TITLE_FONT_SIZE)
+    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=LEGEND_FONT_SIZE)
+    _style_axis_text(ax)
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
 
@@ -544,20 +565,21 @@ def plot_joint_individual_fits_by_hint(
             )
             ax.axvline(float(all_fit["midpoint"]), color=color, linestyle=":", alpha=0.5)
 
-        ax.set_title(f"h = {float(hint_fraction):.2f}", fontsize=11)
-        ax.set_xlabel(x_label)
-        ax.set_ylabel("accuracy")
+        ax.set_title(f"h = {float(hint_fraction):.2f}", fontsize=PANEL_TITLE_FONT_SIZE)
+        ax.set_xlabel(x_label, fontsize=AXIS_LABEL_FONT_SIZE)
+        ax.set_ylabel("accuracy", fontsize=AXIS_LABEL_FONT_SIZE)
+        _style_axis_text(ax)
         ax.grid(True, alpha=0.3)
         ax.set_ylim(-0.05, 1.05)
         if idx == 0:
-            ax.legend(fontsize=6)
+            ax.legend(fontsize=LEGEND_FONT_SIZE)
 
     for idx in range(len(hint_fractions), len(axes_flat)):
         axes_flat[idx].set_visible(False)
 
     fig.suptitle(
         format_title_text([f"{label} - Individual fits per hint", f"Joint: {joint_equation}"]),
-        fontsize=12,
+        fontsize=TITLE_FONT_SIZE,
     )
     fig.tight_layout()
 
@@ -614,23 +636,29 @@ def plot_joint_accuracy_vs_hint_by_model(
                 label="individual fit",
             )
 
-        ax.set_title(f"{model}\n{x_label}={x_value:.1f}", fontsize=8)
-        ax.set_xlabel("hint fraction")
-        ax.set_ylabel("accuracy")
+        ax.set_title(f"{model}\n{x_label}={x_value:.1f}", fontsize=MODEL_TICK_FONT_SIZE)
+        ax.set_xlabel("hint fraction", fontsize=AXIS_LABEL_FONT_SIZE)
+        ax.set_ylabel("accuracy", fontsize=AXIS_LABEL_FONT_SIZE)
+        _style_axis_text(ax)
         ax.grid(True, alpha=0.3)
         ax.set_xlim(-0.05, 1.05)
         ax.set_ylim(-0.05, 1.05)
         ax.set_xticks(hint_fractions)
-        ax.set_xticklabels([f"{float(h):.2f}" for h in hint_fractions], rotation=45, ha="right", fontsize=7)
+        ax.set_xticklabels(
+            [f"{float(h):.2f}" for h in hint_fractions],
+            rotation=45,
+            ha="right",
+            fontsize=TICK_LABEL_FONT_SIZE,
+        )
         if idx == 0:
-            ax.legend(fontsize=8)
+            ax.legend(fontsize=LEGEND_FONT_SIZE)
 
     for idx in range(len(models_sorted), len(axes_flat)):
         axes_flat[idx].set_visible(False)
 
     fig.suptitle(
         format_title_text([f"{label} - Accuracy vs Hint per model", f"Joint: {joint_equation}"]),
-        fontsize=12,
+        fontsize=TITLE_FONT_SIZE,
     )
     fig.tight_layout()
 
@@ -652,6 +680,7 @@ def plot_h0_fits_by_model_sweep(
     n_rows = max(1, int(np.ceil(n_panels / n_cols)))
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(3.1 * n_cols, 3.2 * n_rows))
     axes_flat = np.atleast_1d(axes).flatten()
+    legend_entries: dict[str, Any] = {}
 
     for idx, panel in enumerate(panels):
         ax = axes_flat[idx]
@@ -718,21 +747,33 @@ def plot_h0_fits_by_model_sweep(
             if midpoint_all is not None:
                 ax.axvline(float(midpoint_all), color="black", linestyle=":", alpha=0.4)
 
-        ax.set_title(f"n_train={n_train}, n_test={n_test}", fontsize=10)
-        ax.set_xlabel(x_label)
-        ax.set_ylabel("accuracy")
+        ax.set_title(f"n_train={n_train}, n_test={n_test}", fontsize=PANEL_TITLE_FONT_SIZE)
+        ax.set_xlabel(x_label, fontsize=AXIS_LABEL_FONT_SIZE)
+        ax.set_ylabel("accuracy", fontsize=AXIS_LABEL_FONT_SIZE)
+        _style_axis_text(ax)
         ax.set_ylim(-0.05, 1.05)
         ax.grid(True, alpha=0.3)
-        ax.legend(fontsize=6)
+        handles, labels = ax.get_legend_handles_labels()
+        for handle, current_label in zip(handles, labels, strict=False):
+            legend_entries.setdefault(str(current_label), handle)
 
     for idx in range(n_panels, len(axes_flat)):
         axes_flat[idx].set_visible(False)
 
     fig.suptitle(
         format_title_text([f"{label} - h = 0 fits across model sweep"], width=80),
-        fontsize=12,
+        fontsize=TITLE_FONT_SIZE,
     )
-    fig.tight_layout()
+    if legend_entries:
+        fig.legend(
+            list(legend_entries.values()),
+            list(legend_entries.keys()),
+            loc="lower center",
+            bbox_to_anchor=(0.5, 0.0),
+            ncol=min(5, len(legend_entries)),
+            fontsize=LEGEND_FONT_SIZE,
+        )
+    fig.tight_layout(rect=(0, 0.04, 1, 0.95))
 
     output_path = output_dir / f"{filename_stem}.png"
     save_figure(fig, output_path)
@@ -773,10 +814,11 @@ def plot_joint_model_sweep(
         alpha=0.85,
         label="individual (all fit)",
     )
-    axes[0, 0].set_xlabel("number of train models")
-    axes[0, 0].set_ylabel("rms")
-    axes[0, 0].set_title("test models only, hint = 0")
-    axes[0, 0].legend()
+    axes[0, 0].set_xlabel("number of train models", fontsize=AXIS_LABEL_FONT_SIZE)
+    axes[0, 0].set_ylabel("rms", fontsize=AXIS_LABEL_FONT_SIZE)
+    axes[0, 0].set_title("test models only, hint = 0", fontsize=PANEL_TITLE_FONT_SIZE)
+    axes[0, 0].legend(fontsize=LEGEND_FONT_SIZE)
+    _style_axis_text(axes[0, 0])
     axes[0, 0].grid(True, alpha=0.3)
 
     axes[0, 1].plot(
@@ -787,10 +829,14 @@ def plot_joint_model_sweep(
         label="joint - individual",
     )
     axes[0, 1].axhline(0.0, color="black", linestyle="--", alpha=0.5)
-    axes[0, 1].set_xlabel("number of train models")
-    axes[0, 1].set_ylabel("delta RMS (joint - individual)")
-    axes[0, 1].set_title("test models only, hint = 0\n(negative = joint wins)")
-    axes[0, 1].legend()
+    axes[0, 1].set_xlabel("number of train models", fontsize=AXIS_LABEL_FONT_SIZE)
+    axes[0, 1].set_ylabel("delta RMS (joint - individual)", fontsize=AXIS_LABEL_FONT_SIZE)
+    axes[0, 1].set_title(
+        "test models only, hint = 0\n(negative = joint wins)",
+        fontsize=PANEL_TITLE_FONT_SIZE,
+    )
+    axes[0, 1].legend(fontsize=LEGEND_FONT_SIZE)
+    _style_axis_text(axes[0, 1])
     axes[0, 1].grid(True, alpha=0.3)
 
     midpoint_joint_col = f"midpoint_joint_h_{sweep_hint_fraction:.1f}"
@@ -812,10 +858,11 @@ def plot_joint_model_sweep(
             alpha=0.9,
             label="individual",
         )
-    axes[1, 0].set_xlabel("number of train models")
-    axes[1, 0].set_ylabel(f"midpoint error ({x_label} units)")
-    axes[1, 0].set_title("midpoint error, hint = 0")
-    axes[1, 0].legend()
+    axes[1, 0].set_xlabel("number of train models", fontsize=AXIS_LABEL_FONT_SIZE)
+    axes[1, 0].set_ylabel(f"midpoint error ({x_label} units)", fontsize=AXIS_LABEL_FONT_SIZE)
+    axes[1, 0].set_title("midpoint error, hint = 0", fontsize=PANEL_TITLE_FONT_SIZE)
+    axes[1, 0].legend(fontsize=LEGEND_FONT_SIZE)
+    _style_axis_text(axes[1, 0])
     axes[1, 0].grid(True, alpha=0.3)
 
     delta_midpoint_col = f"delta_midpoint_h_{sweep_hint_fraction:.1f}"
@@ -828,13 +875,17 @@ def plot_joint_model_sweep(
             label="joint - individual",
         )
     axes[1, 1].axhline(0.0, color="black", linestyle="--", alpha=0.5)
-    axes[1, 1].set_xlabel("number of train models")
-    axes[1, 1].set_ylabel(f"delta midpoint error ({x_label} units)")
-    axes[1, 1].set_title("delta midpoint error, hint = 0\n(negative = joint wins)")
-    axes[1, 1].legend()
+    axes[1, 1].set_xlabel("number of train models", fontsize=AXIS_LABEL_FONT_SIZE)
+    axes[1, 1].set_ylabel(f"delta midpoint error ({x_label} units)", fontsize=AXIS_LABEL_FONT_SIZE)
+    axes[1, 1].set_title(
+        "delta midpoint error, hint = 0\n(negative = joint wins)",
+        fontsize=PANEL_TITLE_FONT_SIZE,
+    )
+    axes[1, 1].legend(fontsize=LEGEND_FONT_SIZE)
+    _style_axis_text(axes[1, 1])
     axes[1, 1].grid(True, alpha=0.3)
 
-    fig.suptitle(f"{label} (fitting joint scaling)", fontsize=12)
+    fig.suptitle(f"{label} (fitting joint scaling)", fontsize=TITLE_FONT_SIZE)
     fig.tight_layout()
 
     output_path = output_dir / f"{filename_stem}.png"
@@ -873,24 +924,37 @@ def plot_joint_x_axis_model_sweep_comparison(
             label=line_label,
         )
 
-    axes[0].set_xlabel("number of train models")
-    axes[0].set_ylabel("rms")
-    axes[0].set_title("test models only, hint = 0")
+    axes[0].set_xlabel("number of train models", fontsize=AXIS_LABEL_FONT_SIZE)
+    axes[0].set_ylabel("rms", fontsize=AXIS_LABEL_FONT_SIZE)
+    axes[0].set_title("test models only, hint = 0", fontsize=PANEL_TITLE_FONT_SIZE)
+    _style_axis_text(axes[0])
     axes[0].grid(True, alpha=0.3)
 
-    axes[1].set_xlabel("number of train models")
-    axes[1].set_ylabel("delta RMS (joint - individual)")
-    axes[1].set_title("test models only, hint = 0\n(negative = joint wins)")
+    axes[1].set_xlabel("number of train models", fontsize=AXIS_LABEL_FONT_SIZE)
+    axes[1].set_ylabel("delta RMS (joint - individual)", fontsize=AXIS_LABEL_FONT_SIZE)
+    axes[1].set_title(
+        "test models only, hint = 0\n(negative = joint wins)",
+        fontsize=PANEL_TITLE_FONT_SIZE,
+    )
+    _style_axis_text(axes[1])
     axes[1].axhline(0.0, color="black", linestyle="--", alpha=0.5)
     axes[1].grid(True, alpha=0.3)
 
     handles, labels = axes[0].get_legend_handles_labels()
     if handles:
-        fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.02), ncol=3, frameon=False)
+        fig.legend(
+            handles,
+            labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.02),
+            ncol=3,
+            frameon=False,
+            fontsize=LEGEND_FONT_SIZE,
+        )
 
     fig.suptitle(
         format_title_text([f"{label} - model sweep across x-axis methods"], width=90),
-        fontsize=12,
+        fontsize=TITLE_FONT_SIZE,
     )
     fig.tight_layout(rect=(0.0, 0.06, 1.0, 1.0))
 
@@ -921,17 +985,21 @@ def plot_joint_x_axis_delta_rms_comparison(
     for ax, (metric_name, split_label, color) in zip(axes, metric_specs, strict=True):
         ax.bar(x_positions, comparison_df[metric_name].to_numpy(dtype=float), color=color, alpha=0.85)
         ax.axhline(0.0, color="black", linestyle="--", alpha=0.5)
-        ax.set_ylabel("delta RMS")
-        ax.set_title(f"{split_label} split (joint - individual train fit)")
+        ax.set_ylabel("delta RMS", fontsize=AXIS_LABEL_FONT_SIZE)
+        ax.set_title(
+            f"{split_label} split (joint - individual train fit)",
+            fontsize=PANEL_TITLE_FONT_SIZE,
+        )
+        _style_axis_text(ax)
         ax.grid(True, axis="y", alpha=0.3)
 
     axes[-1].set_xticks(x_positions)
-    axes[-1].set_xticklabels(x_labels, rotation=45, ha="right")
-    axes[-1].set_xlabel("x-axis method")
+    axes[-1].set_xticklabels(x_labels, rotation=45, ha="right", fontsize=TICK_LABEL_FONT_SIZE)
+    axes[-1].set_xlabel("x-axis method", fontsize=AXIS_LABEL_FONT_SIZE)
 
     fig.suptitle(
         format_title_text([f"{label} - delta RMS across x-axis methods"], width=90),
-        fontsize=12,
+        fontsize=TITLE_FONT_SIZE,
     )
     fig.tight_layout()
 
@@ -977,18 +1045,19 @@ def plot_joint_x_axis_absolute_rms_comparison(
             alpha=0.85,
             label="individual (train fit)",
         )
-        ax.set_ylabel("RMS")
-        ax.set_title(f"{split_label} split")
+        ax.set_ylabel("RMS", fontsize=AXIS_LABEL_FONT_SIZE)
+        ax.set_title(f"{split_label} split", fontsize=PANEL_TITLE_FONT_SIZE)
+        _style_axis_text(ax)
         ax.grid(True, axis="y", alpha=0.3)
-        ax.legend()
+        ax.legend(fontsize=LEGEND_FONT_SIZE)
 
     axes[-1].set_xticks(x_positions)
-    axes[-1].set_xticklabels(x_labels, rotation=45, ha="right")
-    axes[-1].set_xlabel("x-axis method")
+    axes[-1].set_xticklabels(x_labels, rotation=45, ha="right", fontsize=TICK_LABEL_FONT_SIZE)
+    axes[-1].set_xlabel("x-axis method", fontsize=AXIS_LABEL_FONT_SIZE)
 
     fig.suptitle(
         format_title_text([f"{label} - absolute RMS across x-axis methods"], width=90),
-        fontsize=12,
+        fontsize=TITLE_FONT_SIZE,
     )
     fig.tight_layout()
 
@@ -1025,16 +1094,20 @@ def plot_joint_x_axis_delta_rms_family(
             linewidth=2,
         )
         ax.axhline(0.0, color="black", linestyle="--", alpha=0.5)
-        ax.set_ylabel("delta RMS")
-        ax.set_title(f"{split_label} split (joint - individual train fit)")
+        ax.set_ylabel("delta RMS", fontsize=AXIS_LABEL_FONT_SIZE)
+        ax.set_title(
+            f"{split_label} split (joint - individual train fit)",
+            fontsize=PANEL_TITLE_FONT_SIZE,
+        )
+        _style_axis_text(ax)
         ax.grid(True, alpha=0.3)
 
-    axes[-1].set_xlabel("hint fraction")
+    axes[-1].set_xlabel("hint fraction", fontsize=AXIS_LABEL_FONT_SIZE)
     axes[-1].set_xticks(hint_fractions)
 
     fig.suptitle(
         format_title_text([f"{label} - delta RMS for hinted accuracy logit family"], width=90),
-        fontsize=12,
+        fontsize=TITLE_FONT_SIZE,
     )
     fig.tight_layout()
 
@@ -1080,17 +1153,18 @@ def plot_joint_x_axis_absolute_rms_family(
             alpha=0.9,
             label="individual (train fit)",
         )
-        ax.set_ylabel("RMS")
-        ax.set_title(f"{split_label} split")
+        ax.set_ylabel("RMS", fontsize=AXIS_LABEL_FONT_SIZE)
+        ax.set_title(f"{split_label} split", fontsize=PANEL_TITLE_FONT_SIZE)
+        _style_axis_text(ax)
         ax.grid(True, alpha=0.3)
-        ax.legend()
+        ax.legend(fontsize=LEGEND_FONT_SIZE)
 
-    axes[-1].set_xlabel("hint fraction")
+    axes[-1].set_xlabel("hint fraction", fontsize=AXIS_LABEL_FONT_SIZE)
     axes[-1].set_xticks(hint_fractions)
 
     fig.suptitle(
         format_title_text([f"{label} - absolute RMS for hinted accuracy logit family"], width=90),
-        fontsize=12,
+        fontsize=TITLE_FONT_SIZE,
     )
     fig.tight_layout()
 

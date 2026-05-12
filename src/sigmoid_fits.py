@@ -80,7 +80,7 @@ def fit_bounded_sigmoid_1d(
 
     x = np.asarray(xs, dtype=float)
     y = np.asarray(ys, dtype=float)
-    if x.size < 3 or np.allclose(y, y[0]):
+    if x.size < 2 or np.allclose(y, y[0]):
         return None
 
     clipped = clip_accuracy_for_logit(y, lower=lower)

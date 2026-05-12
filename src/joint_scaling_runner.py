@@ -58,6 +58,8 @@ def run_joint_scaling_for_x_axis(
     include_cross: bool,
     lower_asymptote: float | None,
     num_holdout_models: int,
+    n_train_min: int | None = None,
+    n_train_max: int | None = None,
 ) -> dict[str, Any]:
     if num_holdout_models < 0:
         raise ValueError(f"num_holdout_models must be >= 0, got {num_holdout_models}")
@@ -176,6 +178,8 @@ def run_joint_scaling_for_x_axis(
         models_sorted_by_x=models_sorted_by_x,
         include_cross=include_cross,
         lower_asymptote=lower_asymptote,
+        n_train_min=n_train_min,
+        n_train_max=n_train_max,
     )
     plot_paths["h0_fits_by_model_sweep"] = str(
         plot_h0_fits_by_model_sweep(
@@ -193,6 +197,8 @@ def run_joint_scaling_for_x_axis(
         models_sorted_by_x=models_sorted_by_x,
         include_cross=include_cross,
         lower_asymptote=lower_asymptote,
+        n_train_min=n_train_min,
+        n_train_max=n_train_max,
     )
     plot_paths["model_sweep"] = str(
         plot_joint_model_sweep(
@@ -218,6 +224,8 @@ def run_joint_scaling_for_x_axis(
         "optimizer_message": str(joint_result["optimizer_message"]),
         "n_train_models": int(len(train_model_set)),
         "n_test_models": int(len(holdout_model_set)),
+        "sweep_n_train_min": None if n_train_min is None else int(n_train_min),
+        "sweep_n_train_max": None if n_train_max is None else int(n_train_max),
         "rms_train": compute_rms_joint(
             joint_result=joint_result,
             df=df,

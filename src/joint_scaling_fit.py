@@ -269,6 +269,8 @@ def run_joint_model_sweep(
     models_sorted_by_x: list[str],
     include_cross: bool,
     lower_asymptote: float | None,
+    n_train_min: int | None = None,
+    n_train_max: int | None = None,
 ) -> pd.DataFrame:
     sweep_hint_fraction = 0.0
     individual_by_hint_all = fit_individual_sigmoids_by_hint(
@@ -279,8 +281,22 @@ def run_joint_model_sweep(
     )
     df_hint0 = df[df["hint_fraction"] == sweep_hint_fraction].copy()
 
+    min_n_train = 2 if n_train_min is None else int(n_train_min)
+    max_n_train = len(models_sorted_by_x) if n_train_max is None else int(n_train_max)
+    if min_n_train < 2:
+        raise ValueError(f"n_train_min must be >= 2, got {min_n_train}")
+    if max_n_train > len(models_sorted_by_x):
+        raise ValueError(
+            f"n_train_max ({max_n_train}) cannot exceed number of models "
+            f"({len(models_sorted_by_x)})"
+        )
+    if min_n_train > max_n_train:
+        raise ValueError(
+            f"n_train_min ({min_n_train}) cannot exceed n_train_max ({max_n_train})"
+        )
+
     rows: list[dict[str, float]] = []
-    for n_models in range(2, len(models_sorted_by_x) + 1):
+    for n_models in range(min_n_train, max_n_train + 1):
         train_models = set(models_sorted_by_x[:n_models])
         test_models = set(models_sorted_by_x[n_models:])
 
@@ -353,6 +369,8 @@ def build_h0_sweep_panels(
     models_sorted_by_x: list[str],
     include_cross: bool,
     lower_asymptote: float | None,
+    n_train_min: int | None = None,
+    n_train_max: int | None = None,
 ) -> list[dict[str, Any]]:
     sweep_hint_fraction = 0.0
     df_hint0 = df[df["hint_fraction"] == sweep_hint_fraction].copy()
@@ -369,7 +387,21 @@ def build_h0_sweep_panels(
     x_range = np.linspace(float(df_hint0[x_field].min()) - 5.0, float(df_hint0[x_field].max()) + 5.0, 120)
     panels: list[dict[str, Any]] = []
 
-    for n_models in range(2, len(models_sorted_by_x) + 1):
+    min_n_train = 2 if n_train_min is None else int(n_train_min)
+    max_n_train = len(models_sorted_by_x) if n_train_max is None else int(n_train_max)
+    if min_n_train < 2:
+        raise ValueError(f"n_train_min must be >= 2, got {min_n_train}")
+    if max_n_train > len(models_sorted_by_x):
+        raise ValueError(
+            f"n_train_max ({max_n_train}) cannot exceed number of models "
+            f"({len(models_sorted_by_x)})"
+        )
+    if min_n_train > max_n_train:
+        raise ValueError(
+            f"n_train_min ({min_n_train}) cannot exceed n_train_max ({max_n_train})"
+        )
+
+    for n_models in range(min_n_train, max_n_train + 1):
         train_models_for_panel = set(models_sorted_by_x[:n_models])
         test_models_for_panel = set(models_sorted_by_x[n_models:])
 
