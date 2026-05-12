@@ -21,6 +21,37 @@ def _style_axis_text(ax: plt.Axes) -> None:
     ax.tick_params(axis="both", labelsize=TICK_LABEL_FONT_SIZE)
 
 
+def _benchmark_hint_title_from_label(label: str) -> str:
+    parts = str(label).split()
+    if len(parts) < 2:
+        return str(label)
+    benchmark, fractioner = parts[0], parts[1]
+    fractioner_labels = {
+        "mask_word": "Masked hint",
+        "truncate_hint": "Truncated hint",
+        "truncate_word": "Truncated hint",
+    }
+    hint_label = fractioner_labels.get(fractioner, fractioner)
+    return f"Benchmark: {benchmark}. {hint_label}"
+
+
+def _h0_sweep_grid_shape(n_panels: int) -> tuple[int, int]:
+    if n_panels <= 0:
+        return 1, 1
+    if n_panels <= 3:
+        n_cols = n_panels
+    elif n_panels == 4:
+        n_cols = 2
+    elif n_panels <= 6:
+        n_cols = 3
+    elif n_panels == 9:
+        n_cols = 3
+    else:
+        n_cols = 4
+    n_rows = max(1, int(np.ceil(n_panels / n_cols)))
+    return n_rows, n_cols
+
+
 def format_title_text(lines: list[str], *, width: int = 72) -> str:
     wrapped_lines: list[str] = []
     for line in lines:
@@ -676,9 +707,8 @@ def plot_h0_fits_by_model_sweep(
     filename_stem: str,
 ) -> Path:
     n_panels = len(panels)
-    n_cols = 5
-    n_rows = max(1, int(np.ceil(n_panels / n_cols)))
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3.1 * n_cols, 3.2 * n_rows))
+    n_rows, n_cols = _h0_sweep_grid_shape(n_panels)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5.2 * n_cols, 4.8 * n_rows))
     axes_flat = np.atleast_1d(axes).flatten()
     legend_entries: dict[str, Any] = {}
 
@@ -699,7 +729,7 @@ def plot_h0_fits_by_model_sweep(
             train_df["accuracy"],
             color="#1f77b4",
             alpha=0.8,
-            s=36,
+            s=64,
             marker="o",
             label="train data",
         )
@@ -709,7 +739,7 @@ def plot_h0_fits_by_model_sweep(
                 test_df["accuracy"],
                 color="#1f77b4",
                 alpha=0.8,
-                s=36,
+                s=64,
                 marker="s",
                 edgecolors="black",
                 label="test data",
@@ -718,9 +748,9 @@ def plot_h0_fits_by_model_sweep(
         ax.plot(
             x_range,
             [predict_joint(float(x_value)) for x_value in x_range],
-            "--",
-            color="gray",
-            linewidth=2,
+            "-",
+            color="#1f77b4",
+            linewidth=3,
             label="joint (train)",
         )
 
@@ -729,8 +759,8 @@ def plot_h0_fits_by_model_sweep(
                 x_range,
                 [predict_train(float(x_value)) for x_value in x_range],
                 "-",
-                color="orange",
-                linewidth=2,
+                color="#f2c94c",
+                linewidth=3,
                 label="indiv (train)",
             )
 
@@ -738,9 +768,9 @@ def plot_h0_fits_by_model_sweep(
             ax.plot(
                 x_range,
                 [predict_all(float(x_value)) for x_value in x_range],
-                "-",
-                color="black",
-                linewidth=2,
+                "--",
+                color="gray",
+                linewidth=3,
                 alpha=0.9,
                 label="indiv (all)",
             )
@@ -761,19 +791,33 @@ def plot_h0_fits_by_model_sweep(
         axes_flat[idx].set_visible(False)
 
     fig.suptitle(
-        format_title_text([f"{label} - h = 0 fits across model sweep"], width=80),
+        _benchmark_hint_title_from_label(label),
         fontsize=TITLE_FONT_SIZE,
     )
     if legend_entries:
-        fig.legend(
-            list(legend_entries.values()),
-            list(legend_entries.keys()),
-            loc="lower center",
-            bbox_to_anchor=(0.5, 0.0),
-            ncol=min(5, len(legend_entries)),
-            fontsize=LEGEND_FONT_SIZE,
-        )
-    fig.tight_layout(rect=(0, 0.04, 1, 0.95))
+        data_legend_labels = ["train data", "test data"]
+        fit_legend_labels = ["joint (train)", "indiv (train)", "indiv (all)"]
+        available_data_labels = [label for label in data_legend_labels if label in legend_entries]
+        available_fit_labels = [label for label in fit_legend_labels if label in legend_entries]
+        if available_data_labels:
+            fig.legend(
+                [legend_entries[label] for label in available_data_labels],
+                available_data_labels,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 0.045),
+                ncol=len(available_data_labels),
+                fontsize=LEGEND_FONT_SIZE,
+            )
+        if available_fit_labels:
+            fig.legend(
+                [legend_entries[label] for label in available_fit_labels],
+                available_fit_labels,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 0.0),
+                ncol=len(available_fit_labels),
+                fontsize=LEGEND_FONT_SIZE,
+            )
+    fig.tight_layout(rect=(0, 0.12, 1, 0.94))
 
     output_path = output_dir / f"{filename_stem}.png"
     save_figure(fig, output_path)

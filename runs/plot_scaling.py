@@ -103,7 +103,7 @@ def _parse_args() -> argparse.Namespace:
         "--n-train-min",
         type=int,
         default=None,
-        help="Optional inclusive minimum n_train for joint h0/model-sweep plots.",
+        help="Optional inclusive minimum n_train for joint h0/model-sweep plots. Defaults to 3.",
     )
     parser.add_argument(
         "--n-train-max",
@@ -805,8 +805,8 @@ python -m runs.plot_scaling \
     --fractioner mask_word \
     --num-holdout-models 0 \
     --x-axis-methods hinted_acc_h03_logit \
-    --n-train-min 2 \
-    --n-train-max 10
+    --n-train-min 3 \
+    --n-train-max 7
 
 python -m runs.plot_scaling \
     --benchmark aime2025_2026 \

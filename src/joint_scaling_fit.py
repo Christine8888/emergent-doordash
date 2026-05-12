@@ -281,10 +281,10 @@ def run_joint_model_sweep(
     )
     df_hint0 = df[df["hint_fraction"] == sweep_hint_fraction].copy()
 
-    min_n_train = 2 if n_train_min is None else int(n_train_min)
+    min_n_train = 3 if n_train_min is None else int(n_train_min)
     max_n_train = len(models_sorted_by_x) if n_train_max is None else int(n_train_max)
-    if min_n_train < 2:
-        raise ValueError(f"n_train_min must be >= 2, got {min_n_train}")
+    if min_n_train < 3:
+        raise ValueError(f"n_train_min must be >= 3, got {min_n_train}")
     if max_n_train > len(models_sorted_by_x):
         raise ValueError(
             f"n_train_max ({max_n_train}) cannot exceed number of models "
@@ -387,10 +387,10 @@ def build_h0_sweep_panels(
     x_range = np.linspace(float(df_hint0[x_field].min()) - 5.0, float(df_hint0[x_field].max()) + 5.0, 120)
     panels: list[dict[str, Any]] = []
 
-    min_n_train = 2 if n_train_min is None else int(n_train_min)
+    min_n_train = 3 if n_train_min is None else int(n_train_min)
     max_n_train = len(models_sorted_by_x) if n_train_max is None else int(n_train_max)
-    if min_n_train < 2:
-        raise ValueError(f"n_train_min must be >= 2, got {min_n_train}")
+    if min_n_train < 3:
+        raise ValueError(f"n_train_min must be >= 3, got {min_n_train}")
     if max_n_train > len(models_sorted_by_x):
         raise ValueError(
             f"n_train_max ({max_n_train}) cannot exceed number of models "
