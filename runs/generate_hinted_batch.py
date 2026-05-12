@@ -109,7 +109,7 @@ python -m runs.generate_hinted_batch build-jsonl \
 
 python -m runs.generate_hinted_batch submit hle/answer_not_revealed/mask_word/gemini-3.1-pro-preview/20260512_052817
 
-python -m runs.generate_hinted_batch wait l0fldo6kmmf139yehdekfovl2u7gmy9hd91k
+python -m runs.generate_hinted_batch wait <submitted-manifest-tag>
 
 python -m runs.generate_hinted_batch download <submitted-manifest-tag>
 
