@@ -36,6 +36,17 @@ PLOTS_ROOT = Path("plots/accuracy_vs_hint")
 EXPECTED_FRACTIONS = [i / 10 for i in range(11)]
 AIME_SPLIT_BENCHMARK = "aime2025_2026"
 AIME_SPLIT_HINT_TYPE = "answer_not_revealed"
+PLOT_TITLE_FRACTIONER_LABELS = {
+    "mask_word": "masked hint",
+    "truncate_hint": "truncated_hint",
+    "truncate_word": "truncated_hint",
+}
+PLOT_TITLE_SIZE = 22
+PANEL_TITLE_SIZE = 18
+AXIS_LABEL_SIZE = 16
+TICK_LABEL_SIZE = 14
+LEGEND_FONT_SIZE = 14
+ANNOTATION_FONT_SIZE = 12
 ProblemIdPredicate = Callable[[str], bool]
 
 
@@ -121,6 +132,15 @@ def _split_plot_specs(
         ("aime2025", _problem_ids_for_aime_2025),
         ("aime2026", _problem_ids_for_aime_2026),
     ]
+
+
+def _plot_title(*, benchmark: str, fractioner: str | None, split_name: str | None = None) -> str:
+    title = f"Benchmark: {benchmark}"
+    if split_name is not None:
+        title = f"{title} ({split_name})"
+    if fractioner is not None:
+        title = f"{title}\n{PLOT_TITLE_FRACTIONER_LABELS.get(fractioner, fractioner)}"
+    return title
 
 
 def _parse_args() -> argparse.Namespace:
@@ -369,7 +389,6 @@ def _plot(
     show_values: bool,
     title: str,
     panel_mode: str,
-    legend_outside: bool = False,
 ) -> None:
     if panel_mode not in {"model", "family", "all"}:
         raise ValueError(f"Unsupported panel_mode={panel_mode!r}; expected one of model/family/all.")
@@ -411,20 +430,25 @@ def _plot(
         series_color_map: dict[tuple[str, str, str], Any] = {}
 
     if n_panels == 1:
-        fig_width = 10.5 if legend_outside else 7
-        fig, ax = plt.subplots(figsize=(fig_width, 4.8))
+        fig, ax = plt.subplots(figsize=(10.5, 6.0))
         axes = [ax]
     elif n_panels == 4:
         n_cols = 2
         n_rows = 2
-        fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.3 * n_rows))
+        fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
+        axes = axes_obj.flatten() if hasattr(axes_obj, "flatten") else [axes_obj]
+    elif panel_by_family and n_panels > 1:
+        n_rows = 2
+        n_cols = (n_panels + n_rows - 1) // n_rows
+        fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
         axes = axes_obj.flatten() if hasattr(axes_obj, "flatten") else [axes_obj]
     else:
         n_cols = 5
         n_rows = (n_panels + n_cols - 1) // n_cols
-        fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3.3 * n_rows))
+        fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
         axes = axes_obj.flatten() if hasattr(axes_obj, "flatten") else [axes_obj]
 
+    legend_entries: dict[str, Any] = {}
     for idx, panel in enumerate(panels):
         ax = axes[idx]
         panel_models = panel_to_models.get(panel, [])
@@ -445,7 +469,7 @@ def _plot(
                 yerr = np.vstack([y - low, high - y])
 
                 model_label = str(model).split("/")[-1]
-                ax.errorbar(
+                container = ax.errorbar(
                     x,
                     y,
                     yerr=yerr,
@@ -456,12 +480,9 @@ def _plot(
                     elinewidth=1.0,
                     capthick=1.0,
                     color=color,
-                    label=(
-                        f"{model_label}::{fractioner}"
-                        if panel_by_family or panel_all
-                        else f"{fractioner}"
-                    ),
+                    label=model_label,
                 )
+                legend_entries.setdefault(model_label, container)
                 if show_values:
                     for x_i, y_i in zip(x, y):
                         ax.annotate(
@@ -469,7 +490,7 @@ def _plot(
                             (float(x_i), float(y_i)),
                             xytext=(4, 4),
                             textcoords="offset points",
-                            fontsize=6,
+                            fontsize=ANNOTATION_FONT_SIZE,
                             color=color,
                             alpha=0.9,
                         )
@@ -504,7 +525,7 @@ def _plot(
                     "#111111",
                 )
                 model_label = str(model).split("/")[-1]
-                ax.errorbar(
+                container = ax.errorbar(
                     x,
                     y,
                     yerr=yerr,
@@ -517,12 +538,9 @@ def _plot(
                     color=overlay_color,
                     linestyle="none",
                     linewidth=1.0,
-                    label=(
-                        f"{model_label}::{fractioner}_luke"
-                        if panel_by_family or panel_all
-                        else f"{fractioner}_luke"
-                    ),
+                    label=model_label,
                 )
+                legend_entries.setdefault(model_label, container)
                 if show_values:
                     for x_i, y_i in zip(x, y):
                         ax.annotate(
@@ -530,7 +548,7 @@ def _plot(
                             (float(x_i), float(y_i)),
                             xytext=(4, -9),
                             textcoords="offset points",
-                            fontsize=6,
+                            fontsize=ANNOTATION_FONT_SIZE,
                             color=overlay_color,
                             alpha=0.9,
                         )
@@ -546,22 +564,32 @@ def _plot(
                         float(fit["sigmoid_bias"]),
                     )
                     ax.plot(x_fit, y_fit, "--", color=overlay_color, linewidth=1.25, alpha=0.9)
-        ax.set_title(panel, fontsize=9)
-        ax.set_xlabel("Hint Fraction")
-        ax.set_ylabel("Accuracy")
+        ax.set_title(panel, fontsize=PANEL_TITLE_SIZE)
+        ax.set_xlabel("Hint Fraction", fontsize=AXIS_LABEL_SIZE)
+        ax.set_ylabel("Accuracy", fontsize=AXIS_LABEL_SIZE)
+        ax.tick_params(axis="both", labelsize=TICK_LABEL_SIZE)
         ax.grid(True, alpha=0.3)
         ax.set_xlim(-0.05, 1.05)
         ax.set_ylim(0.0, 1.0)
-        if legend_outside:
-            ax.legend(fontsize=7, loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0)
-        else:
-            ax.legend(fontsize=7)
 
     for idx in range(n_panels, len(axes)):
         axes[idx].set_visible(False)
 
-    fig.suptitle(title, fontsize=12)
-    fig.tight_layout()
+    fig.suptitle(title, fontsize=PLOT_TITLE_SIZE)
+    legend_bottom = 0.06
+    if legend_entries:
+        n_legend_cols = min(4, len(legend_entries))
+        n_legend_rows = (len(legend_entries) + n_legend_cols - 1) // n_legend_cols
+        legend_bottom = min(0.35, 0.08 + 0.04 * n_legend_rows)
+        fig.legend(
+            list(legend_entries.values()),
+            list(legend_entries.keys()),
+            loc="lower center",
+            bbox_to_anchor=(0.5, 0.01),
+            ncol=n_legend_cols,
+            fontsize=LEGEND_FONT_SIZE,
+        )
+    fig.tight_layout(rect=(0, legend_bottom, 1, 0.95))
     output_png.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_png, dpi=200, bbox_inches="tight")
     plt.close(fig)
@@ -887,12 +915,7 @@ def main() -> None:
         external_fit_map=plot_external_fit_map,
         output_png=png_path,
         show_values=args.show_values,
-        title=(
-            f"Hinted Accuracy vs Hint Fraction\n"
-            f"benchmark={args.benchmark} hint_type={args.hint_type} "
-            f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
-            f"[{'clean' if args.clean else 'full'}]"
-        ),
+        title=_plot_title(benchmark=args.benchmark, fractioner=args.fractioner),
         panel_mode="model",
     )
     _plot(
@@ -902,12 +925,7 @@ def main() -> None:
         external_fit_map=plot_external_fit_map,
         output_png=family_png_path,
         show_values=args.show_values,
-        title=(
-            f"Hinted Accuracy vs Hint Fraction (by family)\n"
-            f"benchmark={args.benchmark} hint_type={args.hint_type} "
-            f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
-            f"[{'clean' if args.clean else 'full'}]"
-        ),
+        title=_plot_title(benchmark=args.benchmark, fractioner=args.fractioner),
         panel_mode="family",
     )
     _plot(
@@ -917,14 +935,8 @@ def main() -> None:
         external_fit_map=plot_external_fit_map,
         output_png=all_png_path,
         show_values=args.show_values,
-        title=(
-            f"Hinted Accuracy vs Hint Fraction (all models)\n"
-            f"benchmark={args.benchmark} hint_type={args.hint_type} "
-            f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
-            f"[{'clean' if args.clean else 'full'}]"
-        ),
+        title=_plot_title(benchmark=args.benchmark, fractioner=args.fractioner),
         panel_mode="all",
-        legend_outside=True,
     )
 
     print(f"[plot_hinted_accuracy_vs_hint] wrote_means_json= {means_json_path}")
@@ -986,11 +998,10 @@ def main() -> None:
                 external_fit_map=split_plot_external_fit_map,
                 output_png=split_png_path,
                 show_values=args.show_values,
-                title=(
-                    f"Hinted Accuracy vs Hint Fraction ({split_name})\n"
-                    f"benchmark={args.benchmark} hint_type={args.hint_type} "
-                    f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
-                    f"[{'clean' if args.clean else 'full'}]"
+                title=_plot_title(
+                    benchmark=args.benchmark,
+                    fractioner=args.fractioner,
+                    split_name=split_name,
                 ),
                 panel_mode="model",
             )
@@ -1001,11 +1012,10 @@ def main() -> None:
                 external_fit_map=split_plot_external_fit_map,
                 output_png=split_family_png_path,
                 show_values=args.show_values,
-                title=(
-                    f"Hinted Accuracy vs Hint Fraction ({split_name}, by family)\n"
-                    f"benchmark={args.benchmark} hint_type={args.hint_type} "
-                    f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
-                    f"[{'clean' if args.clean else 'full'}]"
+                title=_plot_title(
+                    benchmark=args.benchmark,
+                    fractioner=args.fractioner,
+                    split_name=split_name,
                 ),
                 panel_mode="family",
             )
@@ -1016,14 +1026,12 @@ def main() -> None:
                 external_fit_map=split_plot_external_fit_map,
                 output_png=split_all_png_path,
                 show_values=args.show_values,
-                title=(
-                    f"Hinted Accuracy vs Hint Fraction ({split_name}, all models)\n"
-                    f"benchmark={args.benchmark} hint_type={args.hint_type} "
-                    f"({args.fractioner if args.fractioner is not None else 'all complete fractioners'}) "
-                    f"[{'clean' if args.clean else 'full'}]"
+                title=_plot_title(
+                    benchmark=args.benchmark,
+                    fractioner=args.fractioner,
+                    split_name=split_name,
                 ),
                 panel_mode="all",
-                legend_outside=True,
             )
             print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {split_png_path}")
             print(f"[plot_hinted_accuracy_vs_hint] wrote_plot= {split_family_png_path}")

@@ -138,9 +138,33 @@ def _add_model_name_axis(
         },
         key=lambda item: item[1],
     )
+    grouped_models: list[tuple[float, list[str]]] = []
+    for model, x_value in plotted_models:
+        if not grouped_models:
+            grouped_models.append((x_value, [model]))
+            continue
+
+        previous_x, previous_models = grouped_models[-1]
+        if np.isclose(x_value, previous_x, rtol=1e-12, atol=1e-12):
+            previous_models.append(model)
+            grouped_models[-1] = (
+                float(np.mean([previous_x, x_value])),
+                previous_models,
+            )
+        else:
+            grouped_models.append((x_value, [model]))
+
     top_ax = ax.secondary_xaxis("top")
-    top_ax.set_xticks([x_value for _, x_value in plotted_models])
-    top_ax.set_xticklabels([model for model, _ in plotted_models], rotation=60, ha="left", fontsize=8)
+    top_ax.set_xticks([x_value for x_value, _ in grouped_models])
+    top_ax.set_xticklabels(
+        [
+            "\n".join(model.split("/")[-1] for model in models)
+            for _, models in grouped_models
+        ],
+        rotation=60,
+        ha="left",
+        fontsize=8,
+    )
     top_ax.set_xlabel(label, fontsize=11)
 
 

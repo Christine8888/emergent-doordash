@@ -57,6 +57,94 @@ class XAxisSpec:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+def _mean_accuracy_by_model(
+    *,
+    base_rows: list[dict[str, Any]],
+    models: set[str],
+) -> dict[str, float]:
+    values_by_model: dict[str, list[float]] = {}
+    for row in base_rows:
+        model = str(row["model"])
+        if model not in models:
+            continue
+        values_by_model.setdefault(model, []).append(float(row["accuracy"]))
+    return {
+        model: float(np.mean(values))
+        for model, values in values_by_model.items()
+        if values
+    }
+
+
+def orient_pc_x_axis_to_accuracy(
+    *,
+    x_axis: XAxisSpec,
+    base_rows: list[dict[str, Any]],
+    train_models: list[str],
+) -> XAxisSpec:
+    if "pc" not in x_axis.name:
+        return x_axis
+
+    mean_accuracy = _mean_accuracy_by_model(
+        base_rows=base_rows,
+        models={str(model) for model in train_models},
+    )
+    shared_models = [
+        str(model)
+        for model in train_models
+        if str(model) in x_axis.model_to_x and str(model) in mean_accuracy
+    ]
+    if len(shared_models) < 2:
+        x_axis.metadata["accuracy_orientation_flipped"] = False
+        x_axis.metadata["accuracy_orientation_reason"] = "fewer_than_two_shared_train_models"
+        return x_axis
+
+    xs = np.asarray([x_axis.model_to_x[model] for model in shared_models], dtype=float)
+    ys = np.asarray([mean_accuracy[model] for model in shared_models], dtype=float)
+    if np.allclose(xs, xs[0]) or np.allclose(ys, ys[0]):
+        x_axis.metadata["accuracy_orientation_flipped"] = False
+        x_axis.metadata["accuracy_orientation_reason"] = "constant_x_or_accuracy"
+        return x_axis
+
+    correlation = float(np.corrcoef(xs, ys)[0, 1])
+    if not np.isfinite(correlation):
+        x_axis.metadata["accuracy_orientation_flipped"] = False
+        x_axis.metadata["accuracy_orientation_reason"] = "nonfinite_correlation"
+        return x_axis
+
+    x_axis.metadata["accuracy_orientation_target"] = "mean_accuracy_across_hint_fractions"
+    x_axis.metadata["accuracy_orientation_train_models"] = list(shared_models)
+    x_axis.metadata["accuracy_orientation_correlation_before"] = correlation
+    if correlation >= 0.0:
+        x_axis.metadata["accuracy_orientation_flipped"] = False
+        return x_axis
+
+    x_axis.model_to_x = {
+        model: -float(value)
+        for model, value in x_axis.model_to_x.items()
+    }
+    x_axis.metadata["accuracy_orientation_flipped"] = True
+    x_axis.metadata["accuracy_orientation_correlation_after"] = -correlation
+
+    if x_axis.name == "hinted_pc12_linear":
+        weight_pc1 = -float(x_axis.metadata.get("linear_weight_pc1", 0.0))
+        weight_pc2 = -float(x_axis.metadata.get("linear_weight_pc2", 0.0))
+        x_axis.metadata["linear_weight_pc1"] = weight_pc1
+        x_axis.metadata["linear_weight_pc2"] = weight_pc2
+        x_axis.equation = f"C = {weight_pc1:+.3f}·PC1 {weight_pc2:+.3f}·PC2"
+    else:
+        pca_result = get_pca_result(x_axis)
+        component_idx = int(x_axis.metadata.get("component_idx", 0))
+        if pca_result is not None and 0 <= component_idx < pca_result.components.shape[0]:
+            pca_result.components[component_idx] = -pca_result.components[component_idx]
+            pca_result.scores[:, component_idx] = -pca_result.scores[:, component_idx]
+            x_axis.equation = format_component_equation(
+                pca_result,
+                component_idx=component_idx,
+            )
+
+    return x_axis
+
+
 def _format_hint_fraction_label(hint_fractions: list[float]) -> str:
     return ", ".join(f"{float(hint_fraction):.1f}" for hint_fraction in hint_fractions)
 

@@ -39,6 +39,7 @@ from src.x_axes import (
     XAxisSpec,
     build_x_axes_from_methods,
     get_pca_result,
+    orient_pc_x_axis_to_accuracy,
 )
 
 
@@ -629,6 +630,14 @@ def run_scaling(config: ScalingRunConfig) -> ScalingRunResult:
         benchmark_order=PC_BENCHMARK_ORDER if needs_scores_df else None,
         canonicalize_model_name=canonicalize_model_name,
     )
+    x_axes = [
+        orient_pc_x_axis_to_accuracy(
+            x_axis=x_axis,
+            base_rows=base_rows,
+            train_models=list(train_model_order),
+        )
+        for x_axis in x_axes
+    ]
     if config.restrict_models_to_x_axes:
         model_sets = [set(x_axis.model_to_x.keys()) for x_axis in x_axes]
         models = sorted(set(models).intersection(*model_sets)) if model_sets else []
