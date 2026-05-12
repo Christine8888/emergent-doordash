@@ -394,6 +394,7 @@ def _plot(
         raise ValueError(f"Unsupported panel_mode={panel_mode!r}; expected one of model/family/all.")
 
     panel_by_family = panel_mode == "family"
+    panel_by_model = panel_mode == "model"
     panel_all = panel_mode == "all"
     model_to_panel: dict[str, str] = {}
     for row in [*results, *external_results]:
@@ -422,7 +423,7 @@ def _plot(
         }
     )
     if series_keys:
-        cmap = plt.cm.get_cmap("tab20", len(series_keys))
+        cmap = plt.get_cmap("tab20", len(series_keys))
         series_color_map = {
             series_key: cmap(index) for index, series_key in enumerate(series_keys)
         }
@@ -432,14 +433,14 @@ def _plot(
     if n_panels == 1:
         fig, ax = plt.subplots(figsize=(10.5, 6.0))
         axes = [ax]
-    elif n_panels == 4:
-        n_cols = 2
-        n_rows = 2
-        fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
-        axes = axes_obj.flatten() if hasattr(axes_obj, "flatten") else [axes_obj]
     elif panel_by_family and n_panels > 1:
         n_rows = 2
         n_cols = (n_panels + n_rows - 1) // n_rows
+        fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 6.2 * n_rows))
+        axes = axes_obj.flatten() if hasattr(axes_obj, "flatten") else [axes_obj]
+    elif n_panels == 4:
+        n_cols = 2
+        n_rows = 2
         fig, axes_obj = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
         axes = axes_obj.flatten() if hasattr(axes_obj, "flatten") else [axes_obj]
     else:
@@ -452,6 +453,7 @@ def _plot(
     for idx, panel in enumerate(panels):
         ax = axes[idx]
         panel_models = panel_to_models.get(panel, [])
+        panel_legend_entries: dict[str, Any] = {}
 
         for model in panel_models:
             model_rows = [row for row in results if str(row["model"]) == model]
@@ -482,7 +484,10 @@ def _plot(
                     color=color,
                     label=model_label,
                 )
-                legend_entries.setdefault(model_label, container)
+                if panel_by_family:
+                    panel_legend_entries.setdefault(model_label, container)
+                elif not panel_by_model:
+                    legend_entries.setdefault(model_label, container)
                 if show_values:
                     for x_i, y_i in zip(x, y):
                         ax.annotate(
@@ -540,7 +545,10 @@ def _plot(
                     linewidth=1.0,
                     label=model_label,
                 )
-                legend_entries.setdefault(model_label, container)
+                if panel_by_family:
+                    panel_legend_entries.setdefault(model_label, container)
+                elif not panel_by_model:
+                    legend_entries.setdefault(model_label, container)
                 if show_values:
                     for x_i, y_i in zip(x, y):
                         ax.annotate(
@@ -571,6 +579,16 @@ def _plot(
         ax.grid(True, alpha=0.3)
         ax.set_xlim(-0.05, 1.05)
         ax.set_ylim(0.0, 1.0)
+        if panel_by_family and panel_legend_entries:
+            n_panel_legend_cols = min(2, len(panel_legend_entries))
+            ax.legend(
+                list(panel_legend_entries.values()),
+                list(panel_legend_entries.keys()),
+                loc="upper center",
+                bbox_to_anchor=(0.5, -0.22),
+                ncol=n_panel_legend_cols,
+                fontsize=LEGEND_FONT_SIZE,
+            )
 
     for idx in range(n_panels, len(axes)):
         axes[idx].set_visible(False)
@@ -579,17 +597,18 @@ def _plot(
     legend_bottom = 0.06
     if legend_entries:
         n_legend_cols = min(4, len(legend_entries))
-        n_legend_rows = (len(legend_entries) + n_legend_cols - 1) // n_legend_cols
-        legend_bottom = min(0.35, 0.08 + 0.04 * n_legend_rows)
         fig.legend(
             list(legend_entries.values()),
             list(legend_entries.keys()),
-            loc="lower center",
-            bbox_to_anchor=(0.5, 0.01),
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.02),
             ncol=n_legend_cols,
             fontsize=LEGEND_FONT_SIZE,
         )
-    fig.tight_layout(rect=(0, legend_bottom, 1, 0.95))
+    if panel_by_family:
+        fig.tight_layout(rect=(0, 0.04, 1, 0.95), h_pad=5.0)
+    else:
+        fig.tight_layout(rect=(0, legend_bottom, 1, 0.95))
     output_png.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_png, dpi=200, bbox_inches="tight")
     plt.close(fig)

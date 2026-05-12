@@ -785,7 +785,8 @@ python -m runs.plot_scaling \
     --benchmark aime2025_2026 \
     --hint-type answer_not_revealed \
     --fractioner mask_word \
-    --num-holdout-models 0 
+    --num-holdout-models 0 \
+    --x-axis-methods hinted_acc_h03_logit
 
 python -m runs.plot_scaling \
     --benchmark aime2025_2026 \
