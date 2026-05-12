@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import json
 import math
 import os
@@ -9,11 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from google import genai
-from google.genai import types
-
 from src.datasets import Problem, get_dataset_spec
 from src.hint_fractioners import fraction_hint
+from src.model_config import get_model_spec
 from src.storage import (
     _model_storage_component,
     append_jsonl,
@@ -33,11 +30,9 @@ from src.types import (
 
 
 DEFAULT_DATA_ROOT = Path("data")
-DEFAULT_BATCH_ROOT = DEFAULT_DATA_ROOT / "gemini_batch_hinted"
+DEFAULT_BATCH_ROOT = DEFAULT_DATA_ROOT / "hinted_inference_batched"
 DEFAULT_MANIFEST_ROOT = DEFAULT_BATCH_ROOT / "manifests"
-DEFAULT_MODEL = "gemini-3.1-pro-preview"
-DEFAULT_MAX_OUTPUT_TOKENS = 32000
-DEFAULT_TEMPERATURE = 1.0
+MAX_OUTPUT_TOKENS = 32000
 COMPLETED_STATES = {
     "JOB_STATE_SUCCEEDED",
     "JOB_STATE_FAILED",
@@ -46,8 +41,8 @@ COMPLETED_STATES = {
 }
 
 # Paid tier Batch API prices per 1M tokens. These were copied from the Gemini API
-# pricing page on 2026-05-11; override from the CLI if Google changes prices.
-GEMINI_BATCH_PRICING_PER_MILLION: dict[str, dict[str, float]] = {
+# pricing page on 2026-05-11; update this table when Google changes prices.
+BATCH_PRICING_PER_MILLION: dict[str, dict[str, float]] = {
     "gemini-3.1-pro-preview": {"input": 1.00, "output": 6.00},
 }
 
@@ -65,15 +60,6 @@ def _load_project_env() -> None:
     load_dotenv(project_root / ".env")
 
 
-def _parse_bool(value: str) -> bool:
-    lowered = value.strip().lower()
-    if lowered in {"true", "1", "yes"}:
-        return True
-    if lowered in {"false", "0", "no"}:
-        return False
-    raise ValueError(f"Invalid bool value: {value!r}")
-
-
 def _parse_fraction_values(values: list[str] | None) -> list[float]:
     if values is None:
         return [0.0]
@@ -87,30 +73,11 @@ def _parse_fraction_values(values: list[str] | None) -> list[float]:
 def _safe_rate_lookup(
     *,
     model: str,
-    input_price_per_million: float | None,
-    output_price_per_million: float | None,
 ) -> dict[str, float]:
-    default = GEMINI_BATCH_PRICING_PER_MILLION.get(model)
-    input_rate = input_price_per_million
-    output_rate = output_price_per_million
-    if input_rate is None and default is not None:
-        input_rate = default["input"]
-    if output_rate is None and default is not None:
-        output_rate = default["output"]
-    if input_rate is None or output_rate is None:
-        raise ValueError(
-            f"No built-in Gemini Batch pricing for model={model!r}. "
-            "Pass --input-price-per-million and --output-price-per-million."
-        )
-    return {"input": float(input_rate), "output": float(output_rate)}
-
-
-def _validate_supported_model(model: str) -> None:
-    if model != DEFAULT_MODEL:
-        raise ValueError(
-            f"Unsupported Gemini batch test model: {model!r}. "
-            f"This harness currently supports only {DEFAULT_MODEL!r}."
-        )
+    default = BATCH_PRICING_PER_MILLION.get(model)
+    if default is None:
+        raise ValueError(f"No Gemini Batch pricing configured for model={model!r}.")
+    return {"input": float(default["input"]), "output": float(default["output"])}
 
 
 def _estimate_text_tokens(text: str) -> int:
@@ -416,6 +383,39 @@ def _safe_filename_component(text: str) -> str:
     return cleaned.strip("._-") or "unknown"
 
 
+def _build_manifest_tag(manifest: dict[str, Any]) -> str:
+    return "/".join(
+        [
+            str(manifest["benchmark"]),
+            str(manifest["hint_type"]),
+            str(manifest["fractioner"]),
+            _model_storage_component(str(manifest["model"])),
+            str(manifest["run_id"]),
+        ]
+    )
+
+
+def _manifest_path_from_tag(tag_or_path: str) -> Path:
+    if tag_or_path.startswith("batches/"):
+        tag_or_path = tag_or_path.removeprefix("batches/")
+    path = Path(tag_or_path)
+    if path.exists() or path.suffix == ".json":
+        return path
+    pieces = [piece for piece in tag_or_path.strip().split("/") if piece]
+    if len(pieces) == 5:
+        benchmark, hint_type, fractioner, model, run_id = pieces
+        return DEFAULT_BATCH_ROOT / benchmark / hint_type / fractioner / model / run_id / "manifest.json"
+    if len(pieces) == 1:
+        candidates = sorted(DEFAULT_MANIFEST_ROOT.glob(f"*__{pieces[0]}.json"))
+        candidates.extend(sorted(DEFAULT_MANIFEST_ROOT.glob(f"*__batches_{pieces[0]}.json")))
+        if candidates:
+            return candidates[-1]
+    raise ValueError(
+        f"Could not resolve manifest tag/path {tag_or_path!r}. "
+        "Use a build tag, submitted batch id, or manifest JSON path."
+    )
+
+
 def _submitted_manifest_path(
     *,
     submitted_at: datetime,
@@ -424,6 +424,12 @@ def _submitted_manifest_path(
     timestamp = submitted_at.strftime("%Y%m%d_%H%M%S")
     job_component = _safe_filename_component(job_name)
     return DEFAULT_MANIFEST_ROOT / f"{timestamp}__{job_component}.json"
+
+
+def _require_manifest_arg(manifest_arg: str | None, *, stage: str) -> Path:
+    if not manifest_arg:
+        raise ValueError(f"{stage} requires a manifest tag or manifest JSON path.")
+    return _manifest_path_from_tag(manifest_arg)
 
 
 def _iter_jsonl(path: Path) -> Any:
@@ -438,23 +444,17 @@ def _iter_jsonl(path: Path) -> Any:
                 raise ValueError(f"Invalid JSONL at {path}:{line_number}") from exc
 
 
-def _default_thinking_config(model: str) -> dict[str, Any] | None:
-    _validate_supported_model(model)
-    return {"thinkingLevel": "high", "includeThoughts": True}
-
-
-def _request_generation_config(args: argparse.Namespace) -> dict[str, Any]:
+def _request_generation_config(args: Any) -> dict[str, Any]:
+    model_spec = get_model_spec(args.model)
     config: dict[str, Any] = {
-        "maxOutputTokens": DEFAULT_MAX_OUTPUT_TOKENS,
-        "temperature": DEFAULT_TEMPERATURE,
+        "maxOutputTokens": MAX_OUTPUT_TOKENS,
+        "temperature": float(model_spec.temperature),
+        "thinkingConfig": {"includeThoughts": True},
     }
-    if args.top_p is not None:
-        config["topP"] = float(args.top_p)
-    if args.top_k is not None:
-        config["topK"] = int(args.top_k)
-    thinking_config = _default_thinking_config(args.model)
-    if thinking_config is not None:
-        config["thinkingConfig"] = thinking_config
+    if model_spec.top_p is not None:
+        config["topP"] = float(model_spec.top_p)
+    if model_spec.top_k is not None:
+        config["topK"] = int(model_spec.top_k)
     return config
 
 
@@ -495,16 +495,20 @@ def _build_batch_paths(
     }
 
 
-def _build_jsonl(args: argparse.Namespace) -> dict[str, Any]:
-    _validate_supported_model(args.model)
-    data_root = Path(args.data_root)
-    batch_root = Path(args.batch_root)
+def build_jsonl(args: Any) -> dict[str, Any]:
+    get_model_spec(args.model)
+    if args.max_requests is not None and args.max_requests < 1:
+        raise ValueError("--max-requests must be positive when provided.")
+    data_root = DEFAULT_DATA_ROOT
+    batch_root = DEFAULT_BATCH_ROOT
     hint_fractions = _parse_fraction_values(args.hint_fractions)
-    run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     generation_config = _request_generation_config(args)
-    token_count_client = (
-        genai.Client() if args.token_estimate_method == "gemini-count-tokens" else None
-    )
+    token_count_client = None
+    if args.token_estimate_method == "gemini-count-tokens":
+        from google import genai
+
+        token_count_client = genai.Client()
     paths = _build_batch_paths(
         batch_root=batch_root,
         benchmark=args.benchmark,
@@ -542,9 +546,7 @@ def _build_jsonl(args: argparse.Namespace) -> dict[str, Any]:
                 hint_fraction=hint_fraction,
                 data_root=data_root,
             )
-            existing_ids = (
-                _read_existing_inference_ids(output_path) if args.skip_existing else set()
-            )
+            existing_ids = _read_existing_inference_ids(output_path)
             fraction_count = 0
             fraction_skipped = 0
             rows = read_jsonl(expanded_path, model_cls=ExpandedHintedPromptRecord)
@@ -587,6 +589,7 @@ def _build_jsonl(args: argparse.Namespace) -> dict[str, Any]:
                         ],
                     },
                 }
+                request["request"]["generationConfig"] = generation_config
                 metadata = {
                     "key": key,
                     "inference_id": inference_id,
@@ -606,7 +609,7 @@ def _build_jsonl(args: argparse.Namespace) -> dict[str, Any]:
                     "hint": row.hint.model_dump(),
                     "expanded_prompt_path": str(expanded_path),
                     "output_path": str(output_path),
-                    "max_output_tokens": DEFAULT_MAX_OUTPUT_TOKENS,
+                    "max_output_tokens": MAX_OUTPUT_TOKENS,
                     "prompt_token_estimate": prompt_token_estimate,
                 }
                 input_f.write(json.dumps(request, ensure_ascii=False) + "\n")
@@ -625,10 +628,8 @@ def _build_jsonl(args: argparse.Namespace) -> dict[str, Any]:
 
     pricing = _safe_rate_lookup(
         model=args.model,
-        input_price_per_million=args.input_price_per_million,
-        output_price_per_million=args.output_price_per_million,
     )
-    max_output_tokens = total_rows * DEFAULT_MAX_OUTPUT_TOKENS
+    max_output_tokens = total_rows * MAX_OUTPUT_TOKENS
     estimated_cost = _calculate_cost(
         input_tokens=total_prompt_token_estimate,
         output_tokens=max_output_tokens,
@@ -636,7 +637,7 @@ def _build_jsonl(args: argparse.Namespace) -> dict[str, Any]:
     )
     manifest = {
         "created_at": _utcnow_iso(),
-        "script": "runs.gemini_batch_hinted_test",
+        "script": "runs.generate_hinted_batch",
         "run_id": run_id,
         "model": args.model,
         "benchmark": args.benchmark,
@@ -651,6 +652,7 @@ def _build_jsonl(args: argparse.Namespace) -> dict[str, Any]:
         "request_count": total_rows,
         "skipped_existing": skipped_existing,
         "generation_config": generation_config,
+        "request_file_config": generation_config,
         "pricing_per_million": pricing,
         "token_estimate_method": args.token_estimate_method,
         "estimated_input_tokens": total_prompt_token_estimate,
@@ -658,14 +660,18 @@ def _build_jsonl(args: argparse.Namespace) -> dict[str, Any]:
         "estimated_max_cost_usd": estimated_cost,
         "per_fraction": per_fraction,
     }
+    manifest["manifest_tag"] = _build_manifest_tag(manifest)
     _write_json(paths["manifest"], manifest)
     return manifest
 
 
-def _submit(args: argparse.Namespace) -> dict[str, Any]:
-    manifest_path = Path(args.manifest)
+def submit(args: Any) -> dict[str, Any]:
+    from google import genai
+    from google.genai import types
+
+    manifest_path = _require_manifest_arg(args.manifest, stage="submit")
     manifest = _read_json(manifest_path)
-    _validate_supported_model(str(manifest["model"]))
+    get_model_spec(str(manifest["model"]))
     input_path = Path(manifest["input_jsonl"])
     if not input_path.exists():
         raise FileNotFoundError(f"Missing input JSONL: {input_path}")
@@ -705,6 +711,7 @@ def _submit(args: argparse.Namespace) -> dict[str, Any]:
             "uploaded_file_name": uploaded_file.name,
             "uploaded_file": _to_plain(uploaded_file),
             "batch_job_name": batch_job.name,
+            "submitted_manifest_tag": batch_job.name.removeprefix("batches/"),
             "batch_job": _to_plain(batch_job),
             "batch_job_state": _extract_state_name(batch_job),
         }
@@ -714,12 +721,11 @@ def _submit(args: argparse.Namespace) -> dict[str, Any]:
     return manifest
 
 
-def _resolve_job_name(args: argparse.Namespace) -> tuple[str, Path | None, dict[str, Any] | None]:
-    if args.job_name:
-        return args.job_name, None, None
-    if not args.manifest:
-        raise ValueError("Pass either --job-name or --manifest.")
-    manifest_path = Path(args.manifest)
+def _resolve_job_name(args: Any) -> tuple[str, Path | None, dict[str, Any] | None]:
+    job_name = getattr(args, "job_name", None)
+    if job_name:
+        return job_name, None, None
+    manifest_path = _require_manifest_arg(args.manifest, stage="status")
     manifest = _read_json(manifest_path)
     job_name = manifest.get("batch_job_name")
     if not isinstance(job_name, str) or not job_name:
@@ -727,7 +733,9 @@ def _resolve_job_name(args: argparse.Namespace) -> tuple[str, Path | None, dict[
     return job_name, manifest_path, manifest
 
 
-def _status(args: argparse.Namespace) -> dict[str, Any]:
+def status(args: Any) -> dict[str, Any]:
+    from google import genai
+
     job_name, manifest_path, manifest = _resolve_job_name(args)
     _load_project_env()
     client = genai.Client()
@@ -748,10 +756,10 @@ def _status(args: argparse.Namespace) -> dict[str, Any]:
     return payload
 
 
-def _wait(args: argparse.Namespace) -> dict[str, Any]:
+def wait(args: Any) -> dict[str, Any]:
     interval_seconds = max(1, int(args.poll_interval_seconds))
     while True:
-        payload = _status(args)
+        payload = status(args)
         state = str(payload["state"])
         checked_at = datetime.now().strftime("%H:%M")
         print(
@@ -763,7 +771,9 @@ def _wait(args: argparse.Namespace) -> dict[str, Any]:
         time.sleep(interval_seconds)
 
 
-def _download(args: argparse.Namespace) -> dict[str, Any]:
+def download(args: Any) -> dict[str, Any]:
+    from google import genai
+
     job_name, manifest_path, manifest = _resolve_job_name(args)
     _load_project_env()
     client = genai.Client()
@@ -791,6 +801,10 @@ def _download(args: argparse.Namespace) -> dict[str, Any]:
     with open(output_path, "wb") as f:
         f.write(result_bytes)
 
+    usage_summary = _summarize_results_usage(
+        result_path=output_path,
+        model=str(manifest["model"]),
+    )
     payload = {
         "downloaded_at": _utcnow_iso(),
         "batch_job_name": job_name,
@@ -798,12 +812,55 @@ def _download(args: argparse.Namespace) -> dict[str, Any]:
         "result_file_name": result_file_name,
         "downloaded_results_jsonl": str(output_path),
         "bytes": len(result_bytes),
+        "usage_summary": usage_summary,
     }
     if manifest_path is not None and manifest is not None:
         manifest.update(payload)
         manifest["batch_job"] = _to_plain(batch_job)
         _write_json(manifest_path, manifest)
     return payload
+
+
+def _summarize_results_usage(*, result_path: Path, model: str) -> dict[str, Any]:
+    pricing = _safe_rate_lookup(
+        model=model,
+    )
+    request_count = 0
+    successful_count = 0
+    error_count = 0
+    total_input_tokens = 0
+    total_candidate_tokens = 0
+    total_thought_tokens = 0
+    for result in _iter_jsonl(result_path):
+        if not isinstance(result, dict):
+            error_count += 1
+            continue
+        request_count += 1
+        response = result.get("response")
+        if not isinstance(response, dict):
+            error_count += 1
+            continue
+        successful_count += 1
+        input_tokens, candidate_tokens, thought_tokens, usage = _extract_usage_counts(response)
+        total_input_tokens += input_tokens
+        total_candidate_tokens += candidate_tokens
+        total_thought_tokens += thought_tokens
+    billable_output_tokens = total_candidate_tokens + total_thought_tokens
+    return {
+        "request_count": request_count,
+        "successful_count": successful_count,
+        "error_count": error_count,
+        "input_tokens": total_input_tokens,
+        "candidate_tokens": total_candidate_tokens,
+        "thought_tokens": total_thought_tokens,
+        "output_tokens_for_cost": billable_output_tokens,
+        "pricing_per_million": pricing,
+        "total_cost_usd": _calculate_cost(
+            input_tokens=total_input_tokens,
+            output_tokens=billable_output_tokens,
+            pricing=pricing,
+        ),
+    }
 
 
 def _candidate_text_parts(response: dict[str, Any]) -> tuple[str, str]:
@@ -852,7 +909,7 @@ def _usage_int(usage: dict[str, Any], *keys: str) -> int:
     return 0
 
 
-def _extract_usage_counts(response: dict[str, Any]) -> tuple[int, int, dict[str, Any]]:
+def _extract_usage_counts(response: dict[str, Any]) -> tuple[int, int, int, dict[str, Any]]:
     usage = response.get("usageMetadata") or response.get("usage_metadata") or {}
     if not isinstance(usage, dict):
         usage = {}
@@ -861,12 +918,11 @@ def _extract_usage_counts(response: dict[str, Any]) -> tuple[int, int, dict[str,
         usage, "candidatesTokenCount", "candidates_token_count"
     )
     thought_tokens = _usage_int(usage, "thoughtsTokenCount", "thoughts_token_count")
-    output_tokens = candidate_tokens + thought_tokens
-    if output_tokens == 0:
+    if candidate_tokens == 0 and thought_tokens == 0:
         total_tokens = _usage_int(usage, "totalTokenCount", "total_token_count")
         if total_tokens and input_tokens:
-            output_tokens = max(0, total_tokens - input_tokens)
-    return input_tokens, output_tokens, usage
+            candidate_tokens = max(0, total_tokens - input_tokens)
+    return input_tokens, candidate_tokens, thought_tokens, usage
 
 
 def _calculate_cost(
@@ -934,16 +990,15 @@ def _load_request_metadata(path: Path) -> dict[str, dict[str, Any]]:
     return rows
 
 
-def _process_results(args: argparse.Namespace) -> dict[str, Any]:
-    manifest = _read_json(Path(args.manifest))
-    _validate_supported_model(str(manifest["model"]))
+def process_results(args: Any) -> dict[str, Any]:
+    manifest_path = _require_manifest_arg(args.manifest, stage="process-results")
+    manifest = _read_json(manifest_path)
+    get_model_spec(str(manifest["model"]))
     result_path = Path(args.results_jsonl or manifest["downloaded_results_jsonl"])
     metadata_path = Path(manifest["request_metadata_jsonl"])
     request_metadata = _load_request_metadata(metadata_path)
     pricing = _safe_rate_lookup(
         model=str(manifest["model"]),
-        input_price_per_million=args.input_price_per_million,
-        output_price_per_million=args.output_price_per_million,
     )
     run_id = str(manifest["run_id"])
 
@@ -951,6 +1006,9 @@ def _process_results(args: argparse.Namespace) -> dict[str, Any]:
     written_error = 0
     total_input_tokens = 0
     total_output_tokens = 0
+    total_billable_output_tokens = 0
+    total_candidate_tokens = 0
+    total_thought_tokens = 0
     total_cost = 0.0
     missing_metadata = 0
     duplicate_existing = 0
@@ -966,7 +1024,7 @@ def _process_results(args: argparse.Namespace) -> dict[str, Any]:
         metadata = request_metadata[key]
         output_path = Path(metadata["output_path"])
         inference_id = str(metadata["inference_id"])
-        if args.skip_existing and inference_id in _read_existing_inference_ids(output_path):
+        if inference_id in _read_existing_inference_ids(output_path):
             duplicate_existing += 1
             continue
 
@@ -980,6 +1038,7 @@ def _process_results(args: argparse.Namespace) -> dict[str, Any]:
             thought_summary = ""
         input_tokens = 0
         output_tokens = 0
+        thought_tokens = 0
         usage_metadata: dict[str, Any] = {}
         finish_reason = None
         graders: list[GraderResult]
@@ -994,7 +1053,9 @@ def _process_results(args: argparse.Namespace) -> dict[str, Any]:
             ]
             written_error += 1
         else:
-            input_tokens, output_tokens, usage_metadata = _extract_usage_counts(response)
+            input_tokens, output_tokens, thought_tokens, usage_metadata = _extract_usage_counts(response)
+            total_candidate_tokens += output_tokens
+            total_thought_tokens += thought_tokens
             finish_reason = _candidate_finish_reason(response)
             graders = [
                 _build_grader(
@@ -1007,11 +1068,12 @@ def _process_results(args: argparse.Namespace) -> dict[str, Any]:
 
         cost = _calculate_cost(
             input_tokens=input_tokens,
-            output_tokens=output_tokens,
+            output_tokens=output_tokens + thought_tokens,
             pricing=pricing,
         )
         total_input_tokens += input_tokens
         total_output_tokens += output_tokens
+        total_billable_output_tokens += output_tokens + thought_tokens
         total_cost += cost
         record = HintedInferenceRecord(
             inference_id=inference_id,
@@ -1045,6 +1107,8 @@ def _process_results(args: argparse.Namespace) -> dict[str, Any]:
                 "usage_metadata": usage_metadata,
                 "fraction_metadata": metadata["fraction_metadata"],
                 "stop_reason": finish_reason,
+                "thought_token_count": thought_tokens,
+                "billable_output_token_count": output_tokens + thought_tokens,
                 "thought_summary": thought_summary,
                 "thought_summary_chars": len(thought_summary),
                 "gemini_batch_job_name": manifest.get("batch_job_name"),
@@ -1064,21 +1128,23 @@ def _process_results(args: argparse.Namespace) -> dict[str, Any]:
         "duplicate_existing": duplicate_existing,
         "total_input_tokens": total_input_tokens,
         "total_output_tokens": total_output_tokens,
+        "total_billable_output_tokens": total_billable_output_tokens,
+        "total_candidate_tokens": total_candidate_tokens,
+        "total_thought_tokens": total_thought_tokens,
         "total_cost_usd": total_cost,
         "pricing_per_million": pricing,
     }
     manifest["processed_results"] = summary
-    _write_json(Path(args.manifest), manifest)
+    _write_json(manifest_path, manifest)
     return summary
 
 
-def _estimate(args: argparse.Namespace) -> dict[str, Any]:
-    manifest = _read_json(Path(args.manifest))
-    _validate_supported_model(str(manifest["model"]))
+def estimate(args: Any) -> dict[str, Any]:
+    manifest_path = _require_manifest_arg(args.manifest, stage="estimate")
+    manifest = _read_json(manifest_path)
+    get_model_spec(str(manifest["model"]))
     pricing = _safe_rate_lookup(
         model=str(manifest["model"]),
-        input_price_per_million=args.input_price_per_million,
-        output_price_per_million=args.output_price_per_million,
     )
     metadata_path = Path(manifest["request_metadata_jsonl"])
     request_count = 0
@@ -1112,141 +1178,3 @@ def _estimate(args: argparse.Namespace) -> dict[str, Any]:
         ),
     }
     return estimate
-
-
-def _print_payload(payload: dict[str, Any]) -> None:
-    print(json.dumps(payload, indent=2, ensure_ascii=False), flush=True)
-
-
-def _add_common_build_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--benchmark", default="aime2025_2026")
-    parser.add_argument("--hint-type", default="answer_not_revealed")
-    parser.add_argument("--fractioner", default="mask_word")
-    parser.add_argument("--hint-fractions", nargs="*", default=["0.0"])
-    parser.add_argument("--model", default=DEFAULT_MODEL)
-    parser.add_argument("--data-root", default=str(DEFAULT_DATA_ROOT))
-    parser.add_argument("--batch-root", default=str(DEFAULT_BATCH_ROOT))
-    parser.add_argument("--run-id", default=None)
-    parser.add_argument("--max-requests", type=int, default=3)
-    parser.add_argument("--skip-existing", type=_parse_bool, default=True)
-    parser.add_argument("--top-p", type=float, default=None)
-    parser.add_argument("--top-k", type=int, default=None)
-    parser.add_argument(
-        "--token-estimate-method",
-        choices=["chars", "gemini-count-tokens"],
-        default="chars",
-        help=(
-            "Use chars for offline estimates, or gemini-count-tokens for Gemini's "
-            "count_tokens endpoint before writing the manifest."
-        ),
-    )
-    parser.add_argument("--input-price-per-million", type=float, default=None)
-    parser.add_argument("--output-price-per-million", type=float, default=None)
-
-
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Small Gemini Batch API harness for hinted inference experiments. "
-            "Start with `build-jsonl`, then `submit`, `status`/`wait`, "
-            "`download`, and `process-results`."
-        )
-    )
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    build_parser = subparsers.add_parser("build-jsonl")
-    _add_common_build_args(build_parser)
-    build_parser.set_defaults(func=_build_jsonl)
-
-    estimate_parser = subparsers.add_parser("estimate")
-    estimate_parser.add_argument("--manifest", required=True)
-    estimate_parser.add_argument("--assumed-output-tokens", type=int, default=None)
-    estimate_parser.add_argument("--input-price-per-million", type=float, default=None)
-    estimate_parser.add_argument("--output-price-per-million", type=float, default=None)
-    estimate_parser.set_defaults(func=_estimate)
-
-    submit_parser = subparsers.add_parser("submit")
-    submit_parser.add_argument("--manifest", required=True)
-    submit_parser.add_argument("--display-name", default=None)
-    submit_parser.set_defaults(func=_submit)
-
-    status_parser = subparsers.add_parser("status")
-    status_parser.add_argument("--manifest", default=None)
-    status_parser.add_argument("--job-name", default=None)
-    status_parser.set_defaults(func=_status)
-
-    wait_parser = subparsers.add_parser("wait")
-    wait_parser.add_argument("--manifest", default=None)
-    wait_parser.add_argument("--job-name", default=None)
-    wait_parser.add_argument("--poll-interval-seconds", type=int, default=30)
-    wait_parser.set_defaults(func=_wait)
-
-    download_parser = subparsers.add_parser("download")
-    download_parser.add_argument("--manifest", default=None)
-    download_parser.add_argument("--job-name", default=None)
-    download_parser.add_argument("--output-path", default=None)
-    download_parser.set_defaults(func=_download)
-
-    process_parser = subparsers.add_parser("process-results")
-    process_parser.add_argument("--manifest", required=True)
-    process_parser.add_argument("--results-jsonl", default=None)
-    process_parser.add_argument("--skip-existing", type=_parse_bool, default=True)
-    process_parser.add_argument("--input-price-per-million", type=float, default=None)
-    process_parser.add_argument("--output-price-per-million", type=float, default=None)
-    process_parser.set_defaults(func=_process_results)
-
-    return parser
-
-
-def main() -> None:
-    args = _build_parser().parse_args()
-    payload = args.func(args)
-    _print_payload(payload)
-
-
-if __name__ == "__main__":
-    main()
-
-
-"""
-  Run this first:
-
-  python -m runs.gemini_batch_hinted_test build-jsonl \
-    --benchmark aime2025_2026 \
-    --hint-type answer_not_revealed \
-    --fractioner mask_word \
-    --hint-fractions 0.0 \
-    --max-requests 3
-
-  It prints a JSON payload. Copy the "input_jsonl" directory’s sibling manifest path, which will look like:
-
-  data/gemini_batch_hinted/aime2025_2026/answer_not_revealed/mask_word/gemini-3.1-pro-preview/20260511_123456/manifest.json
-
-  Then submit:
-
-  python -m runs.gemini_batch_hinted_test submit \
-    --manifest data/gemini_batch_hinted/aime2025_2026/answer_not_revealed/mask_word/gemini-3.1-pro-preview/20260511_193322/manifest.json
-
-  That prints the canonical submitted manifest path, like:
-
-  data/gemini_batch_hinted/manifests/20260511_123501__batches_123456789.json
-
-  Use that path for the rest:
-
-  python -m runs.gemini_batch_hinted_test status \
-    --manifest data/gemini_batch_hinted/manifests/20260511_193849__batches_7sr3ba1jmg7qj6c24j5sr3rj9z4rm9zfomez.json
-
-  python -m runs.gemini_batch_hinted_test wait \
-    --manifest data/gemini_batch_hinted/manifests/20260511_193849__batches_7sr3ba1jmg7qj6c24j5sr3rj9z4rm9zfomez.json
-
-  python -m runs.gemini_batch_hinted_test download \
-    --manifest data/gemini_batch_hinted/manifests/20260511_123501__batches_123456789.json
-
-  python -m runs.gemini_batch_hinted_test process-results \
-    --manifest data/gemini_batch_hinted/manifests/20260511_123501__batches_123456789.json
-
-
-
-
-hle uses "gemini-3.1-pro-preview-high"
-"""

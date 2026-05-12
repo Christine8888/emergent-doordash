@@ -12,15 +12,15 @@ H200_CONSTRAINT = "141G"
 @dataclass(frozen=True)
 class ModelSpec:
     path: str
+    do_sample: bool
+    temperature: float
+    top_p: float | None
+    top_k: int | None
+    repetition_penalty: float
     tp: int = 1
     account: str | None = None
     constraint: str | None = None
     context_limit: int | None = None
-    do_sample: bool = True
-    temperature: float = 1.0
-    top_p: float = 1.0
-    top_k: int = 0
-    repetition_penalty: float = 1.0
 
     @property
     def name(self) -> str:
@@ -38,6 +38,8 @@ class ModelSpec:
 
 
 QWEN3_SAMPLING = {
+    "account": None,
+    "context_limit": None,
     "do_sample": True,
     "temperature": 0.6,
     "top_p": 0.95,
@@ -46,6 +48,8 @@ QWEN3_SAMPLING = {
 }
 
 QWEN25_SMALL_SAMPLING = {
+    "account": None,
+    "context_limit": None,
     "do_sample": True,
     "temperature": 0.7,
     "top_p": 0.8,
@@ -54,6 +58,8 @@ QWEN25_SMALL_SAMPLING = {
 }
 
 QWEN25_SAMPLING = {
+    "account": None,
+    "context_limit": None,
     "do_sample": True,
     "temperature": 0.7,
     "top_p": 0.8,
@@ -62,6 +68,8 @@ QWEN25_SAMPLING = {
 }
 
 QWEN35_SAMPLING = {
+    "account": None,
+    "context_limit": None,
     "do_sample": True,
     "temperature": 0.6,
     "top_p": 0.95,
@@ -70,6 +78,8 @@ QWEN35_SAMPLING = {
 }
 
 LLAMA_SAMPLING = {
+    "account": None,
+    "context_limit": None,
     "do_sample": True,
     "temperature": 0.6,
     "top_p": 0.9,
@@ -78,6 +88,8 @@ LLAMA_SAMPLING = {
 }
 
 GEMMA_SAMPLING = {
+    "account": None,
+    "context_limit": None,
     "do_sample": True,
     "temperature": 1.0,
     "top_p": 0.95,
@@ -86,6 +98,8 @@ GEMMA_SAMPLING = {
 }
 
 OPENAI_SAMPLING = {
+    "account": None,
+    "context_limit": None,
     "do_sample": True,
     "temperature": 1.0,
     "top_p": 1.0,
@@ -116,8 +130,7 @@ QWEN25_MODELS = [
         "Qwen/Qwen2.5-72B-Instruct",
         tp=2,
         constraint=H200_CONSTRAINT,
-        context_limit=32768,
-        **QWEN25_SAMPLING,
+        **{**QWEN25_SAMPLING, "context_limit": 32768},
     ),
 ]
 
@@ -136,21 +149,18 @@ LLAMA_MODELS = [
     ModelSpec(
         "meta-llama/Llama-2-7b-chat-hf",
         constraint=MEDIUM_MODEL_CONSTRAINT,
-        context_limit=4096,
-        **LLAMA_SAMPLING,
+        **{**LLAMA_SAMPLING, "context_limit": 4096},
     ),
     ModelSpec(
         "meta-llama/Llama-2-13b-chat-hf",
         constraint=LARGE_MODEL_CONSTRAINT,
-        context_limit=4096,
-        **LLAMA_SAMPLING,
+        **{**LLAMA_SAMPLING, "context_limit": 4096},
     ),
     ModelSpec(
         "meta-llama/Llama-2-70b-chat-hf",
         tp=2,
         constraint=H200_CONSTRAINT,
-        context_limit=4096,
-        **LLAMA_SAMPLING,
+        **{**LLAMA_SAMPLING, "context_limit": 4096},
     ),
     ModelSpec("meta-llama/Llama-3.1-8B-Instruct", constraint=MEDIUM_MODEL_CONSTRAINT, **LLAMA_SAMPLING),
     ModelSpec("meta-llama/Llama-3.1-70B-Instruct", tp=2, constraint=H200_CONSTRAINT, **LLAMA_SAMPLING),
@@ -174,8 +184,25 @@ OPENAI_MODELS = [
     ModelSpec("openai/gpt-oss-20b", tp=4, constraint=LARGE_MODEL_CONSTRAINT, **OPENAI_SAMPLING),
 ]
 
+GEMINI_BATCH_MODELS = [
+    ModelSpec(
+        "gemini-3.1-pro-preview",
+        account=None,
+        constraint=None,
+        context_limit=1_000_000,
+        do_sample=True,
+        temperature=1.0,
+        top_p=None,
+        top_k=None,
+        repetition_penalty=1.0,
+    ),
+]
+
 ALL_MODELS = QWEN3_MODELS + QWEN25_MODELS + LLAMA_MODELS + GEMMA_MODELS + OPENAI_MODELS + QWEN35_MODELS
 ALL_MODEL_PATHS = [m.path for m in ALL_MODELS]
+ALL_KNOWN_MODELS = ALL_MODELS + GEMINI_BATCH_MODELS
+ALL_KNOWN_MODEL_PATHS = [m.path for m in ALL_KNOWN_MODELS]
+HINTED_PROGRESS_MODEL_PATHS = ALL_MODEL_PATHS + [m.path for m in GEMINI_BATCH_MODELS]
 
 MASK_WORD_EXCLUDED_MODELS: set[str] = {
     "Qwen/Qwen3.5-0.8B",
@@ -253,7 +280,7 @@ def filter_model_specs_for_fractioner(
 
 
 def get_model_spec(model_path: str) -> ModelSpec:
-    for model in ALL_MODELS:
+    for model in ALL_KNOWN_MODELS:
         if model.path == model_path:
             return model
     raise KeyError(f"Unknown model path: {model_path!r}")
